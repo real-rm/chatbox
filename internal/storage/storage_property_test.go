@@ -90,10 +90,10 @@ func TestProperty_SessionCreationAndPersistence(t *testing.T) {
 
 			return true
 		},
-		gen.Identifier(),      // sessionID
-		gen.Identifier(),      // userID
-		gen.AlphaString(),     // name
-		gen.AlphaString(),     // modelID
+		gen.Identifier(),  // sessionID
+		gen.Identifier(),  // userID
+		gen.AlphaString(), // name
+		gen.AlphaString(), // modelID
 	))
 
 	properties.TestingRun(t, gopter.ConsoleReporter(false))
@@ -195,13 +195,13 @@ func TestProperty_MessagePersistence(t *testing.T) {
 
 			return true
 		},
-		gen.Identifier(),                                    // sessionID
-		gen.Identifier(),                                    // userID
-		gen.AlphaString().SuchThat(func(s string) bool {     // content
+		gen.Identifier(), // sessionID
+		gen.Identifier(), // userID
+		gen.AlphaString().SuchThat(func(s string) bool { // content
 			return len(s) > 0
 		}),
-		gen.OneConstOf("user", "ai", "admin"),               // sender
-		gen.MapOf(gen.Identifier(), gen.AlphaString()),      // metadata
+		gen.OneConstOf("user", "ai", "admin"),          // sender
+		gen.MapOf(gen.Identifier(), gen.AlphaString()), // metadata
 	))
 
 	properties.TestingRun(t, gopter.ConsoleReporter(false))
@@ -384,9 +384,9 @@ func TestProperty_SessionLifecycleTracking(t *testing.T) {
 
 			return true
 		},
-		gen.Identifier(),       // sessionID
-		gen.Identifier(),       // userID
-		gen.UInt8Range(1, 60),  // durationMinutes
+		gen.Identifier(),      // sessionID
+		gen.Identifier(),      // userID
+		gen.UInt8Range(1, 60), // durationMinutes
 	))
 
 	properties.TestingRun(t, gopter.ConsoleReporter(false))
@@ -485,8 +485,8 @@ func TestProperty_DataEncryptionAtRest(t *testing.T) {
 
 			return true
 		},
-		gen.Identifier(),                                // sessionID
-		gen.Identifier(),                                // userID
+		gen.Identifier(), // sessionID
+		gen.Identifier(), // userID
 		gen.AlphaString().SuchThat(func(s string) bool { // content
 			return len(s) > 0
 		}),
@@ -576,8 +576,8 @@ func TestProperty_SessionListOrdering(t *testing.T) {
 
 			return true
 		},
-		gen.Identifier(),      // userID
-		gen.UInt8Range(1, 5),  // sessionCount
+		gen.Identifier(),     // userID
+		gen.UInt8Range(1, 5), // sessionCount
 	))
 
 	properties.TestingRun(t, gopter.ConsoleReporter(false))

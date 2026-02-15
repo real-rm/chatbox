@@ -36,22 +36,22 @@ func NewDifyProvider(apiKey, endpoint, model string) *DifyProvider {
 
 // difyRequest represents the request format for Dify API
 type difyRequest struct {
-	Inputs          map[string]string `json:"inputs"`
-	Query           string            `json:"query"`
-	ResponseMode    string            `json:"response_mode"` // "blocking" or "streaming"
-	ConversationID  string            `json:"conversation_id,omitempty"`
-	User            string            `json:"user"`
+	Inputs         map[string]string `json:"inputs"`
+	Query          string            `json:"query"`
+	ResponseMode   string            `json:"response_mode"` // "blocking" or "streaming"
+	ConversationID string            `json:"conversation_id,omitempty"`
+	User           string            `json:"user"`
 }
 
 // difyResponse represents the response format from Dify API
 type difyResponse struct {
-	Event          string         `json:"event,omitempty"`
-	MessageID      string         `json:"message_id,omitempty"`
-	ConversationID string         `json:"conversation_id,omitempty"`
-	Mode           string         `json:"mode,omitempty"`
-	Answer         string         `json:"answer,omitempty"`
-	Metadata       difyMetadata   `json:"metadata,omitempty"`
-	CreatedAt      int64          `json:"created_at,omitempty"`
+	Event          string       `json:"event,omitempty"`
+	MessageID      string       `json:"message_id,omitempty"`
+	ConversationID string       `json:"conversation_id,omitempty"`
+	Mode           string       `json:"mode,omitempty"`
+	Answer         string       `json:"answer,omitempty"`
+	Metadata       difyMetadata `json:"metadata,omitempty"`
+	CreatedAt      int64        `json:"created_at,omitempty"`
 }
 
 type difyMetadata struct {
@@ -59,21 +59,21 @@ type difyMetadata struct {
 }
 
 type difyUsage struct {
-	PromptTokens     int     `json:"prompt_tokens"`
-	CompletionTokens int     `json:"completion_tokens"`
-	TotalTokens      int     `json:"total_tokens"`
-	PromptPrice      string  `json:"prompt_price,omitempty"`
-	CompletionPrice  string  `json:"completion_price,omitempty"`
-	TotalPrice       string  `json:"total_price,omitempty"`
+	PromptTokens     int    `json:"prompt_tokens"`
+	CompletionTokens int    `json:"completion_tokens"`
+	TotalTokens      int    `json:"total_tokens"`
+	PromptPrice      string `json:"prompt_price,omitempty"`
+	CompletionPrice  string `json:"completion_price,omitempty"`
+	TotalPrice       string `json:"total_price,omitempty"`
 }
 
 // SendMessage sends a message to Dify and returns the complete response
 func (p *DifyProvider) SendMessage(ctx context.Context, req *LLMRequest) (*LLMResponse, error) {
 	startTime := time.Now()
-	
+
 	// Dify expects a single query string, so we'll concatenate the messages
 	query := p.formatMessages(req.Messages)
-	
+
 	// Create request body
 	reqBody := difyRequest{
 		Inputs:       make(map[string]string),
@@ -81,45 +81,45 @@ func (p *DifyProvider) SendMessage(ctx context.Context, req *LLMRequest) (*LLMRe
 		ResponseMode: "blocking",
 		User:         "user-" + fmt.Sprintf("%d", gohelper.TimeToDateInt(time.Now())),
 	}
-	
+
 	bodyBytes, err := json.Marshal(reqBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
-	
+
 	// Create HTTP request
 	httpReq, err := http.NewRequestWithContext(ctx, "POST", p.endpoint+"/chat-messages", bytes.NewReader(bodyBytes))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
-	
+
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Authorization", "Bearer "+p.apiKey)
-	
+
 	// Send request
 	resp, err := p.client.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("failed to send request: %w", err)
 	}
 	defer resp.Body.Close()
-	
+
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("Dify API error (status %d): %s", resp.StatusCode, string(body))
 	}
-	
+
 	// Parse response
 	var difyResp difyResponse
 	if err := json.NewDecoder(resp.Body).Decode(&difyResp); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
-	
+
 	if difyResp.Answer == "" {
 		return nil, fmt.Errorf("no answer in response")
 	}
-	
+
 	duration := time.Since(startTime)
-	
+
 	return &LLMResponse{
 		Content:    difyResp.Answer,
 		TokensUsed: difyResp.Metadata.Usage.TotalTokens,
@@ -131,7 +131,7 @@ func (p *DifyProvider) SendMessage(ctx context.Context, req *LLMRequest) (*LLMRe
 func (p *DifyProvider) StreamMessage(ctx context.Context, req *LLMRequest) (<-chan *LLMChunk, error) {
 	// Dify expects a single query string
 	query := p.formatMessages(req.Messages)
-	
+
 	// Create request body
 	reqBody := difyRequest{
 		Inputs:       make(map[string]string),
@@ -139,64 +139,64 @@ func (p *DifyProvider) StreamMessage(ctx context.Context, req *LLMRequest) (<-ch
 		ResponseMode: "streaming",
 		User:         "user-" + fmt.Sprintf("%d", gohelper.TimeToDateInt(time.Now())),
 	}
-	
+
 	bodyBytes, err := json.Marshal(reqBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
-	
+
 	// Create HTTP request
 	httpReq, err := http.NewRequestWithContext(ctx, "POST", p.endpoint+"/chat-messages", bytes.NewReader(bodyBytes))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
-	
+
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Authorization", "Bearer "+p.apiKey)
 	httpReq.Header.Set("Accept", "text/event-stream")
-	
+
 	// Send request
 	resp, err := p.client.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("failed to send request: %w", err)
 	}
-	
+
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
 		return nil, fmt.Errorf("Dify API error (status %d): %s", resp.StatusCode, string(body))
 	}
-	
+
 	// Create channel for streaming chunks
 	chunkChan := make(chan *LLMChunk)
-	
+
 	go func() {
 		defer close(chunkChan)
 		defer resp.Body.Close()
-		
+
 		scanner := bufio.NewScanner(resp.Body)
 		for scanner.Scan() {
 			line := scanner.Text()
-			
+
 			// Skip empty lines
 			if line == "" {
 				continue
 			}
-			
+
 			// Dify streams use "data: " prefix
 			if !strings.HasPrefix(line, "data: ") {
 				continue
 			}
-			
+
 			data := strings.TrimPrefix(line, "data: ")
-			
+
 			// Parse event
 			var event difyResponse
 			if err := json.Unmarshal([]byte(data), &event); err != nil {
 				// Skip malformed events
 				continue
 			}
-			
+
 			// Handle different event types
 			switch event.Event {
 			case "message":
@@ -214,11 +214,11 @@ func (p *DifyProvider) StreamMessage(ctx context.Context, req *LLMRequest) (<-ch
 				return
 			}
 		}
-		
+
 		// Send final chunk if not already sent
 		chunkChan <- &LLMChunk{Content: "", Done: true}
 	}()
-	
+
 	return chunkChan, nil
 }
 

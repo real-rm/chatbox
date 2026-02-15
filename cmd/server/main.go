@@ -26,7 +26,7 @@ func main() {
 	logDir, _ := cfg.ConfigStringWithDefault("log.dir", "logs")
 	logLevel, _ := cfg.ConfigStringWithDefault("log.level", "info")
 	standardOutput, _ := cfg.ConfigBoolWithDefault("log.standardOutput", true)
-	
+
 	logger, err := golog.InitLog(golog.LogConfig{
 		Dir:            logDir,
 		Level:          logLevel,

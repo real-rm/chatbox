@@ -55,7 +55,7 @@ func TestProperty_MessageParsingRoundTrip(t *testing.T) {
 			if msg.Sender != parsed.Sender {
 				return false
 			}
-			
+
 			// Compare timestamps (truncate to second for JSON precision)
 			if !msg.Timestamp.Truncate(time.Second).Equal(parsed.Timestamp.Truncate(time.Second)) {
 				return false
@@ -171,11 +171,11 @@ func TestProperty_JSONValidity(t *testing.T) {
 func genMessage() gopter.Gen {
 	return gopter.CombineGens(
 		genMessageType(),
-		gen.Identifier(),      // SessionID - use Identifier for non-empty strings
-		gen.AlphaString(),     // Content
-		gen.Identifier(),      // FileID
-		gen.AlphaString(),     // FileURL
-		gen.Identifier(),      // ModelID
+		gen.Identifier(),  // SessionID - use Identifier for non-empty strings
+		gen.AlphaString(), // Content
+		gen.Identifier(),  // FileID
+		gen.AlphaString(), // FileURL
+		gen.Identifier(),  // ModelID
 		genTime(),
 		genSenderType(),
 		genMetadata(),

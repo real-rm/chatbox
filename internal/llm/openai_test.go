@@ -81,14 +81,14 @@ func TestOpenAIProvider_SendMessage(t *testing.T) {
 				// Verify request headers
 				assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
 				assert.Contains(t, r.Header.Get("Authorization"), "Bearer")
-				
+
 				// Verify request body
 				var reqBody openAIRequest
 				err := json.NewDecoder(r.Body).Decode(&reqBody)
 				require.NoError(t, err)
 				assert.Equal(t, len(tt.messages), len(reqBody.Messages))
 				assert.False(t, reqBody.Stream)
-				
+
 				// Send response
 				w.WriteHeader(tt.mockStatusCode)
 				if tt.mockStatusCode == http.StatusOK {
@@ -100,16 +100,16 @@ func TestOpenAIProvider_SendMessage(t *testing.T) {
 			defer server.Close()
 
 			provider := NewOpenAIProvider("test-key", server.URL, "gpt-4")
-			
+
 			req := &LLMRequest{
 				ModelID:  "gpt-4",
 				Messages: tt.messages,
 				Stream:   false,
 			}
-			
+
 			ctx := context.Background()
 			resp, err := provider.SendMessage(ctx, req)
-			
+
 			if tt.wantErr {
 				assert.Error(t, err)
 				if tt.errContains != "" {
@@ -171,13 +171,13 @@ func TestOpenAIProvider_StreamMessage(t *testing.T) {
 				assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
 				assert.Contains(t, r.Header.Get("Authorization"), "Bearer")
 				assert.Equal(t, "text/event-stream", r.Header.Get("Accept"))
-				
+
 				// Verify request body
 				var reqBody openAIRequest
 				err := json.NewDecoder(r.Body).Decode(&reqBody)
 				require.NoError(t, err)
 				assert.True(t, reqBody.Stream)
-				
+
 				// Send response
 				w.WriteHeader(tt.mockStatusCode)
 				if tt.mockStatusCode == http.StatusOK {
@@ -192,16 +192,16 @@ func TestOpenAIProvider_StreamMessage(t *testing.T) {
 			defer server.Close()
 
 			provider := NewOpenAIProvider("test-key", server.URL, "gpt-4")
-			
+
 			req := &LLMRequest{
 				ModelID:  "gpt-4",
 				Messages: tt.messages,
 				Stream:   true,
 			}
-			
+
 			ctx := context.Background()
 			chunkChan, err := provider.StreamMessage(ctx, req)
-			
+
 			if tt.wantErr {
 				assert.Error(t, err)
 				if tt.errContains != "" {
@@ -211,13 +211,13 @@ func TestOpenAIProvider_StreamMessage(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 				assert.NotNil(t, chunkChan)
-				
+
 				// Collect chunks
 				chunks := []LLMChunk{}
 				for chunk := range chunkChan {
 					chunks = append(chunks, *chunk)
 				}
-				
+
 				assert.Equal(t, tt.wantChunks, len(chunks))
 				// Last chunk should be marked as done
 				if len(chunks) > 0 {
@@ -230,12 +230,12 @@ func TestOpenAIProvider_StreamMessage(t *testing.T) {
 
 func TestOpenAIProvider_GetTokenCount(t *testing.T) {
 	provider := NewOpenAIProvider("test-key", "https://api.openai.com/v1", "gpt-4")
-	
+
 	tests := []struct {
-		name     string
-		text     string
-		wantMin  int
-		wantMax  int
+		name    string
+		text    string
+		wantMin int
+		wantMax int
 	}{
 		{
 			name:    "short text",
@@ -256,7 +256,7 @@ func TestOpenAIProvider_GetTokenCount(t *testing.T) {
 			wantMax: 0,
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			count := provider.GetTokenCount(tt.text)
@@ -278,16 +278,16 @@ func TestOpenAIProvider_ContextCancellation(t *testing.T) {
 	defer server.Close()
 
 	provider := NewOpenAIProvider("test-key", server.URL, "gpt-4")
-	
+
 	// Create context with short timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
-	
+
 	req := &LLMRequest{
 		ModelID:  "gpt-4",
 		Messages: []ChatMessage{{Role: "user", Content: "Hello"}},
 	}
-	
+
 	_, err := provider.SendMessage(ctx, req)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "context deadline exceeded")

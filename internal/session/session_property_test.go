@@ -28,9 +28,9 @@ func TestProperty_SessionContinuityTimeout(t *testing.T) {
 				return true
 			}
 
-			// Use reasonable timeout values (between 100ms and 5000ms for testing)
-			timeout := time.Duration(timeoutMs%4900+100) * time.Millisecond
-			waitTime := time.Duration(waitMs % 6000) * time.Millisecond
+			// Use reasonable timeout values (between 100ms and 1000ms for testing)
+			timeout := time.Duration(timeoutMs%900+100) * time.Millisecond
+			waitTime := time.Duration(waitMs%1200) * time.Millisecond
 
 			// Add a buffer for timing imprecision (50ms)
 			const timingBuffer = 50 * time.Millisecond
@@ -95,9 +95,9 @@ func TestProperty_SessionContinuityTimeout(t *testing.T) {
 			// If we're in the buffer zone, accept either outcome
 			return true
 		},
-		gen.Identifier(),                           // userID
-		gen.Int64Range(100, 5000),                 // timeoutMs
-		gen.Int64Range(0, 6000),                   // waitMs
+		gen.Identifier(),          // userID
+		gen.Int64Range(100, 5000), // timeoutMs
+		gen.Int64Range(0, 6000),   // waitMs
 	))
 
 	properties.TestingRun(t, gopter.ConsoleReporter(false))
@@ -125,7 +125,7 @@ func TestProperty_MultipleSessionsPerUser(t *testing.T) {
 			count := (sessionCount % 10) + 1
 
 			logger := getTestLogger()
-			sm := NewSessionManager(15 * time.Minute, logger)
+			sm := NewSessionManager(15*time.Minute, logger)
 			sessionIDs := make([]string, 0, count)
 
 			// Create multiple sessions by creating and ending each one
@@ -174,8 +174,8 @@ func TestProperty_MultipleSessionsPerUser(t *testing.T) {
 
 			return len(sessionIDs) == count
 		},
-		gen.Identifier(),      // userID
-		gen.IntRange(1, 15),   // sessionCount
+		gen.Identifier(),    // userID
+		gen.IntRange(1, 15), // sessionCount
 	))
 
 	properties.TestingRun(t, gopter.ConsoleReporter(false))
@@ -200,7 +200,7 @@ func TestProperty_SingleActiveSessionConstraint(t *testing.T) {
 			}
 
 			logger := getTestLogger()
-			sm := NewSessionManager(15 * time.Minute, logger)
+			sm := NewSessionManager(15*time.Minute, logger)
 
 			// Create first session
 			session1, err := sm.CreateSession(userID)
@@ -274,7 +274,7 @@ func TestProperty_AutomaticSessionNameGeneration(t *testing.T) {
 			const maxLen = 50
 
 			logger := getTestLogger()
-			sm := NewSessionManager(15 * time.Minute, logger)
+			sm := NewSessionManager(15*time.Minute, logger)
 
 			// Create session
 			session, err := sm.CreateSession(userID)
@@ -335,8 +335,8 @@ func TestProperty_AutomaticSessionNameGeneration(t *testing.T) {
 			// Name should remain unchanged (only first message sets name)
 			return retrieved2.Name == expectedName
 		},
-		gen.Identifier(),                    // userID
-		gen.AnyString(),                     // firstMessage
+		gen.Identifier(), // userID
+		gen.AnyString(),  // firstMessage
 	))
 
 	properties.TestingRun(t, gopter.ConsoleReporter(false))

@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard</title>
+    <link rel="stylesheet" href="admin.css">
+</head>
+<body>
+    <div id="app">
+        <!-- Header -->
+        <div class="header">
+            <h1>Admin Dashboard</h1>
+            <div class="header-actions">
+                <button id="refresh-btn" class="btn-secondary">🔄 Refresh</button>
+                <span id="auto-refresh-status">Auto-refresh: <strong>ON</strong></span>
+            </div>
+        </div>
+
+        <!-- Metrics Summary -->
+        <div id="metrics-summary" class="metrics-grid">
+            <div class="metric-card">
+                <div class="metric-label">Active Sessions</div>
+                <div class="metric-value" id="active-sessions">-</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Total Sessions</div>
+                <div class="metric-value" id="total-sessions">-</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Avg Concurrent</div>
+                <div class="metric-value" id="avg-concurrent">-</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Total Tokens</div>
+                <div class="metric-value" id="total-tokens">-</div>
+            </div>
+        </div>
+
+        <!-- Filters and Sorting -->
+        <div class="controls-panel">
+            <div class="filters">
+                <input type="text" id="filter-user-id" placeholder="Filter by User ID" />
+                <input type="date" id="filter-date-start" placeholder="Start Date" />
+                <input type="date" id="filter-date-end" placeholder="End Date" />
+                <select id="filter-status">
+                    <option value="">All Status</option>
+                    <option value="active">Active</option>
+                    <option value="ended">Ended</option>
+                </select>
+                <select id="filter-admin">
+                    <option value="">All Sessions</option>
+                    <option value="true">Admin Assisted</option>
+                    <option value="false">Not Assisted</option>
+                </select>
+                <button id="apply-filters-btn" class="btn-primary">Apply Filters</button>
+                <button id="clear-filters-btn" class="btn-secondary">Clear</button>
+            </div>
+            <div class="sorting">
+                <label>Sort by:</label>
+                <select id="sort-field">
+                    <option value="start_time">Connection Time</option>
+                    <option value="duration">Duration</option>
+                    <option value="user_id">User ID</option>
+                    <option value="last_activity">Last Activity</option>
+                </select>
+                <select id="sort-order">
+                    <option value="desc">Descending</option>
+                    <option value="asc">Ascending</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Sessions List -->
+        <div id="sessions-container">
+            <table id="sessions-table">
+                <thead>
+                    <tr>
+                        <th>User ID</th>
+                        <th>Session ID</th>
+                        <th>Status</th>
+                        <th>Start Time</th>
+                        <th>Duration</th>
+                        <th>Last Activity</th>
+                        <th>Tokens</th>
+                        <th>Avg Response</th>
+                        <th>Max Response</th>
+                        <th>Admin</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="sessions-tbody">
+                    <!-- Sessions will be populated here -->
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Empty State -->
+        <div id="empty-state" style="display: none;">
+            <div class="empty-icon">📊</div>
+            <p>No sessions found</p>
+        </div>
+
+        <!-- Loading Indicator -->
+        <div id="loading" style="display: none;">
+            <div class="loading-spinner"></div>
+            <p>Loading sessions...</p>
+        </div>
+
+        <!-- User Sessions Modal -->
+        <div id="user-sessions-modal" class="modal" style="display: none;">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>User Sessions: <span id="modal-user-id"></span></h2>
+                    <button class="close-btn" onclick="closeUserSessionsModal()">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <table id="user-sessions-table">
+                        <thead>
+                            <tr>
+                                <th>Session ID</th>
+                                <th>Name</th>
+                                <th>Status</th>
+                                <th>Start Time</th>
+                                <th>Messages</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="user-sessions-tbody">
+                            <!-- User sessions will be populated here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="admin.js"></script>
+</body>
+</html>

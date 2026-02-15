@@ -3,6 +3,7 @@ package llm
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -18,8 +19,9 @@ import (
 // For any valid user message, the WebSocket_Server should forward it to the LLM_Backend for processing.
 func TestProperty_ValidMessageRoutingToLLM(t *testing.T) {
 	// Use a fixed set of model IDs to avoid goconfig caching issues
-	fixedModelIDs := []string{"test-model-1", "test-model-2", "test-model-3"}
-	
+	// Using 4 models to match TestProperty_ModelSelectionPersistence
+	fixedModelIDs := []string{"test-model-1", "test-model-2", "test-model-3", "test-model-4"}
+
 	// Create a single shared config for all test iterations
 	cfg := createTestConfig([]LLMProviderConfig{
 		{
@@ -43,10 +45,17 @@ func TestProperty_ValidMessageRoutingToLLM(t *testing.T) {
 			Endpoint: "https://api.test.com",
 			APIKey:   "test-key",
 		},
+		{
+			ID:       "test-model-4",
+			Name:     "Test Model 4",
+			Type:     "openai",
+			Endpoint: "https://api.test.com",
+			APIKey:   "test-key",
+		},
 	})
-	
+
 	logger := createTestLogger()
-	
+
 	parameters := gopter.DefaultTestParameters()
 	parameters.MinSuccessfulTests = 100
 	properties := gopter.NewProperties(parameters)
@@ -57,7 +66,7 @@ func TestProperty_ValidMessageRoutingToLLM(t *testing.T) {
 			if userMessage == "" {
 				return true
 			}
-			
+
 			// Use a fixed model ID from the list
 			modelID := fixedModelIDs[modelIDIndex%len(fixedModelIDs)]
 
@@ -123,7 +132,7 @@ func TestProperty_ValidMessageRoutingToLLM(t *testing.T) {
 
 			return true
 		},
-		gen.IntRange(0, 1000),  // modelIDIndex - will be modulo'd to select from fixed list
+		gen.IntRange(0, 1000), // modelIDIndex - will be modulo'd to select from fixed list
 		gen.AlphaString().SuchThat(func(s string) bool { return len(s) > 0 }), // userMessage
 	))
 
@@ -137,8 +146,9 @@ func TestProperty_ValidMessageRoutingToLLM(t *testing.T) {
 // Chat_Client through the WebSocket connection.
 func TestProperty_LLMResponseDelivery(t *testing.T) {
 	// Use a fixed set of model IDs to avoid goconfig caching issues
-	fixedModelIDs := []string{"test-model-1", "test-model-2", "test-model-3"}
-	
+	// Using 4 models to match TestProperty_ModelSelectionPersistence
+	fixedModelIDs := []string{"test-model-1", "test-model-2", "test-model-3", "test-model-4"}
+
 	parameters := gopter.DefaultTestParameters()
 	parameters.MinSuccessfulTests = 100
 	properties := gopter.NewProperties(parameters)
@@ -149,7 +159,7 @@ func TestProperty_LLMResponseDelivery(t *testing.T) {
 			if responseContent == "" {
 				return true
 			}
-			
+
 			// Use a fixed model ID from the list
 			modelID := fixedModelIDs[modelIDIndex%len(fixedModelIDs)]
 
@@ -164,16 +174,16 @@ func TestProperty_LLMResponseDelivery(t *testing.T) {
 			}
 
 			cfg := createTestConfig([]LLMProviderConfig{
-					{
-						ID:       modelID,
-						Name:     "Test Model",
-						Type:     "openai",
-						Endpoint: "https://api.test.com",
-						APIKey:   "test-key",
-					},
-					})
+				{
+					ID:       modelID,
+					Name:     "Test Model",
+					Type:     "openai",
+					Endpoint: "https://api.test.com",
+					APIKey:   "test-key",
+				},
+			})
 
-					logger := createTestLogger()
+			logger := createTestLogger()
 			service, err := NewLLMService(cfg, logger)
 			if err != nil {
 				t.Logf("Failed to create service: %v", err)
@@ -214,9 +224,9 @@ func TestProperty_LLMResponseDelivery(t *testing.T) {
 
 			return true
 		},
-		gen.IntRange(0, 1000),  // modelIDIndex
+		gen.IntRange(0, 1000), // modelIDIndex
 		gen.AlphaString().SuchThat(func(s string) bool { return len(s) > 0 }), // responseContent
-		gen.UInt16(),      // tokensUsed
+		gen.UInt16(), // tokensUsed
 	))
 
 	properties.TestingRun(t, gopter.ConsoleReporter(false))
@@ -229,8 +239,9 @@ func TestProperty_LLMResponseDelivery(t *testing.T) {
 // and this time should be included in session metrics.
 func TestProperty_ResponseTimeTracking(t *testing.T) {
 	// Use a fixed set of model IDs to avoid goconfig caching issues
-	fixedModelIDs := []string{"test-model-1", "test-model-2", "test-model-3"}
-	
+	// Using 4 models to match TestProperty_ModelSelectionPersistence
+	fixedModelIDs := []string{"test-model-1", "test-model-2", "test-model-3", "test-model-4"}
+
 	parameters := gopter.DefaultTestParameters()
 	parameters.MinSuccessfulTests = 100
 	properties := gopter.NewProperties(parameters)
@@ -241,7 +252,7 @@ func TestProperty_ResponseTimeTracking(t *testing.T) {
 			if delayMs > 200 {
 				return true
 			}
-			
+
 			// Use a fixed model ID from the list
 			modelID := fixedModelIDs[modelIDIndex%len(fixedModelIDs)]
 
@@ -260,16 +271,16 @@ func TestProperty_ResponseTimeTracking(t *testing.T) {
 			}
 
 			cfg := createTestConfig([]LLMProviderConfig{
-					{
-						ID:       modelID,
-						Name:     "Test Model",
-						Type:     "openai",
-						Endpoint: "https://api.test.com",
-						APIKey:   "test-key",
-					},
-					})
+				{
+					ID:       modelID,
+					Name:     "Test Model",
+					Type:     "openai",
+					Endpoint: "https://api.test.com",
+					APIKey:   "test-key",
+				},
+			})
 
-					logger := createTestLogger()
+			logger := createTestLogger()
 			service, err := NewLLMService(cfg, logger)
 			if err != nil {
 				t.Logf("Failed to create service: %v", err)
@@ -306,7 +317,7 @@ func TestProperty_ResponseTimeTracking(t *testing.T) {
 
 			return true
 		},
-		gen.IntRange(0, 1000),  // modelIDIndex
+		gen.IntRange(0, 1000),   // modelIDIndex
 		gen.UInt8Range(10, 200), // delayMs
 	))
 
@@ -320,8 +331,9 @@ func TestProperty_ResponseTimeTracking(t *testing.T) {
 // the session context and the user message.
 func TestProperty_LLMRequestContextInclusion(t *testing.T) {
 	// Use a fixed set of model IDs to avoid goconfig caching issues
-	fixedModelIDs := []string{"test-model-1", "test-model-2", "test-model-3"}
-	
+	// Using 4 models to match TestProperty_ModelSelectionPersistence
+	fixedModelIDs := []string{"test-model-1", "test-model-2", "test-model-3", "test-model-4"}
+
 	parameters := gopter.DefaultTestParameters()
 	parameters.MinSuccessfulTests = 100
 	properties := gopter.NewProperties(parameters)
@@ -332,7 +344,7 @@ func TestProperty_LLMRequestContextInclusion(t *testing.T) {
 			if messageCount == 0 || messageCount > 10 {
 				return true
 			}
-			
+
 			// Use a fixed model ID from the list
 			modelID := fixedModelIDs[modelIDIndex%len(fixedModelIDs)]
 
@@ -350,16 +362,16 @@ func TestProperty_LLMRequestContextInclusion(t *testing.T) {
 			}
 
 			cfg := createTestConfig([]LLMProviderConfig{
-					{
-						ID:       modelID,
-						Name:     "Test Model",
-						Type:     "openai",
-						Endpoint: "https://api.test.com",
-						APIKey:   "test-key",
-					},
-					})
+				{
+					ID:       modelID,
+					Name:     "Test Model",
+					Type:     "openai",
+					Endpoint: "https://api.test.com",
+					APIKey:   "test-key",
+				},
+			})
 
-					logger := createTestLogger()
+			logger := createTestLogger()
 			service, err := NewLLMService(cfg, logger)
 			if err != nil {
 				t.Logf("Failed to create service: %v", err)
@@ -419,7 +431,7 @@ func TestProperty_LLMRequestContextInclusion(t *testing.T) {
 
 			return true
 		},
-		gen.IntRange(0, 1000),  // modelIDIndex
+		gen.IntRange(0, 1000), // modelIDIndex
 		gen.UInt8Range(1, 10), // messageCount
 	))
 
@@ -433,8 +445,9 @@ func TestProperty_LLMRequestContextInclusion(t *testing.T) {
 // to the Chat_Client in real-time as they are received.
 func TestProperty_StreamingResponseForwarding(t *testing.T) {
 	// Use a fixed set of model IDs to avoid goconfig caching issues
-	fixedModelIDs := []string{"test-model-1", "test-model-2", "test-model-3"}
-	
+	// Using 4 models to match TestProperty_ModelSelectionPersistence
+	fixedModelIDs := []string{"test-model-1", "test-model-2", "test-model-3", "test-model-4"}
+
 	parameters := gopter.DefaultTestParameters()
 	parameters.MinSuccessfulTests = 100
 	properties := gopter.NewProperties(parameters)
@@ -445,7 +458,7 @@ func TestProperty_StreamingResponseForwarding(t *testing.T) {
 			if chunkCount == 0 || chunkCount > 10 {
 				return true
 			}
-			
+
 			// Use a fixed model ID from the list
 			modelID := fixedModelIDs[modelIDIndex%len(fixedModelIDs)]
 
@@ -467,16 +480,16 @@ func TestProperty_StreamingResponseForwarding(t *testing.T) {
 			}
 
 			cfg := createTestConfig([]LLMProviderConfig{
-					{
-						ID:       modelID,
-						Name:     "Test Model",
-						Type:     "openai",
-						Endpoint: "https://api.test.com",
-						APIKey:   "test-key",
-					},
-					})
+				{
+					ID:       modelID,
+					Name:     "Test Model",
+					Type:     "openai",
+					Endpoint: "https://api.test.com",
+					APIKey:   "test-key",
+				},
+			})
 
-					logger := createTestLogger()
+			logger := createTestLogger()
 			service, err := NewLLMService(cfg, logger)
 			if err != nil {
 				t.Logf("Failed to create service: %v", err)
@@ -528,7 +541,7 @@ func TestProperty_StreamingResponseForwarding(t *testing.T) {
 
 			return true
 		},
-		gen.IntRange(0, 1000),  // modelIDIndex
+		gen.IntRange(0, 1000), // modelIDIndex
 		gen.UInt8Range(1, 10), // chunkCount
 	))
 
@@ -542,8 +555,9 @@ func TestProperty_StreamingResponseForwarding(t *testing.T) {
 // and retry the request with exponential backoff.
 func TestProperty_LLMBackendRetryLogic(t *testing.T) {
 	// Use a fixed set of model IDs to avoid goconfig caching issues
-	fixedModelIDs := []string{"test-model-1", "test-model-2", "test-model-3"}
-	
+	// Using 4 models to match TestProperty_ModelSelectionPersistence
+	fixedModelIDs := []string{"test-model-1", "test-model-2", "test-model-3", "test-model-4"}
+
 	parameters := gopter.DefaultTestParameters()
 	parameters.MinSuccessfulTests = 100
 	properties := gopter.NewProperties(parameters)
@@ -554,7 +568,7 @@ func TestProperty_LLMBackendRetryLogic(t *testing.T) {
 			if failureCount == 0 || failureCount > 3 {
 				return true
 			}
-			
+
 			// Use a fixed model ID from the list
 			modelID := fixedModelIDs[modelIDIndex%len(fixedModelIDs)]
 
@@ -581,16 +595,16 @@ func TestProperty_LLMBackendRetryLogic(t *testing.T) {
 			}
 
 			cfg := createTestConfig([]LLMProviderConfig{
-					{
-						ID:       modelID,
-						Name:     "Test Model",
-						Type:     "openai",
-						Endpoint: "https://api.test.com",
-						APIKey:   "test-key",
-					},
-					})
+				{
+					ID:       modelID,
+					Name:     "Test Model",
+					Type:     "openai",
+					Endpoint: "https://api.test.com",
+					APIKey:   "test-key",
+				},
+			})
 
-					logger := createTestLogger()
+			logger := createTestLogger()
 			service, err := NewLLMService(cfg, logger)
 			if err != nil {
 				t.Logf("Failed to create service: %v", err)
@@ -654,8 +668,8 @@ func TestProperty_LLMBackendRetryLogic(t *testing.T) {
 
 			return true
 		},
-		gen.IntRange(0, 1000),  // modelIDIndex
-		gen.UInt8Range(1, 3), // failureCount (1-3 to test retry logic)
+		gen.IntRange(0, 1000), // modelIDIndex
+		gen.UInt8Range(1, 3),  // failureCount (1-3 to test retry logic)
 	))
 
 	properties.TestingRun(t, gopter.ConsoleReporter(false))
@@ -669,7 +683,7 @@ func TestProperty_LLMBackendRetryLogic(t *testing.T) {
 func TestProperty_ModelSelectionPersistence(t *testing.T) {
 	// Use fixed model IDs to avoid goconfig caching issues
 	fixedModelIDs := []string{"test-model-1", "test-model-2", "test-model-3", "test-model-4"}
-	
+
 	parameters := gopter.DefaultTestParameters()
 	parameters.MinSuccessfulTests = 100
 	properties := gopter.NewProperties(parameters)
@@ -680,11 +694,11 @@ func TestProperty_ModelSelectionPersistence(t *testing.T) {
 			if requestCount == 0 || requestCount > 5 {
 				return true
 			}
-			
+
 			// Use different fixed model IDs
 			modelID1 := fixedModelIDs[modelID1Index%len(fixedModelIDs)]
 			modelID2 := fixedModelIDs[modelID2Index%len(fixedModelIDs)]
-			
+
 			// Skip if models are the same
 			if modelID1 == modelID2 {
 				return true
@@ -715,24 +729,20 @@ func TestProperty_ModelSelectionPersistence(t *testing.T) {
 				},
 			}
 
-			cfg := createTestConfig([]LLMProviderConfig{
-					{
-						ID:       modelID1,
-						Name:     "Test Model 1",
-						Type:     "openai",
-						Endpoint: "https://api.test.com",
-						APIKey:   "test-key",
-					},
-					{
-						ID:       modelID2,
-						Name:     "Test Model 2",
-						Type:     "openai",
-						Endpoint: "https://api.test.com",
-						APIKey:   "test-key",
-					},
-					})
+			// Create config with all possible model IDs to avoid registration errors
+			allProviders := make([]LLMProviderConfig, len(fixedModelIDs))
+			for i, modelID := range fixedModelIDs {
+				allProviders[i] = LLMProviderConfig{
+					ID:       modelID,
+					Name:     fmt.Sprintf("Test Model %d", i+1),
+					Type:     "openai",
+					Endpoint: "https://api.test.com",
+					APIKey:   "test-key",
+				}
+			}
+			cfg := createTestConfig(allProviders)
 
-					logger := createTestLogger()
+			logger := createTestLogger()
 			service, err := NewLLMService(cfg, logger)
 			if err != nil {
 				t.Logf("Failed to create service: %v", err)
@@ -792,8 +802,8 @@ func TestProperty_ModelSelectionPersistence(t *testing.T) {
 
 			return true
 		},
-		gen.IntRange(0, 1000),  // modelID1Index
-		gen.IntRange(0, 1000),  // modelID2Index
+		gen.IntRange(0, 1000), // modelID1Index
+		gen.IntRange(0, 1000), // modelID2Index
 		gen.UInt8Range(1, 5),  // requestCount
 	))
 
@@ -807,8 +817,9 @@ func TestProperty_ModelSelectionPersistence(t *testing.T) {
 // the total token count in the session metadata.
 func TestProperty_TokenUsageTrackingAndStorage(t *testing.T) {
 	// Use a fixed set of model IDs to avoid goconfig caching issues
-	fixedModelIDs := []string{"test-model-1", "test-model-2", "test-model-3"}
-	
+	// Using 4 models to match TestProperty_ModelSelectionPersistence
+	fixedModelIDs := []string{"test-model-1", "test-model-2", "test-model-3", "test-model-4"}
+
 	parameters := gopter.DefaultTestParameters()
 	parameters.MinSuccessfulTests = 100
 	properties := gopter.NewProperties(parameters)
@@ -819,7 +830,7 @@ func TestProperty_TokenUsageTrackingAndStorage(t *testing.T) {
 			if requestCount == 0 || requestCount > 10 || tokensPerRequest == 0 {
 				return true
 			}
-			
+
 			// Use a fixed model ID from the list
 			modelID := fixedModelIDs[modelIDIndex%len(fixedModelIDs)]
 
@@ -836,16 +847,16 @@ func TestProperty_TokenUsageTrackingAndStorage(t *testing.T) {
 			}
 
 			cfg := createTestConfig([]LLMProviderConfig{
-					{
-						ID:       modelID,
-						Name:     "Test Model",
-						Type:     "openai",
-						Endpoint: "https://api.test.com",
-						APIKey:   "test-key",
-					},
-					})
+				{
+					ID:       modelID,
+					Name:     "Test Model",
+					Type:     "openai",
+					Endpoint: "https://api.test.com",
+					APIKey:   "test-key",
+				},
+			})
 
-					logger := createTestLogger()
+			logger := createTestLogger()
 			service, err := NewLLMService(cfg, logger)
 			if err != nil {
 				t.Logf("Failed to create service: %v", err)
@@ -887,8 +898,8 @@ func TestProperty_TokenUsageTrackingAndStorage(t *testing.T) {
 
 			return true
 		},
-		gen.IntRange(0, 1000),  // modelIDIndex
-		gen.UInt8Range(1, 10),  // requestCount
+		gen.IntRange(0, 1000),    // modelIDIndex
+		gen.UInt8Range(1, 10),    // requestCount
 		gen.UInt16Range(1, 1000), // tokensPerRequest
 	))
 

@@ -204,9 +204,9 @@ func TestMessage_UnmarshalJSON(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "invalid json",
-			json: `{invalid}`,
-			want: Message{},
+			name:    "invalid json",
+			json:    `{invalid}`,
+			want:    Message{},
 			wantErr: true,
 		},
 		{
@@ -225,12 +225,12 @@ func TestMessage_UnmarshalJSON(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			var msg Message
 			err := json.Unmarshal([]byte(tt.json), &msg)
-			
+
 			if tt.wantErr {
 				assert.Error(t, err)
 				return
 			}
-			
+
 			require.NoError(t, err)
 			assert.Equal(t, tt.want.Type, msg.Type)
 			assert.Equal(t, tt.want.SessionID, msg.SessionID)
@@ -239,11 +239,11 @@ func TestMessage_UnmarshalJSON(t *testing.T) {
 			assert.Equal(t, tt.want.FileURL, msg.FileURL)
 			assert.Equal(t, tt.want.Sender, msg.Sender)
 			assert.True(t, tt.want.Timestamp.Equal(msg.Timestamp))
-			
+
 			if tt.want.Metadata != nil {
 				assert.Equal(t, tt.want.Metadata, msg.Metadata)
 			}
-			
+
 			if tt.want.Error != nil {
 				require.NotNil(t, msg.Error)
 				assert.Equal(t, tt.want.Error.Code, msg.Error.Code)

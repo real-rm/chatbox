@@ -74,7 +74,7 @@ func TestDifyProvider_SendMessage(t *testing.T) {
 				// Verify request headers
 				assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
 				assert.Contains(t, r.Header.Get("Authorization"), "Bearer")
-				
+
 				// Verify request body
 				var reqBody difyRequest
 				err := json.NewDecoder(r.Body).Decode(&reqBody)
@@ -82,7 +82,7 @@ func TestDifyProvider_SendMessage(t *testing.T) {
 				assert.NotEmpty(t, reqBody.Query)
 				assert.Equal(t, "blocking", reqBody.ResponseMode)
 				assert.NotEmpty(t, reqBody.User)
-				
+
 				// Send response
 				w.WriteHeader(tt.mockStatusCode)
 				if tt.mockStatusCode == http.StatusOK {
@@ -94,16 +94,16 @@ func TestDifyProvider_SendMessage(t *testing.T) {
 			defer server.Close()
 
 			provider := NewDifyProvider("test-key", server.URL, "dify-model")
-			
+
 			req := &LLMRequest{
 				ModelID:  "dify-model",
 				Messages: tt.messages,
 				Stream:   false,
 			}
-			
+
 			ctx := context.Background()
 			resp, err := provider.SendMessage(ctx, req)
-			
+
 			if tt.wantErr {
 				assert.Error(t, err)
 				if tt.errContains != "" {
@@ -178,13 +178,13 @@ func TestDifyProvider_StreamMessage(t *testing.T) {
 				assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
 				assert.Contains(t, r.Header.Get("Authorization"), "Bearer")
 				assert.Equal(t, "text/event-stream", r.Header.Get("Accept"))
-				
+
 				// Verify request body
 				var reqBody difyRequest
 				err := json.NewDecoder(r.Body).Decode(&reqBody)
 				require.NoError(t, err)
 				assert.Equal(t, "streaming", reqBody.ResponseMode)
-				
+
 				// Send response
 				w.WriteHeader(tt.mockStatusCode)
 				if tt.mockStatusCode == http.StatusOK {
@@ -199,16 +199,16 @@ func TestDifyProvider_StreamMessage(t *testing.T) {
 			defer server.Close()
 
 			provider := NewDifyProvider("test-key", server.URL, "dify-model")
-			
+
 			req := &LLMRequest{
 				ModelID:  "dify-model",
 				Messages: tt.messages,
 				Stream:   true,
 			}
-			
+
 			ctx := context.Background()
 			chunkChan, err := provider.StreamMessage(ctx, req)
-			
+
 			if tt.wantErr {
 				assert.Error(t, err)
 				if tt.errContains != "" {
@@ -218,13 +218,13 @@ func TestDifyProvider_StreamMessage(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 				assert.NotNil(t, chunkChan)
-				
+
 				// Collect chunks
 				chunks := []LLMChunk{}
 				for chunk := range chunkChan {
 					chunks = append(chunks, *chunk)
 				}
-				
+
 				assert.Equal(t, tt.wantChunks, len(chunks))
 				// Last chunk should be marked as done
 				if len(chunks) > 0 {
@@ -237,12 +237,12 @@ func TestDifyProvider_StreamMessage(t *testing.T) {
 
 func TestDifyProvider_GetTokenCount(t *testing.T) {
 	provider := NewDifyProvider("test-key", "https://api.dify.ai/v1", "dify-model")
-	
+
 	tests := []struct {
-		name     string
-		text     string
-		wantMin  int
-		wantMax  int
+		name    string
+		text    string
+		wantMin int
+		wantMax int
 	}{
 		{
 			name:    "short text",
@@ -263,7 +263,7 @@ func TestDifyProvider_GetTokenCount(t *testing.T) {
 			wantMax: 0,
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			count := provider.GetTokenCount(tt.text)
@@ -275,7 +275,7 @@ func TestDifyProvider_GetTokenCount(t *testing.T) {
 
 func TestDifyProvider_FormatMessages(t *testing.T) {
 	provider := NewDifyProvider("test-key", "https://api.dify.ai/v1", "dify-model")
-	
+
 	tests := []struct {
 		name     string
 		messages []ChatMessage
@@ -303,7 +303,7 @@ func TestDifyProvider_FormatMessages(t *testing.T) {
 			want:     "",
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := provider.formatMessages(tt.messages)
@@ -317,11 +317,11 @@ func TestDifyProvider_MultipleMessages(t *testing.T) {
 		var reqBody difyRequest
 		err := json.NewDecoder(r.Body).Decode(&reqBody)
 		require.NoError(t, err)
-		
+
 		// Verify query contains all messages formatted correctly
 		assert.Contains(t, reqBody.Query, "user: Hello")
 		assert.Contains(t, reqBody.Query, "assistant: Hi")
-		
+
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(difyResponse{
 			Answer: "Response",
@@ -333,7 +333,7 @@ func TestDifyProvider_MultipleMessages(t *testing.T) {
 	defer server.Close()
 
 	provider := NewDifyProvider("test-key", server.URL, "dify-model")
-	
+
 	req := &LLMRequest{
 		ModelID: "dify-model",
 		Messages: []ChatMessage{
@@ -342,10 +342,10 @@ func TestDifyProvider_MultipleMessages(t *testing.T) {
 			{Role: "user", Content: "How are you?"},
 		},
 	}
-	
+
 	ctx := context.Background()
 	resp, err := provider.SendMessage(ctx, req)
-	
+
 	assert.NoError(t, err)
 	assert.NotNil(t, resp)
 }

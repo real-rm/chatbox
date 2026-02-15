@@ -276,26 +276,26 @@ func genMaliciousString() gopter.Gen {
 		gen.Const("<body onload=alert('XSS')>"),
 		gen.Const("<svg onload=alert(1)>"),
 		gen.Const("<input onfocus=alert(1) autofocus>"),
-		
+
 		// SQL injection vectors
 		gen.Const("'; DROP TABLE users; --"),
 		gen.Const("1' UNION SELECT * FROM users--"),
 		gen.Const("admin'--"),
 		gen.Const("' OR '1'='1"),
 		gen.Const("1; DELETE FROM users WHERE 1=1--"),
-		
+
 		// Special characters
 		gen.Const("test\x00data"),
 		gen.Const("  leading and trailing spaces  "),
 		gen.Const("<>&\"'"),
 		gen.Const("test\ndata\twith\rspecial"),
-		
+
 		// Normal strings (should pass through safely)
 		gen.AlphaString(),
 		gen.Const("Hello, world!"),
 		gen.Const("Normal text with numbers 123"),
 		gen.Const("Unicode: 世界 🌍"),
-		
+
 		// Empty string
 		gen.Const(""),
 	)

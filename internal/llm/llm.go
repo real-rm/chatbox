@@ -35,10 +35,10 @@ type LLMProviderConfig struct {
 type LLMProvider interface {
 	// SendMessage sends a message to the LLM and returns the complete response
 	SendMessage(ctx context.Context, req *LLMRequest) (*LLMResponse, error)
-	
+
 	// StreamMessage sends a message to the LLM and returns a channel for streaming response chunks
 	StreamMessage(ctx context.Context, req *LLMRequest) (<-chan *LLMChunk, error)
-	
+
 	// GetTokenCount estimates the token count for the given text
 	GetTokenCount(text string) int
 }
@@ -94,26 +94,26 @@ func NewLLMService(cfg *goconfig.ConfigAccessor, logger *golog.Logger) (*LLMServ
 	if logger == nil {
 		return nil, errors.New("logger is required")
 	}
-	
+
 	llmLogger := logger.WithGroup("llm")
-	
+
 	// Load LLM providers from config
 	providers, err := loadLLMProviders(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load LLM providers: %w", err)
 	}
-	
+
 	if len(providers) == 0 {
 		return nil, ErrNoProviders
 	}
-	
+
 	service := &LLMService{
 		providers: make(map[string]LLMProvider),
 		models:    make(map[string]ModelInfo),
 		config:    cfg,
 		logger:    llmLogger,
 	}
-	
+
 	// Register all configured providers
 	for _, providerCfg := range providers {
 		modelInfo := ModelInfo{
@@ -123,17 +123,17 @@ func NewLLMService(cfg *goconfig.ConfigAccessor, logger *golog.Logger) (*LLMServ
 			Endpoint: providerCfg.Endpoint,
 		}
 		service.models[providerCfg.ID] = modelInfo
-		
+
 		// Create provider instance based on type
 		provider, err := createProvider(providerCfg)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create provider %s: %w", providerCfg.ID, err)
 		}
-		
+
 		service.providers[providerCfg.ID] = provider
 		llmLogger.Info("Registered LLM provider", "provider_id", providerCfg.ID, "type", providerCfg.Type)
 	}
-	
+
 	return service, nil
 }
 
@@ -145,25 +145,25 @@ func loadLLMProviders(cfg *goconfig.ConfigAccessor) ([]LLMProviderConfig, error)
 		// If llm.providers doesn't exist, return empty slice
 		return []LLMProviderConfig{}, nil
 	}
-	
+
 	// Handle nil case
 	if providersConfig == nil {
 		return []LLMProviderConfig{}, nil
 	}
-	
+
 	// Convert to slice of provider configs
 	providersSlice, ok := providersConfig.([]interface{})
 	if !ok {
 		return nil, errors.New("llm.providers is not an array")
 	}
-	
+
 	providers := make([]LLMProviderConfig, 0, len(providersSlice))
 	for i, p := range providersSlice {
 		providerMap, ok := p.(map[string]interface{})
 		if !ok {
 			return nil, fmt.Errorf("provider %d is not a map", i)
 		}
-		
+
 		provider := LLMProviderConfig{
 			ID:       getStringFromMap(providerMap, "id"),
 			Name:     getStringFromMap(providerMap, "name"),
@@ -172,7 +172,7 @@ func loadLLMProviders(cfg *goconfig.ConfigAccessor) ([]LLMProviderConfig, error)
 			APIKey:   getStringFromMap(providerMap, "apiKey"),
 			Model:    getStringFromMap(providerMap, "model"),
 		}
-		
+
 		// Validate required fields
 		if provider.ID == "" {
 			return nil, fmt.Errorf("provider %d: ID is required", i)
@@ -189,10 +189,10 @@ func loadLLMProviders(cfg *goconfig.ConfigAccessor) ([]LLMProviderConfig, error)
 		if provider.APIKey == "" {
 			return nil, fmt.Errorf("provider %d: API key is required", i)
 		}
-		
+
 		providers = append(providers, provider)
 	}
-	
+
 	return providers, nil
 }
 
@@ -228,15 +228,15 @@ func (s *LLMService) RegisterProvider(modelID string, provider LLMProvider) erro
 	if provider == nil {
 		return errors.New("provider cannot be nil")
 	}
-	
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	
+
 	// Check if model exists in configuration
 	if _, exists := s.models[modelID]; !exists {
 		return fmt.Errorf("model %s not found in configuration", modelID)
 	}
-	
+
 	s.providers[modelID] = provider
 	return nil
 }
@@ -246,23 +246,23 @@ func (s *LLMService) SendMessage(ctx context.Context, modelID string, messages [
 	if modelID == "" {
 		return nil, ErrInvalidModelID
 	}
-	
+
 	provider, err := s.getProvider(modelID)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	req := &LLMRequest{
 		ModelID:  modelID,
 		Messages: messages,
 		Stream:   false,
 	}
-	
+
 	// Implement retry logic with exponential backoff
 	var lastErr error
 	maxRetries := 3
 	baseDelay := 1 * time.Second
-	
+
 	for attempt := 0; attempt < maxRetries; attempt++ {
 		if attempt > 0 {
 			// Calculate exponential backoff delay
@@ -270,9 +270,9 @@ func (s *LLMService) SendMessage(ctx context.Context, modelID string, messages [
 			if delay > 30*time.Second {
 				delay = 30 * time.Second // Cap at 30 seconds
 			}
-			
+
 			s.logger.Info("Retrying LLM request", "model_id", modelID, "attempt", attempt+1, "delay", delay)
-			
+
 			// Wait before retry
 			select {
 			case <-ctx.Done():
@@ -280,12 +280,12 @@ func (s *LLMService) SendMessage(ctx context.Context, modelID string, messages [
 			case <-time.After(delay):
 			}
 		}
-		
+
 		// Measure response time
 		startTime := time.Now()
 		resp, err := provider.SendMessage(ctx, req)
 		duration := time.Since(startTime)
-		
+
 		if err == nil {
 			// Success - ensure duration is set
 			if resp.Duration == 0 {
@@ -294,16 +294,16 @@ func (s *LLMService) SendMessage(ctx context.Context, modelID string, messages [
 			s.logger.Info("LLM request successful", "model_id", modelID, "duration", duration, "tokens", resp.TokensUsed)
 			return resp, nil
 		}
-		
+
 		lastErr = err
 		s.logger.Warn("LLM request failed", "model_id", modelID, "attempt", attempt+1, "error", err)
-		
+
 		// Check if error is retryable
 		if !isRetryableError(err) {
 			return nil, fmt.Errorf("non-retryable error: %w", err)
 		}
 	}
-	
+
 	s.logger.Error("LLM request failed after all retries", "model_id", modelID, "max_retries", maxRetries, "error", lastErr)
 	return nil, fmt.Errorf("failed after %d attempts: %w", maxRetries, lastErr)
 }
@@ -313,23 +313,23 @@ func (s *LLMService) StreamMessage(ctx context.Context, modelID string, messages
 	if modelID == "" {
 		return nil, ErrInvalidModelID
 	}
-	
+
 	provider, err := s.getProvider(modelID)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	req := &LLMRequest{
 		ModelID:  modelID,
 		Messages: messages,
 		Stream:   true,
 	}
-	
+
 	// Implement retry logic with exponential backoff for stream establishment
 	var lastErr error
 	maxRetries := 3
 	baseDelay := 1 * time.Second
-	
+
 	for attempt := 0; attempt < maxRetries; attempt++ {
 		if attempt > 0 {
 			// Calculate exponential backoff delay
@@ -337,9 +337,9 @@ func (s *LLMService) StreamMessage(ctx context.Context, modelID string, messages
 			if delay > 30*time.Second {
 				delay = 30 * time.Second // Cap at 30 seconds
 			}
-			
+
 			s.logger.Info("Retrying LLM stream request", "model_id", modelID, "attempt", attempt+1, "delay", delay)
-			
+
 			// Wait before retry
 			select {
 			case <-ctx.Done():
@@ -347,7 +347,7 @@ func (s *LLMService) StreamMessage(ctx context.Context, modelID string, messages
 			case <-time.After(delay):
 			}
 		}
-		
+
 		chunkChan, err := provider.StreamMessage(ctx, req)
 		if err == nil {
 			// Success - wrap channel to track response time
@@ -361,16 +361,16 @@ func (s *LLMService) StreamMessage(ctx context.Context, modelID string, messages
 			}()
 			return wrappedChan, nil
 		}
-		
+
 		lastErr = err
 		s.logger.Warn("LLM stream request failed", "model_id", modelID, "attempt", attempt+1, "error", err)
-		
+
 		// Check if error is retryable
 		if !isRetryableError(err) {
 			return nil, fmt.Errorf("non-retryable error: %w", err)
 		}
 	}
-	
+
 	s.logger.Error("LLM stream failed after all retries", "model_id", modelID, "max_retries", maxRetries, "error", lastErr)
 	return nil, fmt.Errorf("failed to establish stream after %d attempts: %w", maxRetries, lastErr)
 }
@@ -379,7 +379,7 @@ func (s *LLMService) StreamMessage(ctx context.Context, modelID string, messages
 func (s *LLMService) GetAvailableModels() []ModelInfo {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	
+
 	models := make([]ModelInfo, 0, len(s.models))
 	for _, model := range s.models {
 		models = append(models, model)
@@ -392,14 +392,14 @@ func (s *LLMService) ValidateModel(modelID string) error {
 	if modelID == "" {
 		return ErrInvalidModelID
 	}
-	
+
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	
+
 	if _, exists := s.models[modelID]; !exists {
 		return fmt.Errorf("%w: %s", ErrProviderNotFound, modelID)
 	}
-	
+
 	return nil
 }
 
@@ -408,12 +408,12 @@ func (s *LLMService) GetTokenCount(modelID string, text string) (int, error) {
 	if modelID == "" {
 		return 0, ErrInvalidModelID
 	}
-	
+
 	provider, err := s.getProvider(modelID)
 	if err != nil {
 		return 0, err
 	}
-	
+
 	return provider.GetTokenCount(text), nil
 }
 
@@ -421,12 +421,12 @@ func (s *LLMService) GetTokenCount(modelID string, text string) (int, error) {
 func (s *LLMService) getProvider(modelID string) (LLMProvider, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	
+
 	provider, exists := s.providers[modelID]
 	if !exists {
 		return nil, fmt.Errorf("%w: %s", ErrProviderNotFound, modelID)
 	}
-	
+
 	return provider, nil
 }
 
@@ -435,9 +435,9 @@ func isRetryableError(err error) bool {
 	if err == nil {
 		return false
 	}
-	
+
 	errStr := err.Error()
-	
+
 	// Network errors are retryable
 	if strings.Contains(errStr, "connection refused") ||
 		strings.Contains(errStr, "connection reset") ||
@@ -446,24 +446,24 @@ func isRetryableError(err error) bool {
 		strings.Contains(errStr, "EOF") {
 		return true
 	}
-	
+
 	// HTTP 5xx errors are retryable
 	if strings.Contains(errStr, "status 5") {
 		return true
 	}
-	
+
 	// Rate limit errors (429) are retryable
 	if strings.Contains(errStr, "status 429") ||
 		strings.Contains(errStr, "rate limit") {
 		return true
 	}
-	
+
 	// Service unavailable errors are retryable
 	if strings.Contains(errStr, "unavailable") ||
 		strings.Contains(errStr, "overloaded") {
 		return true
 	}
-	
+
 	// Default to non-retryable for unknown errors
 	return false
 }

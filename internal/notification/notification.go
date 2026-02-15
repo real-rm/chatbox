@@ -163,7 +163,7 @@ func (ns *NotificationService) SendHelpRequestAlert(userID, sessionID string) er
 				</ul>
 				<p><a href="https://admin.example.com/sessions/%s">View Session</a></p>
 			`, userID, sessionID, time.Now().Format(time.RFC3339), sessionID),
-			Text: fmt.Sprintf("Help Request - User: %s, Session: %s, Time: %s", 
+			Text: fmt.Sprintf("Help Request - User: %s, Session: %s, Time: %s",
 				userID, sessionID, time.Now().Format(time.RFC3339)),
 		}
 

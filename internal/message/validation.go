@@ -215,13 +215,13 @@ func (m *Message) Sanitize() {
 func sanitizeString(s string) string {
 	// Remove null bytes
 	s = strings.ReplaceAll(s, "\x00", "")
-	
+
 	// Trim whitespace
 	s = strings.TrimSpace(s)
-	
+
 	// HTML escape to prevent XSS
 	s = html.EscapeString(s)
-	
+
 	return s
 }
 

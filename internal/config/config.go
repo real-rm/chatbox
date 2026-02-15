@@ -298,14 +298,14 @@ func loadLLMConfig() LLMConfig {
 	// Load LLM providers from environment
 	// Format: LLM_PROVIDER_1_ID, LLM_PROVIDER_1_NAME, etc.
 	providers := []LLMProviderConfig{}
-	
+
 	for i := 1; i <= 10; i++ { // Support up to 10 providers
 		prefix := fmt.Sprintf("LLM_PROVIDER_%d_", i)
 		id := os.Getenv(prefix + "ID")
 		if id == "" {
 			continue // No more providers
 		}
-		
+
 		provider := LLMProviderConfig{
 			ID:       id,
 			Name:     os.Getenv(prefix + "NAME"),
@@ -316,7 +316,7 @@ func loadLLMConfig() LLMConfig {
 		}
 		providers = append(providers, provider)
 	}
-	
+
 	return LLMConfig{
 		Providers: providers,
 	}

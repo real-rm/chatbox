@@ -209,7 +209,7 @@ func TestValidate_MissingRequiredFields(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			err := tt.message.Validate()
 			require.Error(t, err)
-			
+
 			validationErr, ok := err.(*ValidationError)
 			require.True(t, ok, "error should be ValidationError")
 			assert.Equal(t, tt.expectedField, validationErr.Field)
@@ -372,7 +372,7 @@ func TestValidate_TypeSpecificFields(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			err := tt.message.Validate()
 			require.Error(t, err)
-			
+
 			validationErr, ok := err.(*ValidationError)
 			require.True(t, ok, "error should be ValidationError")
 			assert.Equal(t, tt.expectedField, validationErr.Field)
@@ -438,7 +438,7 @@ func TestValidate_FieldLengths(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			err := tt.message.Validate()
 			require.Error(t, err)
-			
+
 			validationErr, ok := err.(*ValidationError)
 			require.True(t, ok, "error should be ValidationError")
 			assert.Contains(t, validationErr.Field, tt.expectedField)
@@ -557,7 +557,7 @@ func TestSanitize_XSSPrevention(t *testing.T) {
 				Timestamp: time.Now(),
 				Sender:    SenderUser,
 			}
-			
+
 			msg.Sanitize()
 			assert.Equal(t, tt.expected, msg.Content)
 		})
@@ -596,7 +596,7 @@ func TestSanitize_SQLInjectionPrevention(t *testing.T) {
 				Timestamp: time.Now(),
 				Sender:    SenderUser,
 			}
-			
+
 			msg.Sanitize()
 			assert.Equal(t, tt.expected, msg.Content)
 		})
@@ -640,7 +640,7 @@ func TestSanitize_SpecialCharacters(t *testing.T) {
 				Timestamp: time.Now(),
 				Sender:    SenderUser,
 			}
-			
+
 			msg.Sanitize()
 			assert.Equal(t, tt.expected, msg.Content)
 		})
@@ -675,7 +675,7 @@ func TestSanitize_AllFields(t *testing.T) {
 	assert.Contains(t, msg.FileID, "&#39;")
 	assert.Contains(t, msg.FileURL, "javascript:alert(1)") // URLs are escaped but protocol remains
 	assert.Contains(t, msg.ModelID, "&lt;b&gt;")
-	
+
 	// Check metadata - keys and values should be escaped
 	for key, value := range msg.Metadata {
 		// Keys and values should have HTML entities escaped
@@ -684,7 +684,7 @@ func TestSanitize_AllFields(t *testing.T) {
 			assert.True(t, true)
 		}
 	}
-	
+
 	// Check error info
 	assert.Contains(t, msg.Error.Code, "&lt;")
 	assert.Contains(t, msg.Error.Message, "&lt;")
@@ -709,7 +709,7 @@ func TestSanitize_EmptyStrings(t *testing.T) {
 // TestSanitize_VeryLongStrings tests sanitization of very long strings
 func TestSanitize_VeryLongStrings(t *testing.T) {
 	longString := strings.Repeat("<script>alert('xss')</script>", 100)
-	
+
 	msg := Message{
 		Type:      TypeUserMessage,
 		Content:   longString,

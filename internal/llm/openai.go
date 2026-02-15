@@ -34,9 +34,9 @@ func NewOpenAIProvider(apiKey, endpoint, model string) *OpenAIProvider {
 
 // openAIRequest represents the request format for OpenAI API
 type openAIRequest struct {
-	Model    string              `json:"model"`
-	Messages []openAIMessage     `json:"messages"`
-	Stream   bool                `json:"stream"`
+	Model    string          `json:"model"`
+	Messages []openAIMessage `json:"messages"`
+	Stream   bool            `json:"stream"`
 }
 
 type openAIMessage struct {
@@ -46,12 +46,12 @@ type openAIMessage struct {
 
 // openAIResponse represents the response format from OpenAI API
 type openAIResponse struct {
-	ID      string           `json:"id"`
-	Object  string           `json:"object"`
-	Created int64            `json:"created"`
-	Model   string           `json:"model"`
-	Choices []openAIChoice   `json:"choices"`
-	Usage   openAIUsage      `json:"usage"`
+	ID      string         `json:"id"`
+	Object  string         `json:"object"`
+	Created int64          `json:"created"`
+	Model   string         `json:"model"`
+	Choices []openAIChoice `json:"choices"`
+	Usage   openAIUsage    `json:"usage"`
 }
 
 type openAIChoice struct {
@@ -70,7 +70,7 @@ type openAIUsage struct {
 // SendMessage sends a message to OpenAI and returns the complete response
 func (p *OpenAIProvider) SendMessage(ctx context.Context, req *LLMRequest) (*LLMResponse, error) {
 	startTime := time.Now()
-	
+
 	// Convert messages to OpenAI format
 	messages := make([]openAIMessage, len(req.Messages))
 	for i, msg := range req.Messages {
@@ -79,52 +79,52 @@ func (p *OpenAIProvider) SendMessage(ctx context.Context, req *LLMRequest) (*LLM
 			Content: msg.Content,
 		}
 	}
-	
+
 	// Create request body
 	reqBody := openAIRequest{
 		Model:    p.model,
 		Messages: messages,
 		Stream:   false,
 	}
-	
+
 	bodyBytes, err := json.Marshal(reqBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
-	
+
 	// Create HTTP request
 	httpReq, err := http.NewRequestWithContext(ctx, "POST", p.endpoint+"/chat/completions", bytes.NewReader(bodyBytes))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
-	
+
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Authorization", "Bearer "+p.apiKey)
-	
+
 	// Send request
 	resp, err := p.client.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("failed to send request: %w", err)
 	}
 	defer resp.Body.Close()
-	
+
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("OpenAI API error (status %d): %s", resp.StatusCode, string(body))
 	}
-	
+
 	// Parse response
 	var openAIResp openAIResponse
 	if err := json.NewDecoder(resp.Body).Decode(&openAIResp); err != nil {
 		return nil, fmt.Errorf("failed to decode response: %w", err)
 	}
-	
+
 	if len(openAIResp.Choices) == 0 {
 		return nil, fmt.Errorf("no choices in response")
 	}
-	
+
 	duration := time.Since(startTime)
-	
+
 	return &LLMResponse{
 		Content:    openAIResp.Choices[0].Message.Content,
 		TokensUsed: openAIResp.Usage.TotalTokens,
@@ -142,77 +142,77 @@ func (p *OpenAIProvider) StreamMessage(ctx context.Context, req *LLMRequest) (<-
 			Content: msg.Content,
 		}
 	}
-	
+
 	// Create request body
 	reqBody := openAIRequest{
 		Model:    p.model,
 		Messages: messages,
 		Stream:   true,
 	}
-	
+
 	bodyBytes, err := json.Marshal(reqBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
-	
+
 	// Create HTTP request
 	httpReq, err := http.NewRequestWithContext(ctx, "POST", p.endpoint+"/chat/completions", bytes.NewReader(bodyBytes))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
-	
+
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Authorization", "Bearer "+p.apiKey)
 	httpReq.Header.Set("Accept", "text/event-stream")
-	
+
 	// Send request
 	resp, err := p.client.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("failed to send request: %w", err)
 	}
-	
+
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
 		return nil, fmt.Errorf("OpenAI API error (status %d): %s", resp.StatusCode, string(body))
 	}
-	
+
 	// Create channel for streaming chunks
 	chunkChan := make(chan *LLMChunk)
-	
+
 	go func() {
 		defer close(chunkChan)
 		defer resp.Body.Close()
-		
+
 		scanner := bufio.NewScanner(resp.Body)
 		for scanner.Scan() {
 			line := scanner.Text()
-			
+
 			// Skip empty lines
 			if line == "" {
 				continue
 			}
-			
+
 			// OpenAI streams use "data: " prefix
 			if !strings.HasPrefix(line, "data: ") {
 				continue
 			}
-			
+
 			data := strings.TrimPrefix(line, "data: ")
-			
+
 			// Check for stream end
 			if data == "[DONE]" {
 				chunkChan <- &LLMChunk{Content: "", Done: true}
 				return
 			}
-			
+
 			// Parse chunk
 			var chunkResp openAIResponse
 			if err := json.Unmarshal([]byte(data), &chunkResp); err != nil {
 				// Skip malformed chunks
 				continue
 			}
-			
+
 			if len(chunkResp.Choices) > 0 {
 				content := chunkResp.Choices[0].Delta.Content
 				if content != "" {
@@ -220,11 +220,11 @@ func (p *OpenAIProvider) StreamMessage(ctx context.Context, req *LLMRequest) (<-
 				}
 			}
 		}
-		
+
 		// Send final chunk if not already sent
 		chunkChan <- &LLMChunk{Content: "", Done: true}
 	}()
-	
+
 	return chunkChan, nil
 }
 

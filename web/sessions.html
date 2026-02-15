@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat Sessions</title>
+    <link rel="stylesheet" href="sessions.css">
+</head>
+<body>
+    <div id="app">
+        <!-- Header -->
+        <div class="header">
+            <h1>Chat Sessions</h1>
+            <button id="new-session-btn" class="primary-btn">+ New Chat</button>
+        </div>
+
+        <!-- Connection Status -->
+        <div id="connection-status" class="status-bar" style="display: none;">
+            <span id="status-text">Loading...</span>
+        </div>
+
+        <!-- Sessions List -->
+        <div id="sessions-container">
+            <div id="sessions-list"></div>
+        </div>
+
+        <!-- Empty State -->
+        <div id="empty-state" style="display: none;">
+            <div class="empty-icon">💬</div>
+            <p>No chat sessions yet</p>
+            <button class="primary-btn" onclick="createNewSession()">Start Your First Chat</button>
+        </div>
+
+        <!-- Loading Indicator -->
+        <div id="loading" style="display: none;">
+            <div class="loading-spinner"></div>
+            <p>Loading sessions...</p>
+        </div>
+    </div>
+
+    <script src="sessions.js"></script>
+</body>
+</html>

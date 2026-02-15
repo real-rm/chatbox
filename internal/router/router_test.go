@@ -5,11 +5,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	chaterrors "github.com/real-rm/chatbox/internal/errors"
 	"github.com/real-rm/chatbox/internal/message"
 	"github.com/real-rm/chatbox/internal/session"
 	"github.com/real-rm/chatbox/internal/websocket"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // mockConnection creates a mock WebSocket connection for testing
@@ -20,7 +21,7 @@ func mockConnection(userID string) *websocket.Connection {
 func TestNewMessageRouter(t *testing.T) {
 	logger := createTestLogger()
 	sm := session.NewSessionManager(15*time.Minute, logger)
-	router := NewMessageRouter(sm, nil, logger)
+	router := NewMessageRouter(sm, nil, nil, nil, logger)
 
 	assert.NotNil(t, router)
 	assert.NotNil(t, router.connections)
@@ -31,7 +32,7 @@ func TestNewMessageRouter(t *testing.T) {
 func TestRegisterConnection(t *testing.T) {
 	logger := createTestLogger()
 	sm := session.NewSessionManager(15*time.Minute, logger)
-	router := NewMessageRouter(sm, nil, logger)
+	router := NewMessageRouter(sm, nil, nil, nil, logger)
 
 	tests := []struct {
 		name      string
@@ -84,7 +85,7 @@ func TestRegisterConnection(t *testing.T) {
 func TestUnregisterConnection(t *testing.T) {
 	logger := createTestLogger()
 	sm := session.NewSessionManager(15*time.Minute, logger)
-	router := NewMessageRouter(sm, nil, logger)
+	router := NewMessageRouter(sm, nil, nil, nil, logger)
 
 	sessionID := "session-123"
 	conn := mockConnection("user-1")
@@ -109,7 +110,7 @@ func TestUnregisterConnection(t *testing.T) {
 func TestRouteMessage_UserMessage(t *testing.T) {
 	logger := createTestLogger()
 	sm := session.NewSessionManager(15*time.Minute, logger)
-	router := NewMessageRouter(sm, nil, logger)
+	router := NewMessageRouter(sm, nil, nil, nil, logger)
 
 	// Create a session
 	sess, err := sm.CreateSession("user-1")
@@ -138,7 +139,7 @@ func TestRouteMessage_UserMessage(t *testing.T) {
 func TestRouteMessage_InvalidMessageType(t *testing.T) {
 	logger := createTestLogger()
 	sm := session.NewSessionManager(15*time.Minute, logger)
-	router := NewMessageRouter(sm, nil, logger)
+	router := NewMessageRouter(sm, nil, nil, nil, logger)
 
 	conn := mockConnection("user-1")
 	msg := &message.Message{
@@ -151,13 +152,17 @@ func TestRouteMessage_InvalidMessageType(t *testing.T) {
 
 	err := router.RouteMessage(conn, msg)
 	assert.Error(t, err)
-	assert.ErrorIs(t, err, ErrInvalidMessage)
+
+	// Check if it's a ChatError
+	var chatErr *chaterrors.ChatError
+	assert.ErrorAs(t, err, &chatErr)
+	assert.Equal(t, chaterrors.ErrCodeInvalidFormat, chatErr.Code)
 }
 
 func TestRouteMessage_NilInputs(t *testing.T) {
 	logger := createTestLogger()
 	sm := session.NewSessionManager(15*time.Minute, logger)
-	router := NewMessageRouter(sm, nil, logger)
+	router := NewMessageRouter(sm, nil, nil, nil, logger)
 
 	conn := mockConnection("user-1")
 	msg := &message.Message{
@@ -182,7 +187,7 @@ func TestRouteMessage_NilInputs(t *testing.T) {
 func TestHandleUserMessage(t *testing.T) {
 	logger := createTestLogger()
 	sm := session.NewSessionManager(15*time.Minute, logger)
-	router := NewMessageRouter(sm, nil, logger)
+	router := NewMessageRouter(sm, nil, nil, nil, logger)
 
 	// Create a session
 	sess, err := sm.CreateSession("user-1")
@@ -198,7 +203,7 @@ func TestHandleUserMessage(t *testing.T) {
 		name    string
 		msg     *message.Message
 		wantErr bool
-		errType error
+		errCode chaterrors.ErrorCode
 	}{
 		{
 			name: "valid user message",
@@ -221,7 +226,7 @@ func TestHandleUserMessage(t *testing.T) {
 				Timestamp: time.Now(),
 			},
 			wantErr: true,
-			errType: ErrInvalidMessage,
+			errCode: chaterrors.ErrCodeMissingField,
 		},
 		{
 			name: "non-existent session",
@@ -233,13 +238,12 @@ func TestHandleUserMessage(t *testing.T) {
 				Timestamp: time.Now(),
 			},
 			wantErr: true,
-			errType: ErrSessionNotFound,
+			errCode: chaterrors.ErrCodeMissingField,
 		},
 		{
 			name:    "nil message",
 			msg:     nil,
 			wantErr: true,
-			errType: ErrNilMessage,
 		},
 	}
 
@@ -248,8 +252,11 @@ func TestHandleUserMessage(t *testing.T) {
 			err := router.HandleUserMessage(conn, tt.msg)
 			if tt.wantErr {
 				assert.Error(t, err)
-				if tt.errType != nil {
-					assert.ErrorIs(t, err, tt.errType)
+				if tt.errCode != "" {
+					var chatErr *chaterrors.ChatError
+					if assert.ErrorAs(t, err, &chatErr) {
+						assert.Equal(t, tt.errCode, chatErr.Code)
+					}
 				}
 			} else {
 				assert.NoError(t, err)
@@ -261,7 +268,7 @@ func TestHandleUserMessage(t *testing.T) {
 func TestHandleUserMessage_NilConnection(t *testing.T) {
 	logger := createTestLogger()
 	sm := session.NewSessionManager(15*time.Minute, logger)
-	router := NewMessageRouter(sm, nil, logger)
+	router := NewMessageRouter(sm, nil, nil, nil, logger)
 
 	msg := &message.Message{
 		Type:      message.TypeUserMessage,
@@ -279,7 +286,7 @@ func TestHandleUserMessage_NilConnection(t *testing.T) {
 func TestBroadcastToSession(t *testing.T) {
 	logger := createTestLogger()
 	sm := session.NewSessionManager(15*time.Minute, logger)
-	router := NewMessageRouter(sm, nil, logger)
+	router := NewMessageRouter(sm, nil, nil, nil, logger)
 
 	// Create a session
 	sess, err := sm.CreateSession("user-1")
@@ -297,6 +304,7 @@ func TestBroadcastToSession(t *testing.T) {
 		msg       *message.Message
 		wantErr   bool
 		errType   error
+		errCode   chaterrors.ErrorCode
 	}{
 		{
 			name:      "valid broadcast",
@@ -327,7 +335,7 @@ func TestBroadcastToSession(t *testing.T) {
 				Timestamp: time.Now(),
 			},
 			wantErr: true,
-			errType: ErrInvalidMessage,
+			errCode: chaterrors.ErrCodeMissingField,
 		},
 		{
 			name:      "non-existent session",
@@ -339,7 +347,7 @@ func TestBroadcastToSession(t *testing.T) {
 				Timestamp: time.Now(),
 			},
 			wantErr: true,
-			errType: ErrSessionNotFound,
+			errCode: chaterrors.ErrCodeMissingField,
 		},
 	}
 
@@ -351,6 +359,12 @@ func TestBroadcastToSession(t *testing.T) {
 				if tt.errType != nil {
 					assert.ErrorIs(t, err, tt.errType)
 				}
+				if tt.errCode != "" {
+					var chatErr *chaterrors.ChatError
+					if assert.ErrorAs(t, err, &chatErr) {
+						assert.Equal(t, tt.errCode, chatErr.Code)
+					}
+				}
 			} else {
 				assert.NoError(t, err)
 			}
@@ -361,7 +375,7 @@ func TestBroadcastToSession(t *testing.T) {
 func TestGetConnection(t *testing.T) {
 	logger := createTestLogger()
 	sm := session.NewSessionManager(15*time.Minute, logger)
-	router := NewMessageRouter(sm, nil, logger)
+	router := NewMessageRouter(sm, nil, nil, nil, logger)
 
 	sessionID := "session-123"
 	conn := mockConnection("user-1")
@@ -385,7 +399,7 @@ func TestGetConnection(t *testing.T) {
 func TestMessageOrderPreservation(t *testing.T) {
 	logger := createTestLogger()
 	sm := session.NewSessionManager(15*time.Minute, logger)
-	router := NewMessageRouter(sm, nil, logger)
+	router := NewMessageRouter(sm, nil, nil, nil, logger)
 
 	// Create a session
 	sess, err := sm.CreateSession("user-1")
@@ -419,7 +433,7 @@ func TestMessageOrderPreservation(t *testing.T) {
 func TestConcurrentConnectionAccess(t *testing.T) {
 	logger := createTestLogger()
 	sm := session.NewSessionManager(15*time.Minute, logger)
-	router := NewMessageRouter(sm, nil, logger)
+	router := NewMessageRouter(sm, nil, nil, nil, logger)
 
 	// Create multiple sessions and connections
 	numConnections := 10
@@ -451,7 +465,7 @@ func TestConcurrentConnectionAccess(t *testing.T) {
 func TestHandleModelSelection(t *testing.T) {
 	logger := createTestLogger()
 	sm := session.NewSessionManager(15*time.Minute, logger)
-	router := NewMessageRouter(sm, nil, logger)
+	router := NewMessageRouter(sm, nil, nil, nil, logger)
 
 	// Create a session
 	sess, err := sm.CreateSession("user-123")
@@ -484,7 +498,7 @@ func TestHandleModelSelection(t *testing.T) {
 func TestHandleModelSelection_EmptySessionID(t *testing.T) {
 	logger := createTestLogger()
 	sm := session.NewSessionManager(15*time.Minute, logger)
-	router := NewMessageRouter(sm, nil, logger)
+	router := NewMessageRouter(sm, nil, nil, nil, logger)
 
 	conn := mockConnection("user-123")
 
@@ -498,13 +512,17 @@ func TestHandleModelSelection_EmptySessionID(t *testing.T) {
 
 	err := router.RouteMessage(conn, msg)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "session ID")
+
+	var chatErr *chaterrors.ChatError
+	if assert.ErrorAs(t, err, &chatErr) {
+		assert.Equal(t, chaterrors.ErrCodeMissingField, chatErr.Code)
+	}
 }
 
 func TestHandleModelSelection_EmptyModelID(t *testing.T) {
 	logger := createTestLogger()
 	sm := session.NewSessionManager(15*time.Minute, logger)
-	router := NewMessageRouter(sm, nil, logger)
+	router := NewMessageRouter(sm, nil, nil, nil, logger)
 
 	// Create a session
 	sess, err := sm.CreateSession("user-123")
@@ -522,13 +540,17 @@ func TestHandleModelSelection_EmptyModelID(t *testing.T) {
 
 	err = router.RouteMessage(conn, msg)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "model ID")
+
+	var chatErr *chaterrors.ChatError
+	if assert.ErrorAs(t, err, &chatErr) {
+		assert.Equal(t, chaterrors.ErrCodeMissingField, chatErr.Code)
+	}
 }
 
 func TestHandleModelSelection_NonExistentSession(t *testing.T) {
 	logger := createTestLogger()
 	sm := session.NewSessionManager(15*time.Minute, logger)
-	router := NewMessageRouter(sm, nil, logger)
+	router := NewMessageRouter(sm, nil, nil, nil, logger)
 
 	conn := mockConnection("user-123")
 
@@ -542,13 +564,17 @@ func TestHandleModelSelection_NonExistentSession(t *testing.T) {
 
 	err := router.RouteMessage(conn, msg)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "not found")
+
+	var chatErr *chaterrors.ChatError
+	if assert.ErrorAs(t, err, &chatErr) {
+		assert.Equal(t, chaterrors.ErrCodeMissingField, chatErr.Code)
+	}
 }
 
 func TestHandleModelSelection_UpdateModel(t *testing.T) {
 	logger := createTestLogger()
 	sm := session.NewSessionManager(15*time.Minute, logger)
-	router := NewMessageRouter(sm, nil, logger)
+	router := NewMessageRouter(sm, nil, nil, nil, logger)
 
 	// Create a session
 	sess, err := sm.CreateSession("user-123")
@@ -597,7 +623,7 @@ func TestHandleModelSelection_UpdateModel(t *testing.T) {
 func TestHandleModelSelection_NilConnection(t *testing.T) {
 	logger := createTestLogger()
 	sm := session.NewSessionManager(15*time.Minute, logger)
-	router := NewMessageRouter(sm, nil, logger)
+	router := NewMessageRouter(sm, nil, nil, nil, logger)
 
 	// Create a session
 	sess, err := sm.CreateSession("user-123")
@@ -619,7 +645,7 @@ func TestHandleModelSelection_NilConnection(t *testing.T) {
 func TestHandleModelSelection_NilMessage(t *testing.T) {
 	logger := createTestLogger()
 	sm := session.NewSessionManager(15*time.Minute, logger)
-	router := NewMessageRouter(sm, nil, logger)
+	router := NewMessageRouter(sm, nil, nil, nil, logger)
 
 	conn := mockConnection("user-123")
 
@@ -631,7 +657,7 @@ func TestHandleModelSelection_NilMessage(t *testing.T) {
 func TestModelSelection_Persistence(t *testing.T) {
 	logger := createTestLogger()
 	sm := session.NewSessionManager(15*time.Minute, logger)
-	router := NewMessageRouter(sm, nil, logger)
+	router := NewMessageRouter(sm, nil, nil, nil, logger)
 
 	// Create a session
 	sess, err := sm.CreateSession("user-123")

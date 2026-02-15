@@ -50,7 +50,7 @@ func TestNewUploadService(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			var service *UploadService
 			var err error
-			
+
 			if tt.statsColl == nil {
 				service, err = NewUploadService(tt.site, tt.entryName, nil)
 			}
@@ -72,7 +72,7 @@ func TestNewUploadService(t *testing.T) {
 func TestUploadService_UploadFile_Validation(t *testing.T) {
 	// Note: We can't create a real service without MongoDB connection
 	// These tests verify the validation logic only
-	
+
 	tests := []struct {
 		name        string
 		file        *bytes.Buffer
@@ -113,12 +113,12 @@ func TestUploadService_UploadFile_Validation(t *testing.T) {
 				site:      "CHAT",
 				entryName: "uploads",
 			}
-			
+
 			ctx := context.Background()
-			
+
 			var result *UploadResult
 			var err error
-			
+
 			if tt.file != nil {
 				result, err = service.UploadFile(ctx, tt.file, tt.filename, tt.userID)
 			} else {
@@ -559,7 +559,7 @@ func TestAllowedMimeTypes(t *testing.T) {
 	}
 
 	for _, mimeType := range allowedTypes {
-		assert.True(t, AllowedMimeTypes[mimeType], 
+		assert.True(t, AllowedMimeTypes[mimeType],
 			"MIME type %s should be allowed", mimeType)
 	}
 
@@ -571,7 +571,7 @@ func TestAllowedMimeTypes(t *testing.T) {
 	}
 
 	for _, mimeType := range disallowedTypes {
-		assert.False(t, AllowedMimeTypes[mimeType], 
+		assert.False(t, AllowedMimeTypes[mimeType],
 			"MIME type %s should not be allowed", mimeType)
 	}
 }
@@ -584,11 +584,11 @@ func TestMaliciousPatterns(t *testing.T) {
 	hasExecutableSignatures := false
 	for _, pattern := range MaliciousPatterns {
 		if bytes.Equal(pattern, []byte{0x4D, 0x5A}) || // MZ
-		   bytes.Equal(pattern, []byte{0x7F, 0x45, 0x4C, 0x46}) { // ELF
+			bytes.Equal(pattern, []byte{0x7F, 0x45, 0x4C, 0x46}) { // ELF
 			hasExecutableSignatures = true
 			break
 		}
 	}
-	assert.True(t, hasExecutableSignatures, 
+	assert.True(t, hasExecutableSignatures,
 		"Malicious patterns should include executable signatures")
 }

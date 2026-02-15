@@ -12,7 +12,7 @@ import (
 func TestLoad_DefaultValues(t *testing.T) {
 	// Clear environment
 	clearEnv()
-	
+
 	// Set minimum required values
 	os.Setenv("JWT_SECRET", "test-secret")
 	os.Setenv("S3_ACCESS_KEY_ID", "test-key")
@@ -40,7 +40,7 @@ func TestLoad_DefaultValues(t *testing.T) {
 
 func TestLoad_EnvironmentVariables(t *testing.T) {
 	clearEnv()
-	
+
 	// Set custom values
 	os.Setenv("SERVER_PORT", "9090")
 	os.Setenv("RECONNECT_TIMEOUT", "30m")
@@ -79,12 +79,12 @@ func TestLoad_EnvironmentVariables(t *testing.T) {
 
 func TestLoad_LLMProviders(t *testing.T) {
 	clearEnv()
-	
+
 	// Set minimum required values
 	os.Setenv("JWT_SECRET", "test-secret")
 	os.Setenv("S3_ACCESS_KEY_ID", "test-key")
 	os.Setenv("S3_SECRET_ACCESS_KEY", "test-secret-key")
-	
+
 	// Set multiple LLM providers
 	os.Setenv("LLM_PROVIDER_1_ID", "openai-gpt4")
 	os.Setenv("LLM_PROVIDER_1_NAME", "GPT-4")
@@ -92,7 +92,7 @@ func TestLoad_LLMProviders(t *testing.T) {
 	os.Setenv("LLM_PROVIDER_1_ENDPOINT", "https://api.openai.com/v1")
 	os.Setenv("LLM_PROVIDER_1_API_KEY", "openai-key")
 	os.Setenv("LLM_PROVIDER_1_MODEL", "gpt-4")
-	
+
 	os.Setenv("LLM_PROVIDER_2_ID", "anthropic-claude")
 	os.Setenv("LLM_PROVIDER_2_NAME", "Claude 3")
 	os.Setenv("LLM_PROVIDER_2_TYPE", "anthropic")
@@ -106,14 +106,14 @@ func TestLoad_LLMProviders(t *testing.T) {
 	require.NotNil(t, cfg)
 
 	assert.Len(t, cfg.LLM.Providers, 2)
-	
+
 	assert.Equal(t, "openai-gpt4", cfg.LLM.Providers[0].ID)
 	assert.Equal(t, "GPT-4", cfg.LLM.Providers[0].Name)
 	assert.Equal(t, "openai", cfg.LLM.Providers[0].Type)
 	assert.Equal(t, "https://api.openai.com/v1", cfg.LLM.Providers[0].Endpoint)
 	assert.Equal(t, "openai-key", cfg.LLM.Providers[0].APIKey)
 	assert.Equal(t, "gpt-4", cfg.LLM.Providers[0].Model)
-	
+
 	assert.Equal(t, "anthropic-claude", cfg.LLM.Providers[1].ID)
 	assert.Equal(t, "Claude 3", cfg.LLM.Providers[1].Name)
 	assert.Equal(t, "anthropic", cfg.LLM.Providers[1].Type)
@@ -452,7 +452,7 @@ func TestGetEnvAsDuration_InvalidValue(t *testing.T) {
 
 func TestLoad_KubernetesConfig(t *testing.T) {
 	clearEnv()
-	
+
 	// Set minimum required values
 	os.Setenv("JWT_SECRET", "test-secret")
 	os.Setenv("S3_ACCESS_KEY_ID", "test-key")
@@ -462,7 +462,7 @@ func TestLoad_KubernetesConfig(t *testing.T) {
 	os.Setenv("LLM_PROVIDER_1_TYPE", "openai")
 	os.Setenv("LLM_PROVIDER_1_ENDPOINT", "https://api.test.com")
 	os.Setenv("LLM_PROVIDER_1_API_KEY", "test-api-key")
-	
+
 	// Set Kubernetes config
 	os.Setenv("K8S_NAMESPACE", "production")
 	os.Setenv("K8S_SERVICE_NAME", "chat-service")
@@ -484,7 +484,7 @@ func TestLoad_KubernetesConfig(t *testing.T) {
 
 func TestLoad_NotificationConfig(t *testing.T) {
 	clearEnv()
-	
+
 	// Set minimum required values
 	os.Setenv("JWT_SECRET", "test-secret")
 	os.Setenv("S3_ACCESS_KEY_ID", "test-key")
@@ -494,7 +494,7 @@ func TestLoad_NotificationConfig(t *testing.T) {
 	os.Setenv("LLM_PROVIDER_1_TYPE", "openai")
 	os.Setenv("LLM_PROVIDER_1_ENDPOINT", "https://api.test.com")
 	os.Setenv("LLM_PROVIDER_1_API_KEY", "test-api-key")
-	
+
 	// Set notification config
 	os.Setenv("ADMIN_EMAILS", "admin1@example.com,admin2@example.com")
 	os.Setenv("ADMIN_PHONES", "+1234567890,+0987654321")
@@ -524,25 +524,25 @@ func TestLoad_NotificationConfig(t *testing.T) {
 
 func TestLoad_AllLLMProviderTypes(t *testing.T) {
 	clearEnv()
-	
+
 	// Set minimum required values
 	os.Setenv("JWT_SECRET", "test-secret")
 	os.Setenv("S3_ACCESS_KEY_ID", "test-key")
 	os.Setenv("S3_SECRET_ACCESS_KEY", "test-secret-key")
-	
+
 	// Set all three LLM provider types
 	os.Setenv("LLM_PROVIDER_1_ID", "openai-provider")
 	os.Setenv("LLM_PROVIDER_1_NAME", "OpenAI")
 	os.Setenv("LLM_PROVIDER_1_TYPE", "openai")
 	os.Setenv("LLM_PROVIDER_1_ENDPOINT", "https://api.openai.com")
 	os.Setenv("LLM_PROVIDER_1_API_KEY", "openai-key")
-	
+
 	os.Setenv("LLM_PROVIDER_2_ID", "anthropic-provider")
 	os.Setenv("LLM_PROVIDER_2_NAME", "Anthropic")
 	os.Setenv("LLM_PROVIDER_2_TYPE", "anthropic")
 	os.Setenv("LLM_PROVIDER_2_ENDPOINT", "https://api.anthropic.com")
 	os.Setenv("LLM_PROVIDER_2_API_KEY", "anthropic-key")
-	
+
 	os.Setenv("LLM_PROVIDER_3_ID", "dify-provider")
 	os.Setenv("LLM_PROVIDER_3_NAME", "Dify")
 	os.Setenv("LLM_PROVIDER_3_TYPE", "dify")
@@ -564,10 +564,10 @@ func TestValidate_MultipleErrors(t *testing.T) {
 	// Test that multiple validation errors are collected
 	cfg := &Config{
 		Server: ServerConfig{
-			Port:             0, // Invalid
-			ReconnectTimeout: 0, // Invalid
-			MaxConnections:   0, // Invalid
-			RateLimit:        0, // Invalid
+			Port:             0,  // Invalid
+			ReconnectTimeout: 0,  // Invalid
+			MaxConnections:   0,  // Invalid
+			RateLimit:        0,  // Invalid
 			JWTSecret:        "", // Invalid
 		},
 		Database: DatabaseConfig{
@@ -588,7 +588,7 @@ func TestValidate_MultipleErrors(t *testing.T) {
 
 	err := cfg.Validate()
 	assert.Error(t, err)
-	
+
 	// Check that error message contains multiple validation failures
 	errMsg := err.Error()
 	assert.Contains(t, errMsg, "port")
@@ -606,21 +606,21 @@ func TestValidate_MultipleErrors(t *testing.T) {
 
 func TestLoad_EmptyLLMProviderSkipped(t *testing.T) {
 	clearEnv()
-	
+
 	// Set minimum required values
 	os.Setenv("JWT_SECRET", "test-secret")
 	os.Setenv("S3_ACCESS_KEY_ID", "test-key")
 	os.Setenv("S3_SECRET_ACCESS_KEY", "test-secret-key")
-	
+
 	// Set provider 1 and 3, skip provider 2
 	os.Setenv("LLM_PROVIDER_1_ID", "provider1")
 	os.Setenv("LLM_PROVIDER_1_NAME", "Provider 1")
 	os.Setenv("LLM_PROVIDER_1_TYPE", "openai")
 	os.Setenv("LLM_PROVIDER_1_ENDPOINT", "https://api1.com")
 	os.Setenv("LLM_PROVIDER_1_API_KEY", "key1")
-	
+
 	// Provider 2 is not set (ID is empty)
-	
+
 	os.Setenv("LLM_PROVIDER_3_ID", "provider3")
 	os.Setenv("LLM_PROVIDER_3_NAME", "Provider 3")
 	os.Setenv("LLM_PROVIDER_3_TYPE", "dify")
@@ -640,7 +640,7 @@ func TestLoad_EmptyLLMProviderSkipped(t *testing.T) {
 
 func TestLoad_DatabaseConnectTimeout(t *testing.T) {
 	clearEnv()
-	
+
 	// Set minimum required values
 	os.Setenv("JWT_SECRET", "test-secret")
 	os.Setenv("S3_ACCESS_KEY_ID", "test-key")
@@ -650,7 +650,7 @@ func TestLoad_DatabaseConnectTimeout(t *testing.T) {
 	os.Setenv("LLM_PROVIDER_1_TYPE", "openai")
 	os.Setenv("LLM_PROVIDER_1_ENDPOINT", "https://api.test.com")
 	os.Setenv("LLM_PROVIDER_1_API_KEY", "test-api-key")
-	
+
 	// Set custom database timeout
 	os.Setenv("MONGO_CONNECT_TIMEOUT", "30s")
 	defer clearEnv()
@@ -673,12 +673,12 @@ func clearEnv() {
 		"SMTP_USER", "SMTP_PASS", "SMS_PROVIDER", "SMS_API_KEY",
 		"K8S_NAMESPACE", "K8S_SERVICE_NAME", "K8S_CONFIGMAP_NAME", "K8S_SECRET_NAME", "K8S_ENABLE_PROBE",
 	}
-	
+
 	for i := 1; i <= 10; i++ {
 		prefix := "LLM_PROVIDER_" + string(rune('0'+i)) + "_"
 		envVars = append(envVars, prefix+"ID", prefix+"NAME", prefix+"TYPE", prefix+"ENDPOINT", prefix+"API_KEY", prefix+"MODEL")
 	}
-	
+
 	for _, v := range envVars {
 		os.Unsetenv(v)
 	}

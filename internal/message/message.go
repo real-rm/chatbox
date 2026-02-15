@@ -9,18 +9,18 @@ import (
 type MessageType string
 
 const (
-	TypeUserMessage       MessageType = "user_message"
-	TypeAIResponse        MessageType = "ai_response"
-	TypeFileUpload        MessageType = "file_upload"
-	TypeVoiceMessage      MessageType = "voice_message"
-	TypeError             MessageType = "error"
-	TypeConnectionStatus  MessageType = "connection_status"
-	TypeTypingIndicator   MessageType = "typing_indicator"
-	TypeHelpRequest       MessageType = "help_request"
-	TypeAdminJoin         MessageType = "admin_join"
-	TypeAdminLeave        MessageType = "admin_leave"
-	TypeModelSelect       MessageType = "model_select"
-	TypeLoading           MessageType = "loading"
+	TypeUserMessage      MessageType = "user_message"
+	TypeAIResponse       MessageType = "ai_response"
+	TypeFileUpload       MessageType = "file_upload"
+	TypeVoiceMessage     MessageType = "voice_message"
+	TypeError            MessageType = "error"
+	TypeConnectionStatus MessageType = "connection_status"
+	TypeTypingIndicator  MessageType = "typing_indicator"
+	TypeHelpRequest      MessageType = "help_request"
+	TypeAdminJoin        MessageType = "admin_join"
+	TypeAdminLeave       MessageType = "admin_leave"
+	TypeModelSelect      MessageType = "model_select"
+	TypeLoading          MessageType = "loading"
 )
 
 // SenderType represents who sent the message
@@ -75,11 +75,11 @@ func (m *Message) UnmarshalJSON(data []byte) error {
 	}{
 		Alias: (*Alias)(m),
 	}
-	
+
 	if err := json.Unmarshal(data, &aux); err != nil {
 		return err
 	}
-	
+
 	if aux.Timestamp != "" {
 		// Use standard time.Parse for RFC3339 format (JSON standard)
 		t, err := time.Parse(time.RFC3339, aux.Timestamp)
@@ -88,6 +88,6 @@ func (m *Message) UnmarshalJSON(data []byte) error {
 		}
 		m.Timestamp = t
 	}
-	
+
 	return nil
 }

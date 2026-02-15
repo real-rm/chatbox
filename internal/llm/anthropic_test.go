@@ -74,7 +74,7 @@ func TestAnthropicProvider_SendMessage(t *testing.T) {
 				assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
 				assert.NotEmpty(t, r.Header.Get("x-api-key"))
 				assert.Equal(t, "2023-06-01", r.Header.Get("anthropic-version"))
-				
+
 				// Verify request body
 				var reqBody anthropicRequest
 				err := json.NewDecoder(r.Body).Decode(&reqBody)
@@ -82,7 +82,7 @@ func TestAnthropicProvider_SendMessage(t *testing.T) {
 				assert.Equal(t, len(tt.messages), len(reqBody.Messages))
 				assert.False(t, reqBody.Stream)
 				assert.Greater(t, reqBody.MaxTokens, 0)
-				
+
 				// Send response
 				w.WriteHeader(tt.mockStatusCode)
 				if tt.mockStatusCode == http.StatusOK {
@@ -94,16 +94,16 @@ func TestAnthropicProvider_SendMessage(t *testing.T) {
 			defer server.Close()
 
 			provider := NewAnthropicProvider("test-key", server.URL, "claude-3-opus-20240229")
-			
+
 			req := &LLMRequest{
 				ModelID:  "claude-3-opus-20240229",
 				Messages: tt.messages,
 				Stream:   false,
 			}
-			
+
 			ctx := context.Background()
 			resp, err := provider.SendMessage(ctx, req)
-			
+
 			if tt.wantErr {
 				assert.Error(t, err)
 				if tt.errContains != "" {
@@ -179,13 +179,13 @@ func TestAnthropicProvider_StreamMessage(t *testing.T) {
 				assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
 				assert.NotEmpty(t, r.Header.Get("x-api-key"))
 				assert.Equal(t, "text/event-stream", r.Header.Get("Accept"))
-				
+
 				// Verify request body
 				var reqBody anthropicRequest
 				err := json.NewDecoder(r.Body).Decode(&reqBody)
 				require.NoError(t, err)
 				assert.True(t, reqBody.Stream)
-				
+
 				// Send response
 				w.WriteHeader(tt.mockStatusCode)
 				if tt.mockStatusCode == http.StatusOK {
@@ -200,16 +200,16 @@ func TestAnthropicProvider_StreamMessage(t *testing.T) {
 			defer server.Close()
 
 			provider := NewAnthropicProvider("test-key", server.URL, "claude-3-opus-20240229")
-			
+
 			req := &LLMRequest{
 				ModelID:  "claude-3-opus-20240229",
 				Messages: tt.messages,
 				Stream:   true,
 			}
-			
+
 			ctx := context.Background()
 			chunkChan, err := provider.StreamMessage(ctx, req)
-			
+
 			if tt.wantErr {
 				assert.Error(t, err)
 				if tt.errContains != "" {
@@ -219,13 +219,13 @@ func TestAnthropicProvider_StreamMessage(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 				assert.NotNil(t, chunkChan)
-				
+
 				// Collect chunks
 				chunks := []LLMChunk{}
 				for chunk := range chunkChan {
 					chunks = append(chunks, *chunk)
 				}
-				
+
 				assert.Equal(t, tt.wantChunks, len(chunks))
 				// Last chunk should be marked as done
 				if len(chunks) > 0 {
@@ -238,12 +238,12 @@ func TestAnthropicProvider_StreamMessage(t *testing.T) {
 
 func TestAnthropicProvider_GetTokenCount(t *testing.T) {
 	provider := NewAnthropicProvider("test-key", "https://api.anthropic.com/v1", "claude-3-opus-20240229")
-	
+
 	tests := []struct {
-		name     string
-		text     string
-		wantMin  int
-		wantMax  int
+		name    string
+		text    string
+		wantMin int
+		wantMax int
 	}{
 		{
 			name:    "short text",
@@ -264,7 +264,7 @@ func TestAnthropicProvider_GetTokenCount(t *testing.T) {
 			wantMax: 0,
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			count := provider.GetTokenCount(tt.text)
@@ -279,12 +279,12 @@ func TestAnthropicProvider_SystemMessageHandling(t *testing.T) {
 		var reqBody anthropicRequest
 		err := json.NewDecoder(r.Body).Decode(&reqBody)
 		require.NoError(t, err)
-		
+
 		// Verify system message was converted to user message
 		for _, msg := range reqBody.Messages {
 			assert.NotEqual(t, "system", msg.Role)
 		}
-		
+
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(anthropicResponse{
 			Content: []anthropicContent{{Type: "text", Text: "Response"}},
@@ -294,7 +294,7 @@ func TestAnthropicProvider_SystemMessageHandling(t *testing.T) {
 	defer server.Close()
 
 	provider := NewAnthropicProvider("test-key", server.URL, "claude-3-opus-20240229")
-	
+
 	req := &LLMRequest{
 		ModelID: "claude-3-opus-20240229",
 		Messages: []ChatMessage{
@@ -302,10 +302,10 @@ func TestAnthropicProvider_SystemMessageHandling(t *testing.T) {
 			{Role: "user", Content: "Hello"},
 		},
 	}
-	
+
 	ctx := context.Background()
 	resp, err := provider.SendMessage(ctx, req)
-	
+
 	assert.NoError(t, err)
 	assert.NotNil(t, resp)
 }

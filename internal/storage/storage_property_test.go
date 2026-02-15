@@ -8,7 +8,7 @@ import (
 	"github.com/leanovate/gopter"
 	"github.com/leanovate/gopter/gen"
 	"github.com/leanovate/gopter/prop"
-	"github.com/yourusername/chat-websocket/internal/session"
+	"github.com/real-rm/chatbox/internal/session"
 	"go.mongodb.org/mongo-driver/bson"
 )
 
@@ -29,10 +29,10 @@ func TestProperty_SessionCreationAndPersistence(t *testing.T) {
 				return true
 			}
 
-			client, cleanup := setupTestMongoDB(t)
+			mongoClient, logger, cleanup := setupTestMongoDB(t)
 			defer cleanup()
 
-			service := NewStorageService(client, "test_chat_db", "prop_sessions", nil)
+			service := NewStorageService(mongoClient, "test_chat_db", "prop_sessions", logger, nil)
 
 			// Create session
 			now := time.Now()
@@ -116,10 +116,10 @@ func TestProperty_MessagePersistence(t *testing.T) {
 				return true
 			}
 
-			client, cleanup := setupTestMongoDB(t)
+			mongoClient, logger, cleanup := setupTestMongoDB(t)
 			defer cleanup()
 
-			service := NewStorageService(client, "test_chat_db", "prop_sessions", nil)
+			service := NewStorageService(mongoClient, "test_chat_db", "prop_sessions", logger, nil)
 
 			// Create session first
 			now := time.Now()
@@ -224,10 +224,10 @@ func TestProperty_ConversationHistoryRetrieval(t *testing.T) {
 				return true
 			}
 
-			client, cleanup := setupTestMongoDB(t)
+			mongoClient, logger, cleanup := setupTestMongoDB(t)
 			defer cleanup()
 
-			service := NewStorageService(client, "test_chat_db", "prop_sessions", nil)
+			service := NewStorageService(mongoClient, "test_chat_db", "prop_sessions", logger, nil)
 
 			// Create session
 			now := time.Now()
@@ -309,10 +309,10 @@ func TestProperty_SessionLifecycleTracking(t *testing.T) {
 				return true
 			}
 
-			client, cleanup := setupTestMongoDB(t)
+			mongoClient, logger, cleanup := setupTestMongoDB(t)
 			defer cleanup()
 
-			service := NewStorageService(client, "test_chat_db", "prop_sessions", nil)
+			service := NewStorageService(mongoClient, "test_chat_db", "prop_sessions", logger, nil)
 
 			// Create session
 			startTime := time.Now()
@@ -408,12 +408,12 @@ func TestProperty_DataEncryptionAtRest(t *testing.T) {
 				return true
 			}
 
-			client, cleanup := setupTestMongoDB(t)
+			mongoClient, logger, cleanup := setupTestMongoDB(t)
 			defer cleanup()
 
 			// Create 32-byte encryption key for AES-256
 			encryptionKey := []byte("12345678901234567890123456789012")
-			service := NewStorageService(client, "test_chat_db", "prop_sessions", encryptionKey)
+			service := NewStorageService(mongoClient, "test_chat_db", "prop_sessions", logger, encryptionKey)
 
 			// Create session
 			now := time.Now()
@@ -512,10 +512,10 @@ func TestProperty_SessionListOrdering(t *testing.T) {
 				return true
 			}
 
-			client, cleanup := setupTestMongoDB(t)
+			mongoClient, logger, cleanup := setupTestMongoDB(t)
 			defer cleanup()
 
-			service := NewStorageService(client, "test_chat_db", "prop_sessions", nil)
+			service := NewStorageService(mongoClient, "test_chat_db", "prop_sessions", logger, nil)
 
 			// Create multiple sessions with different start times
 			now := time.Now()

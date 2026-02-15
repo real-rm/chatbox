@@ -3,31 +3,52 @@ kind: ConfigMap
 metadata:
   name: chat-config
   namespace: default
+  labels:
+    app: chatbox
+    component: config
 data:
   # Server Configuration
   SERVER_PORT: "8080"
   RECONNECT_TIMEOUT: "15m"
   MAX_CONNECTIONS: "10000"
   RATE_LIMIT: "100"
+  SHUTDOWN_TIMEOUT: "30s"
   
-  # Database Configuration
-  MONGO_URI: "mongodb://mongo-service:27017"
+  # WebSocket Configuration
+  WS_READ_BUFFER_SIZE: "1024"
+  WS_WRITE_BUFFER_SIZE: "1024"
+  WS_PONG_WAIT: "60s"
+  WS_PING_PERIOD: "54s"
+  WS_WRITE_WAIT: "10s"
+  
+  # Database Configuration (gomongo)
+  MONGO_URI: "mongodb://mongo-service:27017/chat"
   MONGO_DATABASE: "chat"
   MONGO_COLLECTION: "sessions"
   MONGO_CONNECT_TIMEOUT: "10s"
+  MONGO_VERBOSE: "1"
+  MONGO_SLOW_THRESHOLD: "2"
   
-  # Storage Configuration
+  # Storage Configuration (goupload)
   S3_REGION: "us-east-1"
   S3_BUCKET: "chat-files"
-  S3_ENDPOINT: ""
+  S3_ENDPOINT: "s3.us-east-1.amazonaws.com"
+  UPLOAD_SITE: "CHAT"
+  UPLOAD_ENTRY_NAME: "uploads"
+  UPLOAD_PREFIX: "/chat-files"
+  UPLOAD_TMP_PATH: "/app/temp/uploads"
+  UPLOAD_MAX_SIZE: "100MB"
   
   # Notification Configuration
   ADMIN_EMAILS: "admin@example.com,support@example.com"
   ADMIN_PHONES: "+1234567890,+0987654321"
   EMAIL_FROM: "noreply@example.com"
+  EMAIL_FROM_NAME: "Chat Support"
+  EMAIL_REPLY_TO: "support@example.com"
   SMTP_HOST: "smtp.example.com"
   SMTP_PORT: "587"
   SMS_PROVIDER: "twilio"
+  SMS_FROM_NUMBER: "+1234567890"
   
   # LLM Provider Configuration
   LLM_PROVIDER_1_ID: "openai-gpt4"
@@ -42,9 +63,30 @@ data:
   LLM_PROVIDER_2_ENDPOINT: "https://api.anthropic.com/v1"
   LLM_PROVIDER_2_MODEL: "claude-3-opus-20240229"
   
+  LLM_PROVIDER_3_ID: "dify-assistant"
+  LLM_PROVIDER_3_NAME: "Dify Assistant"
+  LLM_PROVIDER_3_TYPE: "dify"
+  LLM_PROVIDER_3_ENDPOINT: "https://api.dify.ai/v1"
+  LLM_PROVIDER_3_MODEL: "assistant"
+  
+  # Logging Configuration (golog)
+  LOG_DIR: "/app/logs"
+  LOG_LEVEL: "info"
+  LOG_STANDARD_OUTPUT: "true"
+  LOG_INFO_FILE: "info.log"
+  LOG_WARN_FILE: "warn.log"
+  LOG_ERROR_FILE: "error.log"
+  
   # Kubernetes Configuration
   K8S_NAMESPACE: "default"
-  K8S_SERVICE_NAME: "chat-websocket"
+  K8S_SERVICE_NAME: "chatbox-websocket"
   K8S_CONFIGMAP_NAME: "chat-config"
   K8S_SECRET_NAME: "chat-secrets"
   K8S_ENABLE_PROBE: "true"
+  
+  # Feature Flags
+  ENABLE_VOICE_MESSAGES: "true"
+  ENABLE_FILE_UPLOADS: "true"
+  ENABLE_ADMIN_TAKEOVER: "true"
+  ENABLE_HELP_REQUESTS: "true"
+  ENABLE_METRICS: "true"

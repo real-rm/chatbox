@@ -4,13 +4,13 @@ package websocket
 
 import (
 	"fmt"
-	"log"
 	"net/http"
 	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
-	"github.com/yourusername/chat-websocket/internal/auth"
+	"github.com/real-rm/golog"
+	"github.com/real-rm/chatbox/internal/auth"
 )
 
 var (
@@ -69,6 +69,7 @@ func NewConnection(userID string, roles []string) *Connection {
 // Handler manages WebSocket connections and upgrades
 type Handler struct {
 	validator *auth.JWTValidator
+	logger    *golog.Logger
 	
 	// connections tracks active connections by user ID
 	connections map[string]*Connection
@@ -76,9 +77,11 @@ type Handler struct {
 }
 
 // NewHandler creates a new WebSocket handler
-func NewHandler(validator *auth.JWTValidator) *Handler {
+func NewHandler(validator *auth.JWTValidator, logger *golog.Logger) *Handler {
+	wsLogger := logger.WithGroup("websocket")
 	return &Handler{
 		validator:   validator,
+		logger:      wsLogger,
 		connections: make(map[string]*Connection),
 	}
 }
@@ -108,7 +111,7 @@ func (h *Handler) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	// Validate JWT token
 	claims, err := h.validator.ValidateToken(token)
 	if err != nil {
-		log.Printf("JWT validation failed: %v", err)
+		h.logger.Warn("JWT validation failed", "error", err)
 		http.Error(w, fmt.Sprintf("Authentication failed: %v", err), http.StatusUnauthorized)
 		return
 	}
@@ -116,7 +119,7 @@ func (h *Handler) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	// Upgrade HTTP connection to WebSocket
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Printf("WebSocket upgrade failed: %v", err)
+		h.logger.Error("WebSocket upgrade failed", "error", err)
 		return
 	}
 	
@@ -126,7 +129,7 @@ func (h *Handler) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	// Register the connection
 	h.registerConnection(connection)
 	
-	log.Printf("WebSocket connection established for user %s", claims.UserID)
+	h.logger.Info("WebSocket connection established", "user_id", claims.UserID)
 	
 	// Start read and write pumps in goroutines
 	go connection.readPump(h)
@@ -206,13 +209,13 @@ func (c *Connection) readPump(h *Handler) {
 		_, message, err := c.conn.ReadMessage()
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				log.Printf("WebSocket error for user %s: %v", c.UserID, err)
+				h.logger.Error("WebSocket unexpected close", "user_id", c.UserID, "error", err)
 			}
 			break
 		}
 		
 		// TODO: Process incoming message
-		log.Printf("Received message from user %s: %s", c.UserID, string(message))
+		h.logger.Debug("Received message", "user_id", c.UserID, "message_length", len(message))
 	}
 }
 

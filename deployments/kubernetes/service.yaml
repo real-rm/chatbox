@@ -1,0 +1,158 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: chatbox-websocket
+  namespace: default
+  labels:
+    app: chatbox
+    component: websocket
+  annotations:
+    # Service annotations for cloud providers
+    # AWS Load Balancer annotations (uncomment if using AWS)
+    # service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    # service.beta.kubernetes.io/aws-load-balancer-backend-protocol: "tcp"
+    # service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: "true"
+    
+    # GCP Load Balancer annotations (uncomment if using GCP)
+    # cloud.google.com/load-balancer-type: "Internal"
+    
+    # Azure Load Balancer annotations (uncomment if using Azure)
+    # service.beta.kubernetes.io/azure-load-balancer-internal: "true"
+spec:
+  type: ClusterIP  # Use LoadBalancer for external access, ClusterIP for internal
+  
+  # Session affinity is CRITICAL for WebSocket connections
+  # This ensures that all requests from the same client go to the same pod
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 10800  # 3 hours - adjust based on your reconnect timeout
+  
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
+    protocol: TCP
+  - name: https
+    port: 443
+    targetPort: 8080
+    protocol: TCP
+  
+  selector:
+    app: chatbox
+    component: websocket
+
+---
+# Headless service for StatefulSet (if using StatefulSet instead of Deployment)
+# Uncomment if you need direct pod-to-pod communication
+# apiVersion: v1
+# kind: Service
+# metadata:
+#   name: chatbox-websocket-headless
+#   namespace: default
+#   labels:
+#     app: chatbox
+#     component: websocket
+# spec:
+#   clusterIP: None
+#   ports:
+#   - name: http
+#     port: 8080
+#     targetPort: 8080
+#     protocol: TCP
+#   selector:
+#     app: chatbox
+#     component: websocket
+
+---
+# Service for external access (LoadBalancer type)
+# Uncomment if you need direct external access without ingress
+# apiVersion: v1
+# kind: Service
+# metadata:
+#   name: chatbox-websocket-external
+#   namespace: default
+#   labels:
+#     app: chatbox
+#     component: websocket
+# spec:
+#   type: LoadBalancer
+#   sessionAffinity: ClientIP
+#   sessionAffinityConfig:
+#     clientIP:
+#       timeoutSeconds: 10800
+#   ports:
+#   - name: http
+#     port: 80
+#     targetPort: 8080
+#     protocol: TCP
+#   - name: https
+#     port: 443
+#     targetPort: 8080
+#     protocol: TCP
+#   selector:
+#     app: chatbox
+#     component: websocket
+
+---
+# Ingress for HTTP/HTTPS routing (optional)
+# Requires an Ingress Controller (nginx, traefik, etc.)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: chatbox-websocket-ingress
+  namespace: default
+  labels:
+    app: chatbox
+    component: websocket
+  annotations:
+    # Nginx Ingress Controller annotations
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    
+    # WebSocket support - CRITICAL for WebSocket connections
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "3600"
+    nginx.ingress.kubernetes.io/websocket-services: "chatbox-websocket"
+    
+    # Session affinity for WebSocket
+    nginx.ingress.kubernetes.io/affinity: "cookie"
+    nginx.ingress.kubernetes.io/affinity-mode: "persistent"
+    nginx.ingress.kubernetes.io/session-cookie-name: "chatbox-affinity"
+    nginx.ingress.kubernetes.io/session-cookie-max-age: "10800"
+    nginx.ingress.kubernetes.io/session-cookie-expires: "10800"
+    nginx.ingress.kubernetes.io/session-cookie-path: "/chat"
+    
+    # Rate limiting (optional)
+    nginx.ingress.kubernetes.io/limit-rps: "100"
+    nginx.ingress.kubernetes.io/limit-connections: "10"
+    
+    # CORS (if needed)
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "*"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, OPTIONS"
+    nginx.ingress.kubernetes.io/cors-allow-headers: "Authorization, Content-Type"
+    
+    # TLS/SSL
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"  # If using cert-manager
+spec:
+  ingressClassName: nginx  # Or traefik, haproxy, etc.
+  
+  # TLS configuration
+  tls:
+  - hosts:
+    - chat.example.com
+    secretName: chatbox-tls-cert
+  
+  rules:
+  - host: chat.example.com
+    http:
+      paths:
+      - path: /chat
+        pathType: Prefix
+        backend:
+          service:
+            name: chatbox-websocket
+            port:
+              number: 80

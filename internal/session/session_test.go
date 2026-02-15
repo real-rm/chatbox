@@ -4,13 +4,28 @@ import (
 	"testing"
 	"time"
 
+	"github.com/real-rm/golog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
+// getTestLogger creates a logger for testing
+func getTestLogger() *golog.Logger {
+	logger, err := golog.InitLog(golog.LogConfig{
+		Dir:            "/tmp/chatbox-test-logs", // Use temp directory for test logs
+		Level:          "error",                   // Only log errors in tests
+		StandardOutput: false,                     // Don't output to console during tests
+	})
+	if err != nil {
+		panic("Failed to initialize test logger: " + err.Error())
+	}
+	return logger
+}
+
 func TestNewSessionManager(t *testing.T) {
 	timeout := 15 * time.Minute
-	sm := NewSessionManager(timeout)
+	logger := getTestLogger()
+	sm := NewSessionManager(timeout, logger)
 	
 	require.NotNil(t, sm)
 	assert.Equal(t, timeout, sm.reconnectTimeout)
@@ -19,7 +34,8 @@ func TestNewSessionManager(t *testing.T) {
 }
 
 func TestCreateSession_ValidUser(t *testing.T) {
-	sm := NewSessionManager(15 * time.Minute)
+	logger := getTestLogger()
+	sm := NewSessionManager(15 * time.Minute, logger)
 	
 	session, err := sm.CreateSession("user-123")
 	
@@ -38,7 +54,8 @@ func TestCreateSession_ValidUser(t *testing.T) {
 }
 
 func TestCreateSession_EmptyUserID(t *testing.T) {
-	sm := NewSessionManager(15 * time.Minute)
+	logger := getTestLogger()
+	sm := NewSessionManager(15 * time.Minute, logger)
 	
 	session, err := sm.CreateSession("")
 	
@@ -48,7 +65,8 @@ func TestCreateSession_EmptyUserID(t *testing.T) {
 }
 
 func TestCreateSession_SingleActiveSessionConstraint(t *testing.T) {
-	sm := NewSessionManager(15 * time.Minute)
+	logger := getTestLogger()
+	sm := NewSessionManager(15 * time.Minute, logger)
 	
 	// Create first session
 	session1, err := sm.CreateSession("user-123")
@@ -64,7 +82,8 @@ func TestCreateSession_SingleActiveSessionConstraint(t *testing.T) {
 }
 
 func TestCreateSession_AfterEndingPreviousSession(t *testing.T) {
-	sm := NewSessionManager(15 * time.Minute)
+	logger := getTestLogger()
+	sm := NewSessionManager(15 * time.Minute, logger)
 	
 	// Create first session
 	session1, err := sm.CreateSession("user-123")
@@ -82,7 +101,8 @@ func TestCreateSession_AfterEndingPreviousSession(t *testing.T) {
 }
 
 func TestGetSession_ExistingSession(t *testing.T) {
-	sm := NewSessionManager(15 * time.Minute)
+	logger := getTestLogger()
+	sm := NewSessionManager(15 * time.Minute, logger)
 	
 	created, err := sm.CreateSession("user-123")
 	require.NoError(t, err)
@@ -96,7 +116,8 @@ func TestGetSession_ExistingSession(t *testing.T) {
 }
 
 func TestGetSession_NonExistentSession(t *testing.T) {
-	sm := NewSessionManager(15 * time.Minute)
+	logger := getTestLogger()
+	sm := NewSessionManager(15 * time.Minute, logger)
 	
 	session, err := sm.GetSession("non-existent-id")
 	
@@ -106,7 +127,8 @@ func TestGetSession_NonExistentSession(t *testing.T) {
 }
 
 func TestGetSession_EmptySessionID(t *testing.T) {
-	sm := NewSessionManager(15 * time.Minute)
+	logger := getTestLogger()
+	sm := NewSessionManager(15 * time.Minute, logger)
 	
 	session, err := sm.GetSession("")
 	
@@ -116,7 +138,8 @@ func TestGetSession_EmptySessionID(t *testing.T) {
 }
 
 func TestRestoreSession_WithinTimeout(t *testing.T) {
-	sm := NewSessionManager(15 * time.Minute)
+	logger := getTestLogger()
+	sm := NewSessionManager(15 * time.Minute, logger)
 	
 	// Create session
 	created, err := sm.CreateSession("user-123")
@@ -136,7 +159,8 @@ func TestRestoreSession_WithinTimeout(t *testing.T) {
 }
 
 func TestRestoreSession_AfterTimeout(t *testing.T) {
-	sm := NewSessionManager(100 * time.Millisecond) // Very short timeout for testing
+	logger := getTestLogger()
+	sm := NewSessionManager(100 * time.Millisecond, logger) // Very short timeout for testing
 	
 	// Create session
 	created, err := sm.CreateSession("user-123")
@@ -158,7 +182,8 @@ func TestRestoreSession_AfterTimeout(t *testing.T) {
 }
 
 func TestRestoreSession_NonExistentSession(t *testing.T) {
-	sm := NewSessionManager(15 * time.Minute)
+	logger := getTestLogger()
+	sm := NewSessionManager(15 * time.Minute, logger)
 	
 	restored, err := sm.RestoreSession("user-123", "non-existent-id")
 	
@@ -168,7 +193,8 @@ func TestRestoreSession_NonExistentSession(t *testing.T) {
 }
 
 func TestRestoreSession_WrongUser(t *testing.T) {
-	sm := NewSessionManager(15 * time.Minute)
+	logger := getTestLogger()
+	sm := NewSessionManager(15 * time.Minute, logger)
 	
 	// Create session for user-123
 	created, err := sm.CreateSession("user-123")
@@ -187,7 +213,8 @@ func TestRestoreSession_WrongUser(t *testing.T) {
 }
 
 func TestEndSession_ExistingSession(t *testing.T) {
-	sm := NewSessionManager(15 * time.Minute)
+	logger := getTestLogger()
+	sm := NewSessionManager(15 * time.Minute, logger)
 	
 	session, err := sm.CreateSession("user-123")
 	require.NoError(t, err)
@@ -204,7 +231,8 @@ func TestEndSession_ExistingSession(t *testing.T) {
 }
 
 func TestEndSession_NonExistentSession(t *testing.T) {
-	sm := NewSessionManager(15 * time.Minute)
+	logger := getTestLogger()
+	sm := NewSessionManager(15 * time.Minute, logger)
 	
 	err := sm.EndSession("non-existent-id")
 	
@@ -213,7 +241,8 @@ func TestEndSession_NonExistentSession(t *testing.T) {
 }
 
 func TestEndSession_EmptySessionID(t *testing.T) {
-	sm := NewSessionManager(15 * time.Minute)
+	logger := getTestLogger()
+	sm := NewSessionManager(15 * time.Minute, logger)
 	
 	err := sm.EndSession("")
 	
@@ -222,20 +251,23 @@ func TestEndSession_EmptySessionID(t *testing.T) {
 }
 
 func TestSessionTimeout_DefaultValue(t *testing.T) {
-	sm := NewSessionManager(15 * time.Minute)
+	logger := getTestLogger()
+	sm := NewSessionManager(15 * time.Minute, logger)
 	
 	assert.Equal(t, 15*time.Minute, sm.reconnectTimeout)
 }
 
 func TestSessionTimeout_CustomValue(t *testing.T) {
 	customTimeout := 30 * time.Minute
-	sm := NewSessionManager(customTimeout)
+	logger := getTestLogger()
+	sm := NewSessionManager(customTimeout, logger)
 	
 	assert.Equal(t, customTimeout, sm.reconnectTimeout)
 }
 
 func TestUserToSessionMapping(t *testing.T) {
-	sm := NewSessionManager(15 * time.Minute)
+	logger := getTestLogger()
+	sm := NewSessionManager(15 * time.Minute, logger)
 	
 	// Create session for user-123
 	session1, err := sm.CreateSession("user-123")
@@ -251,7 +283,8 @@ func TestUserToSessionMapping(t *testing.T) {
 }
 
 func TestUserToSessionMapping_RemovedAfterEnd(t *testing.T) {
-	sm := NewSessionManager(15 * time.Minute)
+	logger := getTestLogger()
+	sm := NewSessionManager(15 * time.Minute, logger)
 	
 	// Create session
 	session, err := sm.CreateSession("user-123")
@@ -270,7 +303,8 @@ func TestUserToSessionMapping_RemovedAfterEnd(t *testing.T) {
 }
 
 func TestSession_InitialState(t *testing.T) {
-	sm := NewSessionManager(15 * time.Minute)
+	logger := getTestLogger()
+	sm := NewSessionManager(15 * time.Minute, logger)
 	
 	session, err := sm.CreateSession("user-123")
 	require.NoError(t, err)
@@ -296,7 +330,8 @@ func TestSession_InitialState(t *testing.T) {
 }
 
 func TestConcurrentSessionCreation(t *testing.T) {
-	sm := NewSessionManager(15 * time.Minute)
+	logger := getTestLogger()
+	sm := NewSessionManager(15 * time.Minute, logger)
 	
 	// Create sessions for different users concurrently
 	done := make(chan bool, 3)
@@ -324,7 +359,8 @@ func TestConcurrentSessionCreation(t *testing.T) {
 }
 
 func TestConcurrentGetSession(t *testing.T) {
-	sm := NewSessionManager(15 * time.Minute)
+	logger := getTestLogger()
+	sm := NewSessionManager(15 * time.Minute, logger)
 	
 	// Create a session
 	session, err := sm.CreateSession("user-123")
@@ -350,7 +386,8 @@ func TestConcurrentGetSession(t *testing.T) {
 }
 
 func TestRestoreSession_ReactivatesSession(t *testing.T) {
-	sm := NewSessionManager(15 * time.Minute)
+	logger := getTestLogger()
+	sm := NewSessionManager(15 * time.Minute, logger)
 	
 	// Create and end session
 	session, err := sm.CreateSession("user-123")
@@ -374,7 +411,8 @@ func TestRestoreSession_ReactivatesSession(t *testing.T) {
 }
 
 func TestRestoreSession_UpdatesUserMapping(t *testing.T) {
-	sm := NewSessionManager(15 * time.Minute)
+	logger := getTestLogger()
+	sm := NewSessionManager(15 * time.Minute, logger)
 	
 	// Create and end session
 	session, err := sm.CreateSession("user-123")
@@ -484,7 +522,8 @@ func TestGenerateSessionName_DefaultMaxLength(t *testing.T) {
 }
 
 func TestSetSessionNameFromMessage(t *testing.T) {
-	sm := NewSessionManager(15 * time.Minute)
+	logger := getTestLogger()
+	sm := NewSessionManager(15 * time.Minute, logger)
 	
 	// Create session
 	session, err := sm.CreateSession("user-123")
@@ -502,7 +541,8 @@ func TestSetSessionNameFromMessage(t *testing.T) {
 }
 
 func TestSetSessionNameFromMessage_OnlyFirstMessage(t *testing.T) {
-	sm := NewSessionManager(15 * time.Minute)
+	logger := getTestLogger()
+	sm := NewSessionManager(15 * time.Minute, logger)
 	
 	// Create session
 	session, err := sm.CreateSession("user-123")
@@ -523,7 +563,8 @@ func TestSetSessionNameFromMessage_OnlyFirstMessage(t *testing.T) {
 }
 
 func TestSetSessionNameFromMessage_NonExistentSession(t *testing.T) {
-	sm := NewSessionManager(15 * time.Minute)
+	logger := getTestLogger()
+	sm := NewSessionManager(15 * time.Minute, logger)
 	
 	err := sm.SetSessionNameFromMessage("non-existent-id", "Test message")
 	
@@ -532,7 +573,8 @@ func TestSetSessionNameFromMessage_NonExistentSession(t *testing.T) {
 }
 
 func TestSetSessionNameFromMessage_EmptySessionID(t *testing.T) {
-	sm := NewSessionManager(15 * time.Minute)
+	logger := getTestLogger()
+	sm := NewSessionManager(15 * time.Minute, logger)
 	
 	err := sm.SetSessionNameFromMessage("", "Test message")
 	
@@ -542,7 +584,8 @@ func TestSetSessionNameFromMessage_EmptySessionID(t *testing.T) {
 
 // TestUpdateTokenUsage tests updating token usage for a session
 func TestUpdateTokenUsage(t *testing.T) {
-	sm := NewSessionManager(15 * time.Minute)
+	logger := getTestLogger()
+	sm := NewSessionManager(15 * time.Minute, logger)
 	
 	// Create session
 	session, err := sm.CreateSession("user-123")
@@ -569,7 +612,8 @@ func TestUpdateTokenUsage(t *testing.T) {
 }
 
 func TestUpdateTokenUsage_NonExistentSession(t *testing.T) {
-	sm := NewSessionManager(15 * time.Minute)
+	logger := getTestLogger()
+	sm := NewSessionManager(15 * time.Minute, logger)
 	
 	err := sm.UpdateTokenUsage("non-existent-id", 100)
 	
@@ -578,7 +622,8 @@ func TestUpdateTokenUsage_NonExistentSession(t *testing.T) {
 }
 
 func TestUpdateTokenUsage_EmptySessionID(t *testing.T) {
-	sm := NewSessionManager(15 * time.Minute)
+	logger := getTestLogger()
+	sm := NewSessionManager(15 * time.Minute, logger)
 	
 	err := sm.UpdateTokenUsage("", 100)
 	
@@ -587,7 +632,8 @@ func TestUpdateTokenUsage_EmptySessionID(t *testing.T) {
 }
 
 func TestUpdateTokenUsage_NegativeTokens(t *testing.T) {
-	sm := NewSessionManager(15 * time.Minute)
+	logger := getTestLogger()
+	sm := NewSessionManager(15 * time.Minute, logger)
 	
 	session, err := sm.CreateSession("user-123")
 	require.NoError(t, err)
@@ -600,7 +646,8 @@ func TestUpdateTokenUsage_NegativeTokens(t *testing.T) {
 
 // TestRecordResponseTime tests recording response times for a session
 func TestRecordResponseTime(t *testing.T) {
-	sm := NewSessionManager(15 * time.Minute)
+	logger := getTestLogger()
+	sm := NewSessionManager(15 * time.Minute, logger)
 	
 	// Create session
 	session, err := sm.CreateSession("user-123")
@@ -632,7 +679,8 @@ func TestRecordResponseTime(t *testing.T) {
 }
 
 func TestRecordResponseTime_NonExistentSession(t *testing.T) {
-	sm := NewSessionManager(15 * time.Minute)
+	logger := getTestLogger()
+	sm := NewSessionManager(15 * time.Minute, logger)
 	
 	err := sm.RecordResponseTime("non-existent-id", 500*time.Millisecond)
 	
@@ -641,7 +689,8 @@ func TestRecordResponseTime_NonExistentSession(t *testing.T) {
 }
 
 func TestRecordResponseTime_EmptySessionID(t *testing.T) {
-	sm := NewSessionManager(15 * time.Minute)
+	logger := getTestLogger()
+	sm := NewSessionManager(15 * time.Minute, logger)
 	
 	err := sm.RecordResponseTime("", 500*time.Millisecond)
 	
@@ -650,7 +699,8 @@ func TestRecordResponseTime_EmptySessionID(t *testing.T) {
 }
 
 func TestRecordResponseTime_NegativeDuration(t *testing.T) {
-	sm := NewSessionManager(15 * time.Minute)
+	logger := getTestLogger()
+	sm := NewSessionManager(15 * time.Minute, logger)
 	
 	session, err := sm.CreateSession("user-123")
 	require.NoError(t, err)
@@ -663,7 +713,8 @@ func TestRecordResponseTime_NegativeDuration(t *testing.T) {
 
 // TestGetMaxResponseTime tests calculating maximum response time
 func TestGetMaxResponseTime(t *testing.T) {
-	sm := NewSessionManager(15 * time.Minute)
+	logger := getTestLogger()
+	sm := NewSessionManager(15 * time.Minute, logger)
 	
 	// Create session
 	session, err := sm.CreateSession("user-123")
@@ -690,7 +741,8 @@ func TestGetMaxResponseTime(t *testing.T) {
 }
 
 func TestGetMaxResponseTime_NoResponseTimes(t *testing.T) {
-	sm := NewSessionManager(15 * time.Minute)
+	logger := getTestLogger()
+	sm := NewSessionManager(15 * time.Minute, logger)
 	
 	// Create session with no response times
 	session, err := sm.CreateSession("user-123")
@@ -702,7 +754,8 @@ func TestGetMaxResponseTime_NoResponseTimes(t *testing.T) {
 }
 
 func TestGetMaxResponseTime_NonExistentSession(t *testing.T) {
-	sm := NewSessionManager(15 * time.Minute)
+	logger := getTestLogger()
+	sm := NewSessionManager(15 * time.Minute, logger)
 	
 	_, err := sm.GetMaxResponseTime("non-existent-id")
 	
@@ -711,7 +764,8 @@ func TestGetMaxResponseTime_NonExistentSession(t *testing.T) {
 }
 
 func TestGetMaxResponseTime_EmptySessionID(t *testing.T) {
-	sm := NewSessionManager(15 * time.Minute)
+	logger := getTestLogger()
+	sm := NewSessionManager(15 * time.Minute, logger)
 	
 	_, err := sm.GetMaxResponseTime("")
 	
@@ -721,7 +775,8 @@ func TestGetMaxResponseTime_EmptySessionID(t *testing.T) {
 
 // TestGetAverageResponseTime tests calculating average response time
 func TestGetAverageResponseTime(t *testing.T) {
-	sm := NewSessionManager(15 * time.Minute)
+	logger := getTestLogger()
+	sm := NewSessionManager(15 * time.Minute, logger)
 	
 	// Create session
 	session, err := sm.CreateSession("user-123")
@@ -748,7 +803,8 @@ func TestGetAverageResponseTime(t *testing.T) {
 }
 
 func TestGetAverageResponseTime_NoResponseTimes(t *testing.T) {
-	sm := NewSessionManager(15 * time.Minute)
+	logger := getTestLogger()
+	sm := NewSessionManager(15 * time.Minute, logger)
 	
 	// Create session with no response times
 	session, err := sm.CreateSession("user-123")
@@ -760,7 +816,8 @@ func TestGetAverageResponseTime_NoResponseTimes(t *testing.T) {
 }
 
 func TestGetAverageResponseTime_NonExistentSession(t *testing.T) {
-	sm := NewSessionManager(15 * time.Minute)
+	logger := getTestLogger()
+	sm := NewSessionManager(15 * time.Minute, logger)
 	
 	_, err := sm.GetAverageResponseTime("non-existent-id")
 	
@@ -769,7 +826,8 @@ func TestGetAverageResponseTime_NonExistentSession(t *testing.T) {
 }
 
 func TestGetAverageResponseTime_EmptySessionID(t *testing.T) {
-	sm := NewSessionManager(15 * time.Minute)
+	logger := getTestLogger()
+	sm := NewSessionManager(15 * time.Minute, logger)
 	
 	_, err := sm.GetAverageResponseTime("")
 	
@@ -779,7 +837,8 @@ func TestGetAverageResponseTime_EmptySessionID(t *testing.T) {
 
 // TestGetSessionDuration tests calculating session duration
 func TestGetSessionDuration(t *testing.T) {
-	sm := NewSessionManager(15 * time.Minute)
+	logger := getTestLogger()
+	sm := NewSessionManager(15 * time.Minute, logger)
 	
 	// Create session
 	session, err := sm.CreateSession("user-123")
@@ -801,7 +860,8 @@ func TestGetSessionDuration(t *testing.T) {
 }
 
 func TestGetSessionDuration_ActiveSession(t *testing.T) {
-	sm := NewSessionManager(15 * time.Minute)
+	logger := getTestLogger()
+	sm := NewSessionManager(15 * time.Minute, logger)
 	
 	// Create session
 	session, err := sm.CreateSession("user-123")
@@ -819,7 +879,8 @@ func TestGetSessionDuration_ActiveSession(t *testing.T) {
 }
 
 func TestGetSessionDuration_NonExistentSession(t *testing.T) {
-	sm := NewSessionManager(15 * time.Minute)
+	logger := getTestLogger()
+	sm := NewSessionManager(15 * time.Minute, logger)
 	
 	_, err := sm.GetSessionDuration("non-existent-id")
 	
@@ -828,7 +889,8 @@ func TestGetSessionDuration_NonExistentSession(t *testing.T) {
 }
 
 func TestGetSessionDuration_EmptySessionID(t *testing.T) {
-	sm := NewSessionManager(15 * time.Minute)
+	logger := getTestLogger()
+	sm := NewSessionManager(15 * time.Minute, logger)
 	
 	_, err := sm.GetSessionDuration("")
 	
@@ -838,7 +900,8 @@ func TestGetSessionDuration_EmptySessionID(t *testing.T) {
 
 // TestConcurrentMetricsUpdates tests concurrent updates to session metrics
 func TestConcurrentMetricsUpdates(t *testing.T) {
-	sm := NewSessionManager(15 * time.Minute)
+	logger := getTestLogger()
+	sm := NewSessionManager(15 * time.Minute, logger)
 	
 	// Create session
 	session, err := sm.CreateSession("user-123")
@@ -880,7 +943,8 @@ func TestConcurrentMetricsUpdates(t *testing.T) {
 
 // TestSetModelID tests setting the model ID for a session
 func TestSetModelID(t *testing.T) {
-	sm := NewSessionManager(15 * time.Minute)
+	logger := getTestLogger()
+	sm := NewSessionManager(15 * time.Minute, logger)
 	
 	// Create a session
 	session, err := sm.CreateSession("user-123")
@@ -897,7 +961,8 @@ func TestSetModelID(t *testing.T) {
 }
 
 func TestSetModelID_EmptySessionID(t *testing.T) {
-	sm := NewSessionManager(15 * time.Minute)
+	logger := getTestLogger()
+	sm := NewSessionManager(15 * time.Minute, logger)
 	
 	err := sm.SetModelID("", "gpt-4")
 	
@@ -906,7 +971,8 @@ func TestSetModelID_EmptySessionID(t *testing.T) {
 }
 
 func TestSetModelID_EmptyModelID(t *testing.T) {
-	sm := NewSessionManager(15 * time.Minute)
+	logger := getTestLogger()
+	sm := NewSessionManager(15 * time.Minute, logger)
 	
 	session, err := sm.CreateSession("user-123")
 	require.NoError(t, err)
@@ -918,7 +984,8 @@ func TestSetModelID_EmptyModelID(t *testing.T) {
 }
 
 func TestSetModelID_NonExistentSession(t *testing.T) {
-	sm := NewSessionManager(15 * time.Minute)
+	logger := getTestLogger()
+	sm := NewSessionManager(15 * time.Minute, logger)
 	
 	err := sm.SetModelID("non-existent-session", "gpt-4")
 	
@@ -927,7 +994,8 @@ func TestSetModelID_NonExistentSession(t *testing.T) {
 }
 
 func TestSetModelID_UpdateExistingModel(t *testing.T) {
-	sm := NewSessionManager(15 * time.Minute)
+	logger := getTestLogger()
+	sm := NewSessionManager(15 * time.Minute, logger)
 	
 	// Create a session
 	session, err := sm.CreateSession("user-123")
@@ -948,7 +1016,8 @@ func TestSetModelID_UpdateExistingModel(t *testing.T) {
 }
 
 func TestGetModelID(t *testing.T) {
-	sm := NewSessionManager(15 * time.Minute)
+	logger := getTestLogger()
+	sm := NewSessionManager(15 * time.Minute, logger)
 	
 	// Create a session
 	session, err := sm.CreateSession("user-123")
@@ -965,7 +1034,8 @@ func TestGetModelID(t *testing.T) {
 }
 
 func TestGetModelID_EmptySessionID(t *testing.T) {
-	sm := NewSessionManager(15 * time.Minute)
+	logger := getTestLogger()
+	sm := NewSessionManager(15 * time.Minute, logger)
 	
 	modelID, err := sm.GetModelID("")
 	
@@ -975,7 +1045,8 @@ func TestGetModelID_EmptySessionID(t *testing.T) {
 }
 
 func TestGetModelID_NonExistentSession(t *testing.T) {
-	sm := NewSessionManager(15 * time.Minute)
+	logger := getTestLogger()
+	sm := NewSessionManager(15 * time.Minute, logger)
 	
 	modelID, err := sm.GetModelID("non-existent-session")
 	
@@ -985,7 +1056,8 @@ func TestGetModelID_NonExistentSession(t *testing.T) {
 }
 
 func TestGetModelID_NoModelSet(t *testing.T) {
-	sm := NewSessionManager(15 * time.Minute)
+	logger := getTestLogger()
+	sm := NewSessionManager(15 * time.Minute, logger)
 	
 	// Create a session without setting model
 	session, err := sm.CreateSession("user-123")
@@ -998,7 +1070,8 @@ func TestGetModelID_NoModelSet(t *testing.T) {
 }
 
 func TestModelSelection_Persistence(t *testing.T) {
-	sm := NewSessionManager(15 * time.Minute)
+	logger := getTestLogger()
+	sm := NewSessionManager(15 * time.Minute, logger)
 	
 	// Create a session
 	session, err := sm.CreateSession("user-123")

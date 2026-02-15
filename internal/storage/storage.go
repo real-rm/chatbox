@@ -11,7 +11,9 @@ import (
 	"io"
 	"time"
 
-	"github.com/yourusername/chat-websocket/internal/session"
+	"github.com/real-rm/gomongo"
+	"github.com/real-rm/golog"
+	"github.com/real-rm/chatbox/internal/session"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -26,11 +28,11 @@ var (
 	ErrSessionNotFound = errors.New("session not found in database")
 )
 
-// StorageService manages conversation persistence in MongoDB
+// StorageService manages conversation persistence in MongoDB using gomongo
 type StorageService struct {
-	client        *mongo.Client
-	database      *mongo.Database
-	collection    *mongo.Collection
+	mongo         *gomongo.Mongo
+	collection    *gomongo.MongoCollection
+	logger        *golog.Logger
 	encryptionKey []byte // Key for encrypting sensitive fields
 }
 
@@ -50,6 +52,8 @@ type SessionDocument struct {
 	TotalTokens       int                `bson:"total_tokens"`
 	MaxResponseTime   int64              `bson:"max_response_time"`  // milliseconds
 	AvgResponseTime   int64              `bson:"avg_response_time"`  // milliseconds
+	CreatedAt         time.Time          `bson:"_ts,omitempty"`      // gomongo automatic timestamp
+	ModifiedAt        time.Time          `bson:"_mt,omitempty"`      // gomongo automatic timestamp
 }
 
 // MessageDocument represents a message stored in MongoDB
@@ -88,16 +92,19 @@ type Metrics struct {
 	AdminAssistedCount int
 }
 
-// NewStorageService creates a new storage service
-// encryptionKey should be 32 bytes for AES-256 encryption
-func NewStorageService(client *mongo.Client, databaseName, collectionName string, encryptionKey []byte) *StorageService {
-	database := client.Database(databaseName)
-	collection := database.Collection(collectionName)
+// NewStorageService creates a new storage service using gomongo
+// mongo: gomongo.Mongo instance (from gomongo.InitMongoDB)
+// dbName: database name
+// collName: collection name
+// logger: golog.Logger instance for logging
+// encryptionKey: should be 32 bytes for AES-256 encryption
+func NewStorageService(mongo *gomongo.Mongo, dbName, collName string, logger *golog.Logger, encryptionKey []byte) *StorageService {
+	collection := mongo.Coll(dbName, collName)
 	
 	return &StorageService{
-		client:        client,
-		database:      database,
+		mongo:         mongo,
 		collection:    collection,
+		logger:        logger,
 		encryptionKey: encryptionKey,
 	}
 }
@@ -118,7 +125,7 @@ func (s *StorageService) CreateSession(sess *session.Session) error {
 	// Convert session to document
 	doc := s.sessionToDocument(sess)
 	
-	// Insert document
+	// Insert document using gomongo (automatically adds _ts and _mt timestamps)
 	_, err := s.collection.InsertOne(ctx, doc)
 	if err != nil {
 		return fmt.Errorf("failed to create session: %w", err)
@@ -143,7 +150,7 @@ func (s *StorageService) UpdateSession(sess *session.Session) error {
 	// Convert session to document
 	doc := s.sessionToDocument(sess)
 	
-	// Update document
+	// Update document using gomongo (automatically updates _mt timestamp)
 	filter := bson.M{"_id": sess.ID}
 	update := bson.M{"$set": doc}
 	
@@ -168,11 +175,12 @@ func (s *StorageService) GetSession(sessionID string) (*session.Session, error) 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	
-	// Find document
+	// Find document using gomongo
 	filter := bson.M{"_id": sessionID}
 	var doc SessionDocument
 	
-	err := s.collection.FindOne(ctx, filter).Decode(&doc)
+	result := s.collection.FindOne(ctx, filter)
+	err := result.Decode(&doc)
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, ErrSessionNotFound
@@ -337,7 +345,7 @@ func (s *StorageService) AddMessage(sessionID string, msg *session.Message) erro
 		msgDoc.Content = encrypted
 	}
 	
-	// Push message to messages array
+	// Push message to messages array using gomongo (automatically updates _mt)
 	filter := bson.M{"_id": sessionID}
 	update := bson.M{
 		"$push": bson.M{"messages": msgDoc},
@@ -378,7 +386,7 @@ func (s *StorageService) EndSession(sessionID string, endTime time.Time) error {
 	// Calculate duration
 	duration := int64(endTime.Sub(doc.StartTime).Seconds())
 	
-	// Update session with end time and duration
+	// Update session with end time and duration using gomongo (automatically updates _mt)
 	filter := bson.M{"_id": sessionID}
 	update := bson.M{
 		"$set": bson.M{
@@ -481,9 +489,7 @@ func (s *StorageService) ListUserSessions(userID string, limit int) ([]*SessionM
 	// Build query filter
 	filter := bson.M{"user_id": userID}
 	
-	// Build find options with sorting by last_activity (descending)
-	// Note: We need to add last_activity field to the document schema
-	// For now, we'll sort by start_time descending as a fallback
+	// Build find options with sorting by start_time (descending)
 	findOptions := options.Find()
 	findOptions.SetSort(bson.D{{Key: "start_time", Value: -1}})
 	
@@ -491,7 +497,7 @@ func (s *StorageService) ListUserSessions(userID string, limit int) ([]*SessionM
 		findOptions.SetLimit(int64(limit))
 	}
 	
-	// Execute query
+	// Execute query using gomongo
 	cursor, err := s.collection.Find(ctx, filter, findOptions)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list user sessions: %w", err)
@@ -553,7 +559,7 @@ func (s *StorageService) GetSessionMetrics(startTime, endTime time.Time) (*Metri
 		},
 	}
 	
-	// Execute query
+	// Execute query using gomongo
 	cursor, err := s.collection.Find(ctx, filter)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get session metrics: %w", err)

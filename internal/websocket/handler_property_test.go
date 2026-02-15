@@ -8,9 +8,23 @@ import (
 	"github.com/leanovate/gopter"
 	"github.com/leanovate/gopter/gen"
 	"github.com/leanovate/gopter/prop"
+	"github.com/real-rm/golog"
 	"github.com/stretchr/testify/require"
-	"github.com/yourusername/chat-websocket/internal/auth"
+	"github.com/real-rm/chatbox/internal/auth"
 )
+
+// testLogger creates a test logger for property tests
+func testPropertyLogger() *golog.Logger {
+	logger, err := golog.InitLog(golog.LogConfig{
+		Dir:            ".",     // Use current directory for test logs
+		Level:          "error", // Only log errors in tests
+		StandardOutput: true,    // Output to stdout
+	})
+	if err != nil {
+		panic("failed to create test logger: " + err.Error())
+	}
+	return logger
+}
 
 // Feature: chat-application-websocket
 // Property 3: Connection User Association
@@ -50,7 +64,7 @@ func TestProperty_ConnectionUserAssociation(t *testing.T) {
 			}
 			
 			// Create a connection
-			handler := NewHandler(validator)
+			handler := NewHandler(validator, testPropertyLogger())
 			conn := handler.createConnection(nil, claims)
 			
 			// Verify the connection is associated with the correct user ID
@@ -103,7 +117,7 @@ func TestProperty_WebSocketConnectionEstablishment(t *testing.T) {
 			}
 			
 			// Verify we can create a connection with valid claims
-			handler := NewHandler(validator)
+			handler := NewHandler(validator, testPropertyLogger())
 			conn := handler.createConnection(nil, claims)
 			
 			// Connection should be created successfully with proper initialization
@@ -177,7 +191,7 @@ func TestProperty_HeartbeatResponse(t *testing.T) {
 			}
 			
 			// Create a mock WebSocket connection
-			handler := NewHandler(validator)
+			handler := NewHandler(validator, testPropertyLogger())
 			conn := handler.createConnection(nil, claims)
 			
 			// Verify the connection has a send channel (required for heartbeat)
@@ -229,7 +243,7 @@ func TestProperty_ConnectionResourceCleanup(t *testing.T) {
 			}
 			
 			// Create handler and connection
-			handler := NewHandler(validator)
+			handler := NewHandler(validator, testPropertyLogger())
 			conn := handler.createConnection(nil, claims)
 			
 			// Register the connection

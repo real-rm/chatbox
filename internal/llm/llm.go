@@ -8,7 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/yourusername/chat-websocket/internal/config"
+	"github.com/real-rm/goconfig"
+	"github.com/real-rm/golog"
 )
 
 var (
@@ -19,6 +20,16 @@ var (
 	// ErrNoProviders is returned when no providers are configured
 	ErrNoProviders = errors.New("no LLM providers configured")
 )
+
+// LLMProviderConfig holds configuration for a single LLM provider
+type LLMProviderConfig struct {
+	ID       string
+	Name     string
+	Type     string // "openai", "anthropic", "dify"
+	Endpoint string
+	APIKey   string
+	Model    string
+}
 
 // LLMProvider defines the interface that all LLM providers must implement
 type LLMProvider interface {
@@ -68,19 +79,31 @@ type ModelInfo struct {
 
 // LLMService manages multiple LLM providers and routes requests to them
 type LLMService struct {
-	providers map[string]LLMProvider // Map of provider ID to provider instance
-	models    map[string]ModelInfo   // Map of model ID to model info
-	config    *config.LLMConfig      // LLM configuration
-	mu        sync.RWMutex           // Protects concurrent access
+	providers map[string]LLMProvider   // Map of provider ID to provider instance
+	models    map[string]ModelInfo     // Map of model ID to model info
+	config    *goconfig.ConfigAccessor // Configuration accessor
+	logger    *golog.Logger            // Logger for LLM operations
+	mu        sync.RWMutex             // Protects concurrent access
 }
 
-// NewLLMService creates a new LLM service with the given configuration
-func NewLLMService(cfg *config.LLMConfig) (*LLMService, error) {
+// NewLLMService creates a new LLM service with the given configuration accessor
+func NewLLMService(cfg *goconfig.ConfigAccessor, logger *golog.Logger) (*LLMService, error) {
 	if cfg == nil {
-		return nil, errors.New("LLM config is required")
+		return nil, errors.New("config accessor is required")
+	}
+	if logger == nil {
+		return nil, errors.New("logger is required")
 	}
 	
-	if len(cfg.Providers) == 0 {
+	llmLogger := logger.WithGroup("llm")
+	
+	// Load LLM providers from config
+	providers, err := loadLLMProviders(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load LLM providers: %w", err)
+	}
+	
+	if len(providers) == 0 {
 		return nil, ErrNoProviders
 	}
 	
@@ -88,10 +111,11 @@ func NewLLMService(cfg *config.LLMConfig) (*LLMService, error) {
 		providers: make(map[string]LLMProvider),
 		models:    make(map[string]ModelInfo),
 		config:    cfg,
+		logger:    llmLogger,
 	}
 	
 	// Register all configured providers
-	for _, providerCfg := range cfg.Providers {
+	for _, providerCfg := range providers {
 		modelInfo := ModelInfo{
 			ID:       providerCfg.ID,
 			Name:     providerCfg.Name,
@@ -107,13 +131,83 @@ func NewLLMService(cfg *config.LLMConfig) (*LLMService, error) {
 		}
 		
 		service.providers[providerCfg.ID] = provider
+		llmLogger.Info("Registered LLM provider", "provider_id", providerCfg.ID, "type", providerCfg.Type)
 	}
 	
 	return service, nil
 }
 
+// loadLLMProviders loads LLM provider configurations from ConfigAccessor
+func loadLLMProviders(cfg *goconfig.ConfigAccessor) ([]LLMProviderConfig, error) {
+	// Get the llm.providers array from config
+	providersConfig, err := cfg.Config("llm.providers")
+	if err != nil {
+		// If llm.providers doesn't exist, return empty slice
+		return []LLMProviderConfig{}, nil
+	}
+	
+	// Handle nil case
+	if providersConfig == nil {
+		return []LLMProviderConfig{}, nil
+	}
+	
+	// Convert to slice of provider configs
+	providersSlice, ok := providersConfig.([]interface{})
+	if !ok {
+		return nil, errors.New("llm.providers is not an array")
+	}
+	
+	providers := make([]LLMProviderConfig, 0, len(providersSlice))
+	for i, p := range providersSlice {
+		providerMap, ok := p.(map[string]interface{})
+		if !ok {
+			return nil, fmt.Errorf("provider %d is not a map", i)
+		}
+		
+		provider := LLMProviderConfig{
+			ID:       getStringFromMap(providerMap, "id"),
+			Name:     getStringFromMap(providerMap, "name"),
+			Type:     getStringFromMap(providerMap, "type"),
+			Endpoint: getStringFromMap(providerMap, "endpoint"),
+			APIKey:   getStringFromMap(providerMap, "apiKey"),
+			Model:    getStringFromMap(providerMap, "model"),
+		}
+		
+		// Validate required fields
+		if provider.ID == "" {
+			return nil, fmt.Errorf("provider %d: ID is required", i)
+		}
+		if provider.Name == "" {
+			return nil, fmt.Errorf("provider %d: name is required", i)
+		}
+		if provider.Type == "" {
+			return nil, fmt.Errorf("provider %d: type is required", i)
+		}
+		if provider.Endpoint == "" {
+			return nil, fmt.Errorf("provider %d: endpoint is required", i)
+		}
+		if provider.APIKey == "" {
+			return nil, fmt.Errorf("provider %d: API key is required", i)
+		}
+		
+		providers = append(providers, provider)
+	}
+	
+	return providers, nil
+}
+
+// getStringFromMap safely extracts a string value from a map
+func getStringFromMap(m map[string]interface{}, key string) string {
+	if val, ok := m[key]; ok {
+		if str, ok := val.(string); ok {
+			return str
+		}
+	}
+	return ""
+}
+
 // createProvider creates a provider instance based on the configuration
-func createProvider(cfg config.LLMProviderConfig) (LLMProvider, error) {
+func createProvider(cfg LLMProviderConfig) (LLMProvider, error) {
 	switch cfg.Type {
 	case "openai":
 		return NewOpenAIProvider(cfg.APIKey, cfg.Endpoint, cfg.Model), nil
@@ -177,6 +271,8 @@ func (s *LLMService) SendMessage(ctx context.Context, modelID string, messages [
 				delay = 30 * time.Second // Cap at 30 seconds
 			}
 			
+			s.logger.Info("Retrying LLM request", "model_id", modelID, "attempt", attempt+1, "delay", delay)
+			
 			// Wait before retry
 			select {
 			case <-ctx.Done():
@@ -195,10 +291,12 @@ func (s *LLMService) SendMessage(ctx context.Context, modelID string, messages [
 			if resp.Duration == 0 {
 				resp.Duration = duration
 			}
+			s.logger.Info("LLM request successful", "model_id", modelID, "duration", duration, "tokens", resp.TokensUsed)
 			return resp, nil
 		}
 		
 		lastErr = err
+		s.logger.Warn("LLM request failed", "model_id", modelID, "attempt", attempt+1, "error", err)
 		
 		// Check if error is retryable
 		if !isRetryableError(err) {
@@ -206,6 +304,7 @@ func (s *LLMService) SendMessage(ctx context.Context, modelID string, messages [
 		}
 	}
 	
+	s.logger.Error("LLM request failed after all retries", "model_id", modelID, "max_retries", maxRetries, "error", lastErr)
 	return nil, fmt.Errorf("failed after %d attempts: %w", maxRetries, lastErr)
 }
 
@@ -239,6 +338,8 @@ func (s *LLMService) StreamMessage(ctx context.Context, modelID string, messages
 				delay = 30 * time.Second // Cap at 30 seconds
 			}
 			
+			s.logger.Info("Retrying LLM stream request", "model_id", modelID, "attempt", attempt+1, "delay", delay)
+			
 			// Wait before retry
 			select {
 			case <-ctx.Done():
@@ -250,6 +351,7 @@ func (s *LLMService) StreamMessage(ctx context.Context, modelID string, messages
 		chunkChan, err := provider.StreamMessage(ctx, req)
 		if err == nil {
 			// Success - wrap channel to track response time
+			s.logger.Info("LLM stream established", "model_id", modelID)
 			wrappedChan := make(chan *LLMChunk)
 			go func() {
 				defer close(wrappedChan)
@@ -261,6 +363,7 @@ func (s *LLMService) StreamMessage(ctx context.Context, modelID string, messages
 		}
 		
 		lastErr = err
+		s.logger.Warn("LLM stream request failed", "model_id", modelID, "attempt", attempt+1, "error", err)
 		
 		// Check if error is retryable
 		if !isRetryableError(err) {
@@ -268,6 +371,7 @@ func (s *LLMService) StreamMessage(ctx context.Context, modelID string, messages
 		}
 	}
 	
+	s.logger.Error("LLM stream failed after all retries", "model_id", modelID, "max_retries", maxRetries, "error", lastErr)
 	return nil, fmt.Errorf("failed to establish stream after %d attempts: %w", maxRetries, lastErr)
 }
 

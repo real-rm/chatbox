@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/real-rm/gohelper"
 )
 
 // DifyProvider implements the LLMProvider interface for Dify API
@@ -77,7 +79,7 @@ func (p *DifyProvider) SendMessage(ctx context.Context, req *LLMRequest) (*LLMRe
 		Inputs:       make(map[string]string),
 		Query:        query,
 		ResponseMode: "blocking",
-		User:         "user-" + time.Now().Format("20060102150405"),
+		User:         "user-" + fmt.Sprintf("%d", gohelper.TimeToDateInt(time.Now())),
 	}
 	
 	bodyBytes, err := json.Marshal(reqBody)
@@ -135,7 +137,7 @@ func (p *DifyProvider) StreamMessage(ctx context.Context, req *LLMRequest) (<-ch
 		Inputs:       make(map[string]string),
 		Query:        query,
 		ResponseMode: "streaming",
-		User:         "user-" + time.Now().Format("20060102150405"),
+		User:         "user-" + fmt.Sprintf("%d", gohelper.TimeToDateInt(time.Now())),
 	}
 	
 	bodyBytes, err := json.Marshal(reqBody)

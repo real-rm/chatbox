@@ -8,126 +8,75 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/yourusername/chat-websocket/internal/config"
 )
-
-// MockLLMProvider is a mock implementation of LLMProvider for testing
-type MockLLMProvider struct {
-	sendMessageFunc    func(ctx context.Context, req *LLMRequest) (*LLMResponse, error)
-	streamMessageFunc  func(ctx context.Context, req *LLMRequest) (<-chan *LLMChunk, error)
-	getTokenCountFunc  func(text string) int
-}
-
-func (m *MockLLMProvider) SendMessage(ctx context.Context, req *LLMRequest) (*LLMResponse, error) {
-	if m.sendMessageFunc != nil {
-		return m.sendMessageFunc(ctx, req)
-	}
-	return &LLMResponse{
-		Content:    "mock response",
-		TokensUsed: 10,
-		Duration:   100 * time.Millisecond,
-	}, nil
-}
-
-func (m *MockLLMProvider) StreamMessage(ctx context.Context, req *LLMRequest) (<-chan *LLMChunk, error) {
-	if m.streamMessageFunc != nil {
-		return m.streamMessageFunc(ctx, req)
-	}
-	ch := make(chan *LLMChunk, 2)
-	ch <- &LLMChunk{Content: "chunk1", Done: false}
-	ch <- &LLMChunk{Content: "chunk2", Done: true}
-	close(ch)
-	return ch, nil
-}
-
-func (m *MockLLMProvider) GetTokenCount(text string) int {
-	if m.getTokenCountFunc != nil {
-		return m.getTokenCountFunc(text)
-	}
-	return len(text) / 4 // Simple approximation
-}
 
 func TestNewLLMService(t *testing.T) {
 	tests := []struct {
-		name    string
-		config  *config.LLMConfig
-		wantErr bool
-		errMsg  string
+		name      string
+		providers []LLMProviderConfig
+		wantErr   bool
+		errMsg    string
 	}{
 		{
 			name: "valid config with single provider",
-			config: &config.LLMConfig{
-				Providers: []config.LLMProviderConfig{
-					{
-						ID:       "gpt-4",
-						Name:     "GPT-4",
-						Type:     "openai",
-						Endpoint: "https://api.openai.com/v1",
-						APIKey:   "test-key",
-						Model:    "gpt-4",
-					},
+			providers: []LLMProviderConfig{
+				{
+					ID:       "gpt-4",
+					Name:     "GPT-4",
+					Type:     "openai",
+					Endpoint: "https://api.openai.com/v1",
+					APIKey:   "test-key",
+					Model:    "gpt-4",
 				},
 			},
 			wantErr: false,
 		},
 		{
 			name: "valid config with multiple providers",
-			config: &config.LLMConfig{
-				Providers: []config.LLMProviderConfig{
-					{
-						ID:       "gpt-4",
-						Name:     "GPT-4",
-						Type:     "openai",
-						Endpoint: "https://api.openai.com/v1",
-						APIKey:   "test-key",
-						Model:    "gpt-4",
-					},
-					{
-						ID:       "claude-3",
-						Name:     "Claude 3",
-						Type:     "anthropic",
-						Endpoint: "https://api.anthropic.com/v1",
-						APIKey:   "test-key",
-						Model:    "claude-3-opus-20240229",
-					},
-					{
-						ID:       "dify-1",
-						Name:     "Dify Model",
-						Type:     "dify",
-						Endpoint: "https://api.dify.ai/v1",
-						APIKey:   "test-key",
-						Model:    "dify-model",
-					},
+			providers: []LLMProviderConfig{
+				{
+					ID:       "gpt-4",
+					Name:     "GPT-4",
+					Type:     "openai",
+					Endpoint: "https://api.openai.com/v1",
+					APIKey:   "test-key",
+					Model:    "gpt-4",
+				},
+				{
+					ID:       "claude-3",
+					Name:     "Claude 3",
+					Type:     "anthropic",
+					Endpoint: "https://api.anthropic.com/v1",
+					APIKey:   "test-key",
+					Model:    "claude-3-opus-20240229",
+				},
+				{
+					ID:       "dify-1",
+					Name:     "Dify Model",
+					Type:     "dify",
+					Endpoint: "https://api.dify.ai/v1",
+					APIKey:   "test-key",
+					Model:    "dify-model",
 				},
 			},
 			wantErr: false,
 		},
 		{
-			name:    "nil config",
-			config:  nil,
-			wantErr: true,
-			errMsg:  "LLM config is required",
-		},
-		{
-			name: "empty providers",
-			config: &config.LLMConfig{
-				Providers: []config.LLMProviderConfig{},
-			},
-			wantErr: true,
-			errMsg:  "no LLM providers configured",
+			name:      "empty providers",
+			providers: []LLMProviderConfig{},
+			wantErr:   true,
+			errMsg:    "no LLM providers configured",
 		},
 		{
 			name: "unsupported provider type",
-			config: &config.LLMConfig{
-				Providers: []config.LLMProviderConfig{
-					{
-						ID:       "unknown",
-						Name:     "Unknown",
-						Type:     "unsupported",
-						Endpoint: "https://api.example.com",
-						APIKey:   "test-key",
-						Model:    "model",
-					},
+			providers: []LLMProviderConfig{
+				{
+					ID:       "unknown",
+					Name:     "Unknown",
+					Type:     "unsupported",
+					Endpoint: "https://api.example.com",
+					APIKey:   "test-key",
+					Model:    "model",
 				},
 			},
 			wantErr: true,
@@ -137,7 +86,9 @@ func TestNewLLMService(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			service, err := NewLLMService(tt.config)
+			cfg := createTestConfig(tt.providers)
+			logger := createTestLogger()
+			service, err := NewLLMService(cfg, logger)
 			
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -148,11 +99,11 @@ func TestNewLLMService(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 				assert.NotNil(t, service)
-				assert.Equal(t, len(tt.config.Providers), len(service.models))
-				assert.Equal(t, len(tt.config.Providers), len(service.providers))
+				assert.Equal(t, len(tt.providers), len(service.models))
+				assert.Equal(t, len(tt.providers), len(service.providers))
 				
 				// Verify providers are correctly instantiated
-				for _, providerCfg := range tt.config.Providers {
+				for _, providerCfg := range tt.providers {
 					provider, err := service.getProvider(providerCfg.ID)
 					assert.NoError(t, err)
 					assert.NotNil(t, provider)
@@ -163,19 +114,19 @@ func TestNewLLMService(t *testing.T) {
 }
 
 func TestLLMService_RegisterProvider(t *testing.T) {
-	cfg := &config.LLMConfig{
-		Providers: []config.LLMProviderConfig{
-			{
-				ID:       "gpt-4",
-				Name:     "GPT-4",
-				Type:     "openai",
-				Endpoint: "https://api.openai.com/v1",
-				APIKey:   "test-key",
-			},
+	providers := []LLMProviderConfig{
+		{
+			ID:       "gpt-4",
+			Name:     "GPT-4",
+			Type:     "openai",
+			Endpoint: "https://api.openai.com/v1",
+			APIKey:   "test-key",
 		},
 	}
 	
-	service, err := NewLLMService(cfg)
+	cfg := createTestConfig(providers)
+	logger := createTestLogger()
+	service, err := NewLLMService(cfg, logger)
 	require.NoError(t, err)
 	
 	tests := []struct {
@@ -231,19 +182,19 @@ func TestLLMService_RegisterProvider(t *testing.T) {
 }
 
 func TestLLMService_SendMessage(t *testing.T) {
-	cfg := &config.LLMConfig{
-		Providers: []config.LLMProviderConfig{
-			{
-				ID:       "gpt-4",
-				Name:     "GPT-4",
-				Type:     "openai",
-				Endpoint: "https://api.openai.com/v1",
-				APIKey:   "test-key",
-			},
+	providers := []LLMProviderConfig{
+		{
+			ID:       "gpt-4",
+			Name:     "GPT-4",
+			Type:     "openai",
+			Endpoint: "https://api.openai.com/v1",
+			APIKey:   "test-key",
 		},
 	}
 	
-	service, err := NewLLMService(cfg)
+	cfg := createTestConfig(providers)
+	logger := createTestLogger()
+	service, err := NewLLMService(cfg, logger)
 	require.NoError(t, err)
 	
 	mockProvider := &MockLLMProvider{
@@ -316,19 +267,19 @@ func TestLLMService_SendMessage(t *testing.T) {
 }
 
 func TestLLMService_StreamMessage(t *testing.T) {
-	cfg := &config.LLMConfig{
-		Providers: []config.LLMProviderConfig{
-			{
-				ID:       "gpt-4",
-				Name:     "GPT-4",
-				Type:     "openai",
-				Endpoint: "https://api.openai.com/v1",
-				APIKey:   "test-key",
-			},
+	providers := []LLMProviderConfig{
+		{
+			ID:       "gpt-4",
+			Name:     "GPT-4",
+			Type:     "openai",
+			Endpoint: "https://api.openai.com/v1",
+			APIKey:   "test-key",
 		},
 	}
 	
-	service, err := NewLLMService(cfg)
+	cfg := createTestConfig(providers)
+	logger := createTestLogger()
+	service, err := NewLLMService(cfg, logger)
 	require.NoError(t, err)
 	
 	mockProvider := &MockLLMProvider{
@@ -416,26 +367,26 @@ func TestLLMService_StreamMessage(t *testing.T) {
 }
 
 func TestLLMService_GetAvailableModels(t *testing.T) {
-	cfg := &config.LLMConfig{
-		Providers: []config.LLMProviderConfig{
-			{
-				ID:       "gpt-4",
-				Name:     "GPT-4",
-				Type:     "openai",
-				Endpoint: "https://api.openai.com/v1",
-				APIKey:   "test-key",
-			},
-			{
-				ID:       "claude-3",
-				Name:     "Claude 3",
-				Type:     "anthropic",
-				Endpoint: "https://api.anthropic.com/v1",
-				APIKey:   "test-key",
-			},
+	providers := []LLMProviderConfig{
+		{
+			ID:       "gpt-4",
+			Name:     "GPT-4",
+			Type:     "openai",
+			Endpoint: "https://api.openai.com/v1",
+			APIKey:   "test-key",
+		},
+		{
+			ID:       "claude-3",
+			Name:     "Claude 3",
+			Type:     "anthropic",
+			Endpoint: "https://api.anthropic.com/v1",
+			APIKey:   "test-key",
 		},
 	}
 	
-	service, err := NewLLMService(cfg)
+	cfg := createTestConfig(providers)
+	logger := createTestLogger()
+	service, err := NewLLMService(cfg, logger)
 	require.NoError(t, err)
 	
 	models := service.GetAvailableModels()
@@ -456,19 +407,19 @@ func TestLLMService_GetAvailableModels(t *testing.T) {
 }
 
 func TestLLMService_ValidateModel(t *testing.T) {
-	cfg := &config.LLMConfig{
-		Providers: []config.LLMProviderConfig{
-			{
-				ID:       "gpt-4",
-				Name:     "GPT-4",
-				Type:     "openai",
-				Endpoint: "https://api.openai.com/v1",
-				APIKey:   "test-key",
-			},
+	providers := []LLMProviderConfig{
+		{
+			ID:       "gpt-4",
+			Name:     "GPT-4",
+			Type:     "openai",
+			Endpoint: "https://api.openai.com/v1",
+			APIKey:   "test-key",
 		},
 	}
 	
-	service, err := NewLLMService(cfg)
+	cfg := createTestConfig(providers)
+	logger := createTestLogger()
+	service, err := NewLLMService(cfg, logger)
 	require.NoError(t, err)
 	
 	tests := []struct {
@@ -513,19 +464,19 @@ func TestLLMService_ValidateModel(t *testing.T) {
 }
 
 func TestLLMService_GetTokenCount(t *testing.T) {
-	cfg := &config.LLMConfig{
-		Providers: []config.LLMProviderConfig{
-			{
-				ID:       "gpt-4",
-				Name:     "GPT-4",
-				Type:     "openai",
-				Endpoint: "https://api.openai.com/v1",
-				APIKey:   "test-key",
-			},
+	providers := []LLMProviderConfig{
+		{
+			ID:       "gpt-4",
+			Name:     "GPT-4",
+			Type:     "openai",
+			Endpoint: "https://api.openai.com/v1",
+			APIKey:   "test-key",
 		},
 	}
 	
-	service, err := NewLLMService(cfg)
+	cfg := createTestConfig(providers)
+	logger := createTestLogger()
+	service, err := NewLLMService(cfg, logger)
 	require.NoError(t, err)
 	
 	mockProvider := &MockLLMProvider{
@@ -586,19 +537,19 @@ func TestLLMService_GetTokenCount(t *testing.T) {
 }
 
 func TestLLMService_ProviderError(t *testing.T) {
-	cfg := &config.LLMConfig{
-		Providers: []config.LLMProviderConfig{
-			{
-				ID:       "gpt-4",
-				Name:     "GPT-4",
-				Type:     "openai",
-				Endpoint: "https://api.openai.com/v1",
-				APIKey:   "test-key",
-			},
+	providers := []LLMProviderConfig{
+		{
+			ID:       "gpt-4",
+			Name:     "GPT-4",
+			Type:     "openai",
+			Endpoint: "https://api.openai.com/v1",
+			APIKey:   "test-key",
 		},
 	}
 	
-	service, err := NewLLMService(cfg)
+	cfg := createTestConfig(providers)
+	logger := createTestLogger()
+	service, err := NewLLMService(cfg, logger)
 	require.NoError(t, err)
 	
 	// Mock provider that returns an error
@@ -622,19 +573,19 @@ func TestLLMService_ProviderError(t *testing.T) {
 }
 
 func TestLLMService_ConcurrentAccess(t *testing.T) {
-	cfg := &config.LLMConfig{
-		Providers: []config.LLMProviderConfig{
-			{
-				ID:       "gpt-4",
-				Name:     "GPT-4",
-				Type:     "openai",
-				Endpoint: "https://api.openai.com/v1",
-				APIKey:   "test-key",
-			},
+	providers := []LLMProviderConfig{
+		{
+			ID:       "gpt-4",
+			Name:     "GPT-4",
+			Type:     "openai",
+			Endpoint: "https://api.openai.com/v1",
+			APIKey:   "test-key",
 		},
 	}
 	
-	service, err := NewLLMService(cfg)
+	cfg := createTestConfig(providers)
+	logger := createTestLogger()
+	service, err := NewLLMService(cfg, logger)
 	require.NoError(t, err)
 	
 	mockProvider := &MockLLMProvider{}
@@ -671,19 +622,19 @@ func TestLLMService_ConcurrentAccess(t *testing.T) {
 }
 
 func TestLLMService_RetryLogic(t *testing.T) {
-	cfg := &config.LLMConfig{
-		Providers: []config.LLMProviderConfig{
-			{
-				ID:       "gpt-4",
-				Name:     "GPT-4",
-				Type:     "openai",
-				Endpoint: "https://api.openai.com/v1",
-				APIKey:   "test-key",
-			},
+	providers := []LLMProviderConfig{
+		{
+			ID:       "gpt-4",
+			Name:     "GPT-4",
+			Type:     "openai",
+			Endpoint: "https://api.openai.com/v1",
+			APIKey:   "test-key",
 		},
 	}
 	
-	service, err := NewLLMService(cfg)
+	cfg := createTestConfig(providers)
+	logger := createTestLogger()
+	service, err := NewLLMService(cfg, logger)
 	require.NoError(t, err)
 	
 	t.Run("retry on retryable error and succeed", func(t *testing.T) {
@@ -794,19 +745,19 @@ func TestLLMService_RetryLogic(t *testing.T) {
 }
 
 func TestLLMService_StreamRetryLogic(t *testing.T) {
-	cfg := &config.LLMConfig{
-		Providers: []config.LLMProviderConfig{
-			{
-				ID:       "gpt-4",
-				Name:     "GPT-4",
-				Type:     "openai",
-				Endpoint: "https://api.openai.com/v1",
-				APIKey:   "test-key",
-			},
+	providers := []LLMProviderConfig{
+		{
+			ID:       "gpt-4",
+			Name:     "GPT-4",
+			Type:     "openai",
+			Endpoint: "https://api.openai.com/v1",
+			APIKey:   "test-key",
 		},
 	}
 	
-	service, err := NewLLMService(cfg)
+	cfg := createTestConfig(providers)
+	logger := createTestLogger()
+	service, err := NewLLMService(cfg, logger)
 	require.NoError(t, err)
 	
 	t.Run("retry stream on retryable error and succeed", func(t *testing.T) {
@@ -872,19 +823,19 @@ func TestLLMService_StreamRetryLogic(t *testing.T) {
 }
 
 func TestLLMService_ResponseTimeTracking(t *testing.T) {
-	cfg := &config.LLMConfig{
-		Providers: []config.LLMProviderConfig{
-			{
-				ID:       "gpt-4",
-				Name:     "GPT-4",
-				Type:     "openai",
-				Endpoint: "https://api.openai.com/v1",
-				APIKey:   "test-key",
-			},
+	providers := []LLMProviderConfig{
+		{
+			ID:       "gpt-4",
+			Name:     "GPT-4",
+			Type:     "openai",
+			Endpoint: "https://api.openai.com/v1",
+			APIKey:   "test-key",
 		},
 	}
 	
-	service, err := NewLLMService(cfg)
+	cfg := createTestConfig(providers)
+	logger := createTestLogger()
+	service, err := NewLLMService(cfg, logger)
 	require.NoError(t, err)
 	
 	t.Run("response time is measured", func(t *testing.T) {

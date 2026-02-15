@@ -20,7 +20,7 @@ This implementation plan breaks down the chat application into discrete coding t
   - Test configuration validation for required fields
   - _Requirements: 7.1_
 
-- [ ] 2. Implement JWT authentication middleware
+- [x] 2. Implement JWT authentication middleware
   - [x] 2.1 Create JWT token validation function
     - Implement token signature verification
     - Implement token expiration checking
@@ -35,7 +35,7 @@ This implementation plan breaks down the chat application into discrete coding t
     - **Property 2: JWT Claims Extraction Round Trip**
     - **Validates: Requirements 1.2**
 
-- [ ] 3. Implement WebSocket connection handling
+- [x] 3. Implement WebSocket connection handling
   - [x] 3.1 Create WebSocket server and connection upgrade handler
     - Implement HTTP to WebSocket upgrade
     - Create Connection struct with user context
@@ -56,7 +56,7 @@ This implementation plan breaks down the chat application into discrete coding t
     - **Property 7: Connection Resource Cleanup**
     - **Validates: Requirements 1.4, 2.1, 2.2, 2.6**
 
-- [ ] 4. Implement session management
+- [x] 4. Implement session management
   - [x] 4.1 Create SessionManager with session tracking
     - Implement Session struct with all required fields
     - Implement CreateSession method
@@ -86,7 +86,7 @@ This implementation plan breaks down the chat application into discrete coding t
 - [x] 5. Checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 6. Implement message protocol and routing
+- [x] 6. Implement message protocol and routing
   - [x] 6.1 Define message types and structures
     - Create Message struct with all message types
     - Create MessageType and SenderType enums
@@ -114,7 +114,7 @@ This implementation plan breaks down the chat application into discrete coding t
     - **Property 42: Input Sanitization**
     - **Validates: Requirements 3.1, 3.5, 8.1, 8.2, 8.4, 8.5, 13.2**
 
-- [ ] 7. Integrate with Storage Service (gomongo)
+- [x] 7. Integrate with Storage Service (gomongo)
   - [x] 7.1 Create StorageService wrapper
     - Initialize MongoDB client using gomongo
     - Create SessionDocument and MessageDocument structs
@@ -144,7 +144,7 @@ This implementation plan breaks down the chat application into discrete coding t
     - **Property 46: Session List Ordering**
     - **Validates: Requirements 4.1, 4.2, 4.3, 4.6, 4.7, 13.4, 15.1**
 
-- [ ] 8. Implement LLM Service integration
+- [x] 8. Implement LLM Service integration
   - [x] 8.1 Create LLMService with provider interface
     - Define LLMProvider interface
     - Create LLMRequest and LLMResponse structs
@@ -186,28 +186,94 @@ This implementation plan breaks down the chat application into discrete coding t
 - [x] 9. Checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
-- [ ] 10. Implement file upload service (goupload)
-  - [~] 10.1 Create UploadService wrapper
+- [x] 10. Refactor to use company base libraries
+  - [x] 10.1 Refactor storage service to use gomongo
+    - Replace direct mongo-driver usage with gomongo wrapper
+    - Update StorageService to use gomongo.Mongo and gomongo.MongoCollection
+    - Use gomongo's automatic timestamp management (_ts, _mt)
+    - Update initialization to use gomongo.InitMongoDB()
+    - Pass logger and config accessor to gomongo
+    - Update all CRUD operations to use gomongo methods
+    - _Requirements: 4.1, 4.2, 4.3, 4.6, 4.7_
+  
+  - [x] 10.2 Refactor upload service to use goupload
+    - Replace AWS SDK v2 usage with goupload wrapper
+    - Initialize goupload with goupload.Init()
+    - Create StatsUpdater for file tracking
+    - Update UploadFile to use goupload.Upload()
+    - Update GenerateSignedURL to use goupload signed URL generation
+    - Update DeleteFile to use goupload.Delete()
+    - Configure S3 providers in config.toml under [connection_sources]
+    - Configure upload types in config.toml under [userupload]
+    - _Requirements: 5.1, 5.3, 5.4_
+  
+  - [x] 10.3 Refactor config loading to use goconfig
+    - Replace direct environment variable reading with goconfig
+    - Create config.toml file with all configuration sections
+    - Update initialization to use goconfig.LoadConfig() and goconfig.Default()
+    - Use ConfigAccessor methods (ConfigString, ConfigInt, etc.)
+    - Remove internal/config package in favor of goconfig
+    - Update all services to accept ConfigAccessor parameter
+    - _Requirements: 7.1, 19.1, 19.3_
+  
+  - [x] 10.4 Refactor logging to use golog
+    - Replace custom logging with golog structured logging
+    - Initialize logger with golog.InitLog()
+    - Create module loggers using logger.WithGroup() for different components
+    - Update all log calls to use structured logging (key-value pairs)
+    - Use appropriate log levels (Debug, Info, Warn, Error)
+    - Configure log files in golog.LogConfig
+    - _Requirements: 10.1, 10.2, 10.3, 10.4, 10.5_
+  
+  - [x] 10.5 Replace utility functions with gohelper
+    - Replace UUID generation with gohelper.GenUUID()
+    - Replace email validation with gohelper.IsEmail()
+    - Replace time conversion functions with gohelper time utilities
+    - Replace array Contains checks with gohelper.Contains()
+    - Remove duplicate utility code
+    - _Requirements: 12.1, 12.2, 12.3, 12.4_
+  
+  - [x] 10.6 Refactor notification service to use gomail and gosms
+    - Initialize gomail with gomail.GetSendMailObj()
+    - Configure mail engines in config.toml under [mail.engines]
+    - Initialize gosms with gosms.NewTwilioEngine()
+    - Update SendHelpRequestAlert to use gomail.SendMail()
+    - Update SendCriticalError to use gomail.SendWithRetry()
+    - Update SMS sending to use gosms.Send()
+    - Enable email logging by passing Mongo to gomail
+    - _Requirements: 11.1, 11.3, 11.4, 11.5, 16.3, 16.4_
+  
+  - [x]* 10.7 Update tests for refactored code
+    - Update storage tests to work with gomongo
+    - Update upload tests to work with goupload
+    - Update config tests to work with goconfig
+    - Update logging tests to work with golog
+    - Update notification tests to work with gomail/gosms
+    - Ensure all property tests still pass
+    - _Requirements: All_
+
+- [x] 11. Implement file upload service (goupload)
+  - [x] 11.1 Create UploadService wrapper
     - Initialize S3 client using goupload
     - Implement UploadFile method
     - Implement GenerateSignedURL method
     - Implement DeleteFile method
     - _Requirements: 5.1, 5.3_
   
-  - [~] 10.2 Implement file validation
+  - [x] 11.2 Implement file validation
     - Validate file size limits
     - Validate file types (whitelist)
     - Implement malicious file scanning
     - _Requirements: 5.4, 13.5_
   
-  - [~] 10.3 Integrate file uploads with message flow
+  - [x] 11.3 Integrate file uploads with message flow
     - Handle file upload messages
     - Send file upload completion messages
     - Handle file upload errors
     - Handle AI-generated files from LLM
     - _Requirements: 5.2, 5.5, 5.6_
   
-  - [~] 10.4 Write property tests for file upload
+  - [x] 11.4 Write property tests for file upload
     - **Property 19: File Upload and Identifier Generation**
     - **Property 20: File Upload Notification**
     - **Property 21: Signed URL Generation**
@@ -217,29 +283,29 @@ This implementation plan breaks down the chat application into discrete coding t
     - **Property 45: Malicious File Detection**
     - **Validates: Requirements 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 13.5**
 
-- [ ] 11. Implement voice message support
-  - [~] 11.1 Handle voice message uploads
+- [ ] 12. Implement voice message support
+  - [ ] 12.1 Handle voice message uploads
     - Process voice message upload via UploadService
     - Forward audio file reference to LLM for transcription
     - _Requirements: 6.3_
   
-  - [~] 11.2 Handle voice responses from LLM
+  - [ ] 12.2 Handle voice responses from LLM
     - Include audio file URL in response messages
     - _Requirements: 6.5_
   
-  - [~] 11.3 Write property tests for voice messages
+  - [ ] 12.3 Write property tests for voice messages
     - **Property 25: Voice Message Routing**
     - **Property 26: Voice Response Formatting**
     - **Validates: Requirements 6.3, 6.5**
 
 - [ ] 12. Implement admin features
-  - [~] 12.1 Implement help request handling
+  - [ ] 12.1 Implement help request handling
     - Handle help request messages from users
     - Mark session as requiring assistance
     - Persist help request state
     - _Requirements: 16.2, 16.5_
   
-  - [~] 12.2 Implement admin session takeover
+  - [ ] 12.2 Implement admin session takeover
     - Create HandleAdminTakeover method
     - Establish admin connection to user session
     - Implement bidirectional message routing
@@ -248,7 +314,7 @@ This implementation plan breaks down the chat application into discrete coding t
     - Log takeover events
     - _Requirements: 17.3, 17.4, 17.6, 17.7, 17.8_
   
-  - [~] 12.3 Implement admin monitoring endpoints
+  - [ ] 12.3 Implement admin monitoring endpoints
     - Create HTTP endpoints for admin UI
     - Implement session list with filtering and sorting
     - Implement session metrics calculation
@@ -256,7 +322,7 @@ This implementation plan breaks down the chat application into discrete coding t
     - Verify admin role from JWT before serving data
     - _Requirements: 18.1, 18.2, 18.8_
   
-  - [~] 12.4 Write property tests for admin features
+  - [ ] 12.4 Write property tests for admin features
     - **Property 51: Help Request State Update**
     - **Property 53: Admin Takeover Connection**
     - **Property 54: Bidirectional Message Routing During Takeover**
@@ -268,21 +334,21 @@ This implementation plan breaks down the chat application into discrete coding t
     - **Validates: Requirements 16.2, 16.5, 17.3, 17.4, 17.6, 17.7, 17.8, 18.2, 18.8**
 
 - [ ] 13. Implement notification service (gomail, gosms)
-  - [~] 13.1 Create NotificationService wrapper
+  - [ ] 13.1 Create NotificationService wrapper
     - Initialize email client using gomail
     - Initialize SMS client using gosms
     - Load notification configuration
     - Implement rate limiting for notifications
     - _Requirements: 11.4_
   
-  - [~] 13.2 Implement notification methods
+  - [ ] 13.2 Implement notification methods
     - Implement SendHelpRequestAlert
     - Implement SendCriticalError
     - Implement SendSystemAlert
     - Include required information in notifications (user ID, session ID, error details, timestamp)
     - _Requirements: 11.1, 11.3, 11.5, 16.3, 16.4_
   
-  - [~] 13.3 Write property tests for notifications
+  - [ ] 13.3 Write property tests for notifications
     - **Property 38: Critical Error Notification**
     - **Property 39: Notification Type Support**
     - **Property 40: Notification Rate Limiting**
@@ -290,62 +356,62 @@ This implementation plan breaks down the chat application into discrete coding t
     - **Property 52: Help Request Notification**
     - **Validates: Requirements 11.1, 11.3, 11.4, 11.5, 16.3, 16.4**
 
-- [~] 14. Checkpoint - Ensure all tests pass
+- [ ] 14. Checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 15. Implement logging service (golog)
-  - [~] 15.1 Create LogService wrapper
+  - [ ] 15.1 Create LogService wrapper
     - Initialize golog logger
     - Configure log levels and output destinations
     - _Requirements: 10.1, 10.2, 10.5_
   
-  - [~] 15.2 Integrate logging throughout application
+  - [ ] 15.2 Integrate logging throughout application
     - Log all significant events (connections, disconnections, messages, errors, LLM interactions)
     - Include structured fields in all logs
     - Log errors with full context
     - _Requirements: 9.4, 10.3, 10.4_
   
-  - [~] 15.3 Write property tests for logging
+  - [ ] 15.3 Write property tests for logging
     - **Property 35: Error Logging Completeness**
     - **Property 36: Structured Log Field Inclusion**
     - **Property 37: Significant Event Logging**
     - **Validates: Requirements 9.4, 10.3, 10.4**
 
 - [ ] 16. Implement error handling
-  - [~] 16.1 Create error types and error response formatting
+  - [ ] 16.1 Create error types and error response formatting
     - Define error categories (auth, validation, service, rate limit)
     - Create ErrorInfo struct
     - Implement error message generation with type and recoverability
     - _Requirements: 9.1, 9.2_
   
-  - [~] 16.2 Implement error handling throughout application
+  - [ ] 16.2 Implement error handling throughout application
     - Handle fatal errors with connection closure
     - Handle recoverable errors with error messages
     - _Requirements: 9.3_
   
-  - [~] 16.3 Write property tests for error handling
+  - [ ] 16.3 Write property tests for error handling
     - **Property 33: Error Message Generation**
     - **Property 34: Fatal Error Connection Closure**
     - **Validates: Requirements 9.1, 9.2, 9.3**
 
 - [ ] 17. Implement rate limiting and security
-  - [~] 17.1 Implement rate limiting
+  - [ ] 17.1 Implement rate limiting
     - Create rate limiter for connections
     - Create rate limiter for messages
     - Implement rate limit error responses
     - _Requirements: 13.3_
   
-  - [~] 17.2 Implement security measures
+  - [ ] 17.2 Implement security measures
     - Ensure WSS protocol usage
     - Implement input sanitization (already in message validation)
     - _Requirements: 13.1_
   
-  - [~] 17.3 Write property tests for rate limiting
+  - [ ] 17.3 Write property tests for rate limiting
     - **Property 43: Rate Limiting Enforcement**
     - **Validates: Requirements 13.3**
 
 - [ ] 18. Implement Kubernetes deployment configuration
-  - [~] 18.1 Create Kubernetes manifests
+  - [ ] 18.1 Create Kubernetes manifests
     - Create Deployment manifest with health check endpoints
     - Create Service manifest with session affinity
     - Create ConfigMap for configuration
@@ -353,19 +419,19 @@ This implementation plan breaks down the chat application into discrete coding t
     - Support both K8s and K3s
     - _Requirements: 19.1, 19.2, 19.5, 19.7_
   
-  - [~] 18.2 Implement health check endpoints
+  - [ ] 18.2 Implement health check endpoints
     - Implement /healthz for liveness probe
     - Implement /readyz for readiness probe
     - _Requirements: 19.4_
   
-  - [~] 18.3 Implement graceful shutdown
+  - [ ] 18.3 Implement graceful shutdown
     - Handle SIGTERM signal
     - Close connections gracefully
     - Flush logs and metrics
     - _Requirements: 19.6_
 
 - [ ] 19. Implement frontend HTML/JavaScript chat client
-  - [~] 19.1 Create HTML structure
+  - [ ] 19.1 Create HTML structure
     - Create chat interface with message list and input field
     - Create file upload button
     - Create voice recording button
@@ -374,64 +440,64 @@ This implementation plan breaks down the chat application into discrete coding t
     - Create loading animation
     - _Requirements: 14.1, 14.3, 14.4, 14.5_
   
-  - [~] 19.2 Implement WebSocket client
+  - [ ] 19.2 Implement WebSocket client
     - Implement WebSocket connection with JWT token
     - Implement message sending and receiving
     - Implement reconnection logic with exponential backoff
     - Implement heartbeat ping/pong
     - _Requirements: 1.1, 2.1, 2.3_
   
-  - [~] 19.3 Implement message rendering
+  - [ ] 19.3 Implement message rendering
     - Render messages in chronological order
     - Distinguish user vs AI messages visually
     - Display timestamps
     - Display admin name when admin joins
     - _Requirements: 14.2, 14.3_
   
-  - [~] 19.4 Implement file upload UI
+  - [ ] 19.4 Implement file upload UI
     - Handle file selection
     - Handle camera access (mobile)
     - Handle photo library access (mobile)
     - Display upload progress
     - _Requirements: 14.4_
   
-  - [~] 19.5 Implement voice message UI
+  - [ ] 19.5 Implement voice message UI
     - Implement audio recording
     - Display recording indicators
     - Implement audio playback controls
     - _Requirements: 6.1, 6.6, 6.7_
   
-  - [~] 19.6 Implement model selection UI
+  - [ ] 19.6 Implement model selection UI
     - Display model selector when multiple models configured
     - Send model selection message to server
     - _Requirements: 7.6, 7.7_
   
-  - [~] 19.7 Implement loading animation
+  - [ ] 19.7 Implement loading animation
     - Show loading indicator when message is being processed
     - Hide when response received
     - _Requirements: 3.6_
 
 - [ ] 20. Implement session list page
-  - [~] 20.1 Create session list HTML structure
+  - [ ] 20.1 Create session list HTML structure
     - Display list of user sessions
     - Show session metadata (name, timestamp, message count, admin flag)
     - Implement navigation between session list and chat
     - _Requirements: 15.1, 15.2, 15.6, 15.7_
   
-  - [~] 20.2 Implement session list functionality
+  - [ ] 20.2 Implement session list functionality
     - Fetch user sessions from server
     - Handle session selection and loading
     - Display admin-assisted flag
     - _Requirements: 15.3_
 
 - [ ] 21. Implement admin UI
-  - [~] 21.1 Create admin UI HTML structure
+  - [ ] 21.1 Create admin UI HTML structure
     - Display active sessions list
     - Display session metrics
     - Implement filtering and sorting controls
     - _Requirements: 18.1, 18.4, 18.5_
   
-  - [~] 21.2 Implement admin UI functionality
+  - [ ] 21.2 Implement admin UI functionality
     - Fetch session list and metrics
     - Implement filtering by user ID, date range, status, admin flag
     - Implement sorting by connection time, duration, user ID, last activity
@@ -439,17 +505,17 @@ This implementation plan breaks down the chat application into discrete coding t
     - Auto-refresh data
     - _Requirements: 18.4, 18.5, 18.7, 18.9, 18.11, 18.12_
   
-  - [~] 21.3 Implement admin takeover UI
+  - [ ] 21.3 Implement admin takeover UI
     - Display user session list when clicking user
     - Implement session takeover button
     - Display admin name in user's chat when joined
     - _Requirements: 17.1, 17.2_
 
-- [~] 22. Checkpoint - Ensure all tests pass
+- [ ] 22. Checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 23. Integration testing
-  - [~] 23.1 Write end-to-end integration tests
+  - [ ] 23.1 Write end-to-end integration tests
     - Test complete message flow: connect → send → LLM → receive
     - Test file upload flow
     - Test voice message flow
@@ -458,21 +524,37 @@ This implementation plan breaks down the chat application into discrete coding t
     - Test multi-model selection flow
     - _Requirements: All_
 
-- [ ] 24. Wire everything together
-  - [~] 24.1 Create main server entry point
-    - Initialize all services (config, storage, upload, LLM, notification, log)
-    - Initialize session manager and message router
-    - Start WebSocket server
-    - Start HTTP server for admin UI
+- [x] 24. Wire everything together with gomain
+  - [x] 24.1 Create chatbox service Register function
+    - Implement Register(r *gin.Engine, config *goconfig.ConfigAccessor, logger *golog.Logger, mongo *gomongo.Mongo) error
+    - Initialize all services (storage, upload, LLM, notification, session manager, message router)
+    - Register WebSocket endpoint at /chat/ws
+    - Register admin HTTP endpoints at /chat/admin/*
+    - Register health check endpoints at /chat/healthz and /chat/readyz
     - _Requirements: All_
   
-  - [~] 24.2 Create deployment scripts
-    - Create Docker build script
-    - Create Kubernetes deployment script
-    - Create environment configuration examples
-    - _Requirements: 19.1_
+  - [x] 24.2 Create chatbox configuration section
+    - Add [chatbox] section to config.toml
+    - Configure JWT secret, timeouts, connection limits
+    - Configure WebSocket parameters
+    - Configure LLM providers
+    - _Requirements: 7.1, 19.1, 19.3_
+  
+  - [x] 24.3 Integrate with gomain service registry
+    - Add chatbox to gomain's services.imports.txt
+    - Update gomain's go.mod with chatbox dependency
+    - Test service registration and initialization
+    - Verify graceful shutdown handling
+    - _Requirements: All_
+  
+  - [x] 24.4 Create deployment configuration
+    - Create Dockerfile for containerization
+    - Create Kubernetes manifests (Deployment, Service, ConfigMap, Secret)
+    - Configure session affinity for WebSocket connections
+    - Set up health check probes
+    - _Requirements: 19.1, 19.2, 19.4, 19.5, 19.7_
 
-- [~] 25. Final checkpoint - Ensure all tests pass
+- [x] 25. Final checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 ## Notes

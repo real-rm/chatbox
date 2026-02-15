@@ -4,14 +4,54 @@
 
 This design document describes the architecture and implementation approach for a real-time HTML chat application with a Golang WebSocket backend. The system is embedded within existing React Native mobile and web applications, providing AI-powered conversations with support for file uploads, voice messages, session management, and administrative oversight.
 
-The backend leverages existing API packages (gomongo, goupload, goconfig, golog, gohelper, gomail, gosms) and integrates with LLM backends (OpenAI, Anthropic, Dify) for AI responses. The frontend is a lightweight HTML/JavaScript interface that runs in webviews and iframes, communicating via WebSocket protocol.
+The backend leverages company base libraries from github.com/real-rm/* for core functionality:
+- **gomain**: Service aggregator and main server entry point with Gin router
+- **gomongo**: MongoDB operations with connection pooling, transactions, and logging
+- **goupload**: S3 file upload service with validation, signed URLs, and chunked uploads
+- **goconfig**: Configuration management from TOML files and environment variables
+- **golog**: Structured logging with multiple levels and outputs
+- **gohelper**: Common utility functions (UUID generation, email validation, time conversion)
+- **gomail**: Email service with multiple engines (SES, SMTP, Mock)
+- **gosms**: SMS service with Twilio support
+
+The backend integrates with LLM backends (OpenAI, Anthropic, Dify) for AI responses. The frontend is a lightweight HTML/JavaScript interface that runs in webviews and iframes, communicating via WebSocket protocol.
+
+**Service Registration**: The chatbox service implements a `Register(*gin.Engine, *goconfig.ConfigAccessor, *golog.Logger, *gomongo.Mongo)` function that registers all HTTP and WebSocket routes with the gomain service aggregator.
 
 Key design principles:
 - Real-time bidirectional communication using WebSocket
 - Stateful session management with reconnection support
+- Service-based architecture using gomain for aggregation
 - Horizontal scalability for Kubernetes deployment
-- Comprehensive logging and monitoring
+- Comprehensive logging and monitoring using company libraries
 - Security-first approach with JWT authentication and input validation
+- Consistent use of company base libraries for maintainability
+
+### Company Repository Access
+
+**Repository Location**: All company base libraries (github.com/real-rm/*) should be cloned to `/Users/fx/work/` as subfolders for local development and reference.
+
+**Access Method**: Use `git` or `gh` commands in the system shell to clone and manage company repositories. The system already has credentials configured.
+
+**Example Commands**:
+```bash
+# Clone a company repository
+cd /Users/fx/work/
+git clone https://github.com/real-rm/gomongo.git
+
+# Or using gh CLI
+gh repo clone real-rm/gomongo
+```
+
+**Available Repositories**:
+- `/Users/fx/work/gomain` - Service aggregator and main server
+- `/Users/fx/work/gomongo` - MongoDB wrapper library
+- `/Users/fx/work/goupload` - File upload service library
+- `/Users/fx/work/goconfig` - Configuration management library
+- `/Users/fx/work/golog` - Structured logging library
+- `/Users/fx/work/gohelper` - Common utility functions library
+- `/Users/fx/work/gomail` - Email service library
+- `/Users/fx/work/gosms` - SMS service library
 
 ## Architecture
 
@@ -29,20 +69,23 @@ graph TB
         D[nginx]
     end
     
-    subgraph "WebSocket Server Layer"
-        E[WebSocket Handler]
-        F[Session Manager]
-        G[Message Router]
-        H[Auth Middleware]
+    subgraph "gomain Service Aggregator"
+        E[Gin Router]
+        F[Service Registry]
+    end
+    
+    subgraph "Chatbox Service"
+        G[WebSocket Handler]
+        H[Session Manager]
+        I[Message Router]
+        J[Auth Middleware]
     end
     
     subgraph "Service Layer"
-        I[LLM Service]
-        J[Storage Service]
-        K[Upload Service]
-        L[Notification Service]
-        M[Config Service]
-        N[Log Service]
+        K[LLM Service]
+        L[Storage Service]
+        M[Upload Service]
+        N[Notification Service]
     end
     
     subgraph "External Services"
@@ -55,14 +98,16 @@ graph TB
     A --> D
     B --> D
     C --> D
-    D --> H
-    H --> E
+    D --> E
     E --> F
-    E --> G
     F --> J
+    J --> G
+    G --> H
     G --> I
-    G --> K
-    G --> L
+    H --> L
+    I --> K
+    I --> M
+    I --> N
     I --> O
     J --> P
     K --> Q
@@ -73,34 +118,163 @@ graph TB
 
 ### Component Responsibilities
 
-1. **WebSocket Handler**: Manages WebSocket connections, message parsing, and protocol validation
-2. **Session Manager**: Tracks active sessions, handles reconnection, and manages session state
-3. **Message Router**: Routes messages between clients, LLM backends, and admin users
-4. **Auth Middleware**: Validates JWT tokens and enforces authorization
-5. **LLM Service**: Interfaces with AI backends, handles streaming responses, and tracks token usage
-6. **Storage Service**: Persists sessions and messages to MongoDB
-7. **Upload Service**: Manages file uploads to S3 and generates signed URLs
-8. **Notification Service**: Sends email/SMS alerts to administrators
-9. **Config Service**: Loads and manages configuration from Kubernetes ConfigMaps/Secrets
-10. **Log Service**: Provides structured logging across all components
+1. **gomain Service Aggregator**: Main server entry point that manages service lifecycle, configuration, logging, and MongoDB initialization
+2. **Chatbox Service Register Function**: Registers all HTTP and WebSocket routes with the Gin router
+3. **WebSocket Handler**: Manages WebSocket connections, message parsing, and protocol validation
+4. **Session Manager**: Tracks active sessions, handles reconnection, and manages session state
+5. **Message Router**: Routes messages between clients, LLM backends, and admin users
+6. **Auth Middleware**: Validates JWT tokens and enforces authorization
+7. **LLM Service**: Interfaces with AI backends, handles streaming responses, and tracks token usage
+8. **Storage Service**: Persists sessions and messages to MongoDB
+9. **Upload Service**: Manages file uploads to S3 and generates signed URLs
+10. **Notification Service**: Sends email/SMS alerts to administrators
+
+## gomain Integration
+
+### Service Registration
+
+The chatbox service integrates with gomain by implementing a `Register` function that follows the gomain service interface:
+
+```go
+package chatbox
+
+import (
+    "github.com/gin-gonic/gin"
+    "github.com/real-rm/goconfig"
+    "github.com/real-rm/golog"
+    "github.com/real-rm/gomongo"
+)
+
+// Register registers the chatbox service with the gomain router
+// This function is called by gomain during service initialization
+func Register(r *gin.Engine, config *goconfig.ConfigAccessor, logger *golog.Logger, mongo *gomongo.Mongo) error {
+    // Initialize chatbox services
+    chatboxLogger := logger.WithGroup("chatbox")
+    
+    // Create service instances
+    storageService := storage.NewStorageService(mongo, "chat", "sessions", chatboxLogger, nil)
+    sessionManager := session.NewSessionManager(15*time.Minute, chatboxLogger)
+    llmService := llm.NewLLMService(config, chatboxLogger)
+    uploadService := upload.NewUploadService("CHAT", "uploads", mongo.Coll("chat", "file_stats"))
+    notificationService := notification.NewNotificationService(config, chatboxLogger, mongo)
+    
+    // Create message router
+    messageRouter := router.NewMessageRouter(sessionManager, llmService, uploadService, notificationService, chatboxLogger)
+    
+    // Create WebSocket handler
+    jwtSecret, err := config.ConfigString("chatbox.jwt_secret")
+    if err != nil {
+        return fmt.Errorf("failed to get JWT secret: %w", err)
+    }
+    
+    validator := auth.NewJWTValidator(jwtSecret)
+    wsHandler := websocket.NewHandler(validator, chatboxLogger)
+    
+    // Register routes
+    chatGroup := r.Group("/chat")
+    {
+        // WebSocket endpoint
+        chatGroup.GET("/ws", wsHandler.HandleWebSocket)
+        
+        // Admin HTTP endpoints
+        adminGroup := chatGroup.Group("/admin")
+        adminGroup.Use(authMiddleware(validator))
+        {
+            adminGroup.GET("/sessions", handleListSessions(storageService))
+            adminGroup.GET("/metrics", handleGetMetrics(storageService))
+            adminGroup.POST("/takeover/:sessionID", handleAdminTakeover(messageRouter))
+        }
+        
+        // Health check endpoints
+        chatGroup.GET("/healthz", handleHealthCheck)
+        chatGroup.GET("/readyz", handleReadyCheck(mongo))
+    }
+    
+    chatboxLogger.Info("Chatbox service registered successfully")
+    return nil
+}
+```
+
+### Configuration
+
+The chatbox service configuration is added to the main `config.toml` file:
+
+```toml
+[app]
+port = 8080
+shutdown_timeout_s = 5
+
+[chatbox]
+jwt_secret = "your-jwt-secret-key"
+reconnect_timeout = "15m"
+max_connections = 10000
+rate_limit = 100
+
+[chatbox.websocket]
+read_buffer_size = 1024
+write_buffer_size = 1024
+pong_wait = "60s"
+ping_period = "54s"
+write_wait = "10s"
+
+# LLM Providers
+[[chatbox.llm.providers]]
+id = "openai-gpt4"
+name = "GPT-4"
+type = "openai"
+endpoint = "https://api.openai.com/v1"
+apiKey = "sk-..."
+model = "gpt-4"
+
+[[chatbox.llm.providers]]
+id = "anthropic-claude"
+name = "Claude"
+type = "anthropic"
+endpoint = "https://api.anthropic.com/v1"
+apiKey = "sk-ant-..."
+model = "claude-3-opus"
+```
+
+### Service Lifecycle
+
+1. **Initialization**: gomain loads configuration, initializes logger and MongoDB
+2. **Registration**: gomain calls `chatbox.Register()` with shared resources
+3. **Runtime**: Chatbox service handles WebSocket connections and HTTP requests
+4. **Shutdown**: gomain handles graceful shutdown, closing all connections
+
+### Benefits of gomain Integration
+
+- **Shared Resources**: Logger, config, and MongoDB are initialized once and shared
+- **Unified Configuration**: All services use the same config.toml file
+- **Graceful Shutdown**: gomain handles SIGTERM/SIGINT signals for all services
+- **Service Discovery**: Services can be enabled/disabled via ENABLE_SERVICES environment variable
+- **Consistent Logging**: All services use the same structured logging format
+- **Health Checks**: Centralized health check endpoints for Kubernetes probes
 
 ## Components and Interfaces
 
-### WebSocket Server
+### Chatbox Service Entry Point
 
-**Package**: `main`
+**Package**: `chatbox`
+
+**Core Function**:
+```go
+// Register is the main entry point for the chatbox service
+// It is called by gomain during service initialization
+func Register(r *gin.Engine, config *goconfig.ConfigAccessor, logger *golog.Logger, mongo *gomongo.Mongo) error
+```
+
+### WebSocket Handler
+
+**Package**: `internal/websocket`
 
 **Core Types**:
 ```go
-type Server struct {
-    config         *Config
-    sessionManager *SessionManager
-    messageRouter  *MessageRouter
-    llmService     *LLMService
-    storageService *StorageService
-    uploadService  *UploadService
-    notifyService  *NotificationService
-    logger         *Logger
+type Handler struct {
+    validator *auth.JWTValidator
+    logger    *golog.Logger
+    connections map[string]*Connection
+    mu        sync.RWMutex
 }
 
 type Connection struct {
@@ -114,16 +288,14 @@ type Connection struct {
 ```
 
 **Key Methods**:
-- `Start()`: Initializes server and starts listening
-- `HandleWebSocket(w http.ResponseWriter, r *http.Request)`: Upgrades HTTP to WebSocket
+- `HandleWebSocket(c *gin.Context)`: Gin handler that upgrades HTTP to WebSocket
 - `authenticateConnection(token string) (*Claims, error)`: Validates JWT token
 - `readPump(conn *Connection)`: Reads messages from client
 - `writePump(conn *Connection)`: Writes messages to client
-- `handleMessage(conn *Connection, msg *Message) error`: Routes incoming messages
 
 ### Session Manager
 
-**Package**: `session`
+**Package**: `internal/session`
 
 **Core Types**:
 ```go
@@ -132,8 +304,7 @@ type SessionManager struct {
     userSessions      map[string]string  // userID -> active sessionID
     mu                sync.RWMutex
     reconnectTimeout  time.Duration
-    storageService    *StorageService
-    logger            *Logger
+    logger            *golog.Logger
 }
 
 type Session struct {
@@ -275,13 +446,29 @@ type LLMChunk struct {
 
 **Package**: `storage`
 
+**Implementation**: Uses `github.com/real-rm/gomongo` for MongoDB operations
+
+**Initialization**:
+```go
+// Initialize gomongo with logger and config
+mongoClient, err := gomongo.InitMongoDB(logger, configAccessor)
+if err != nil {
+    log.Fatal(err)
+}
+
+// Get collection for sessions
+sessionsCollection := mongoClient.Coll("chat", "sessions")
+
+// Create storage service wrapper
+storageService := storage.NewStorageService(mongoClient, sessionsCollection, logger)
+```
+
 **Core Types**:
 ```go
 type StorageService struct {
-    client     *mongo.Client
-    database   *mongo.Database
-    collection *mongo.Collection
-    logger     *Logger
+    mongo      *gomongo.Mongo
+    collection *gomongo.MongoCollection
+    logger     *golog.Logger
 }
 
 type SessionDocument struct {
@@ -312,52 +499,141 @@ type MessageDocument struct {
 ```
 
 **Key Methods**:
-- `CreateSession(session *Session) error`: Creates session document
-- `UpdateSession(session *Session) error`: Updates session document
-- `GetSession(sessionID string) (*Session, error)`: Retrieves session
-- `ListUserSessions(userID string, limit int) ([]*SessionMetadata, error)`: Lists sessions
-- `GetSessionMetrics(startTime, endTime time.Time) (*Metrics, error)`: Aggregates metrics
-- `GetTokenUsage(startTime, endTime time.Time) (int, error)`: Calculates total tokens
+- `CreateSession(session *Session) error`: Creates session document using gomongo
+- `UpdateSession(session *Session) error`: Updates session document using gomongo
+- `GetSession(sessionID string) (*Session, error)`: Retrieves session using gomongo
+- `ListUserSessions(userID string, limit int) ([]*SessionMetadata, error)`: Lists sessions with gomongo query options
+- `GetSessionMetrics(startTime, endTime time.Time) (*Metrics, error)`: Aggregates metrics using gomongo aggregation
+- `GetTokenUsage(startTime, endTime time.Time) (int, error)`: Calculates total tokens using gomongo aggregation
+
+**Benefits of gomongo**:
+- Automatic timestamp management (_ts, _mt fields)
+- Built-in logging and performance monitoring
+- Transaction support for ACID operations
+- Connection pooling and retry logic
+- Consistent error handling
 
 ### Upload Service (goupload)
 
 **Package**: `upload`
 
+**Implementation**: Uses `github.com/real-rm/goupload` for S3 file operations
+
+**Initialization**:
+```go
+// Initialize goupload with logger and config
+if err := goupload.Init(goupload.InitOptions{
+    Logger: logger,
+    Config: configAccessor,
+}); err != nil {
+    log.Fatal(err)
+}
+
+// Create stats updater for file tracking
+mongo, _ := gomongo.InitMongoDB(logger, configAccessor)
+statsColl := mongo.Coll("chat", "file_stats")
+statsUpdater, err := goupload.NewStatsUpdater("CHAT", "uploads", statsColl)
+if err != nil {
+    log.Fatal(err)
+}
+
+// Create upload service wrapper
+uploadService := upload.NewUploadService(statsUpdater, logger)
+```
+
 **Core Types**:
 ```go
 type UploadService struct {
-    s3Client   *s3.Client
-    bucketName string
-    region     string
-    logger     *Logger
+    statsUpdater goupload.StatsUpdater
+    logger       *golog.Logger
 }
 
 type UploadResult struct {
-    FileID  string
-    FileURL string
-    Size    int64
+    FileID   string
+    FileURL  string
+    Size     int64
     MimeType string
 }
 ```
 
 **Key Methods**:
-- `UploadFile(file io.Reader, filename string) (*UploadResult, error)`: Uploads file to S3
-- `GenerateSignedURL(fileID string, expiration time.Duration) (string, error)`: Creates signed URL
-- `ValidateFile(file io.Reader, maxSize int64) error`: Validates file
-- `DeleteFile(fileID string) error`: Deletes file from S3
+- `UploadFile(file io.Reader, filename string) (*UploadResult, error)`: Uploads file using goupload
+- `GenerateSignedURL(fileID string, expiration time.Duration) (string, error)`: Creates signed URL using goupload
+- `ValidateFile(file io.Reader, maxSize int64) error`: Validates file before upload
+- `DeleteFile(fileID string) error`: Deletes file using goupload
+
+**Configuration** (config.toml):
+```toml
+# Connection sources for S3
+[connection_sources]
+  [[connection_sources.s3_providers]]
+    name = "aws-chat-storage"
+    endpoint = "s3.us-east-1.amazonaws.com"
+    key = "YOUR_AWS_ACCESS_KEY"
+    pass = "YOUR_AWS_SECRET_KEY"
+    region = "us-east-1"
+
+# Upload configuration
+[userupload]
+site = "CHAT"
+  [[userupload.types]]
+    entryName = "uploads"
+    prefix = "/chat-files"
+    tmpPath = "./temp/uploads"
+    maxSize = "100MB"
+    storage = [
+      { type = "s3", target = "aws-chat-storage", bucket = "chat-files" }
+    ]
+```
+
+**Benefits of goupload**:
+- Transactional writes with automatic rollback on failure
+- Multi-storage support (local + S3) with failover
+- Chunked upload support for large files
+- File validation and malicious file scanning
+- Automatic path generation with statistics tracking
+- Built-in logging and error handling
 
 ### Notification Service (gomail, gosms)
 
 **Package**: `notification`
 
+**Implementation**: Uses `github.com/real-rm/gomail` and `github.com/real-rm/gosms`
+
+**Initialization**:
+```go
+// Initialize gomail
+mailer, err := gomail.GetSendMailObj(gomail.MailerOptions{
+    Logger: logger,
+    Config: configAccessor,
+    Mongo:  mongoClient, // Optional: for email logging
+})
+if err != nil {
+    log.Fatal(err)
+}
+
+// Initialize gosms
+twilioEngine, err := gosms.NewTwilioEngine(accountSID, authToken)
+if err != nil {
+    log.Fatal(err)
+}
+smsSender, err := gosms.NewSMSSender(twilioEngine)
+if err != nil {
+    log.Fatal(err)
+}
+
+// Create notification service wrapper
+notificationService := notification.NewNotificationService(mailer, smsSender, logger)
+```
+
 **Core Types**:
 ```go
 type NotificationService struct {
-    emailClient *gomail.Client
-    smsClient   *gosms.Client
-    config      *NotificationConfig
+    mailer      *gomail.Mailer
+    smsSender   *gosms.SMSSender
+    logger      *golog.Logger
     rateLimiter *RateLimiter
-    logger      *Logger
+    config      *NotificationConfig
 }
 
 type NotificationConfig struct {
@@ -374,23 +650,85 @@ type NotificationRule struct {
 ```
 
 **Key Methods**:
-- `SendHelpRequestAlert(userID, sessionID string) error`: Notifies admins of help request
+- `SendHelpRequestAlert(userID, sessionID string) error`: Sends alert using gomail/gosms
 - `SendCriticalError(errorType, details string, affectedUsers int) error`: Sends error alert
 - `SendSystemAlert(message string) error`: Sends general system alert
+
+**Configuration** (config.toml):
+```toml
+[mail]
+defaultFromName = "Chat Support"
+replyToEmail = "support@example.com"
+adminEmail = "admin@example.com"
+
+# SES Engine for production
+[[mail.engines.ses]]
+name = "ses-primary"
+accessKeyId = "AKIAXXXXXXXX"
+secretAccessKey = "xxxxxxxx"
+region = "us-east-1"
+from = "noreply@example.com"
+fromName = "Chat System"
+
+# SMTP Engine for backup
+[[mail.engines.smtp]]
+name = "smtp-backup"
+host = "smtp.example.com"
+port = 587
+user = "user@example.com"
+pass = "password"
+from = "noreply@example.com"
+
+# SMS Configuration
+[sms]
+provider = "twilio"
+accountSID = "ACXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+authToken = "your_auth_token"
+fromNumber = "+1234567890"
+```
+
+**Benefits of gomail/gosms**:
+- Multi-engine support with automatic failover
+- Email validation with MX record lookup
+- Template support with parameter replacement
+- Automatic email logging to MongoDB
+- Rate limiting to prevent notification flooding
+- Mock engines for testing
 
 ### Config Service (goconfig)
 
 **Package**: `config`
 
+**Implementation**: Uses `github.com/real-rm/goconfig` for configuration management
+
+**Initialization**:
+```go
+// Load configuration from TOML file
+if err := goconfig.LoadConfig(); err != nil {
+    log.Fatal(err)
+}
+
+// Get config accessor
+configAccessor, err := goconfig.Default()
+if err != nil {
+    log.Fatal(err)
+}
+
+// Access configuration values
+serverPort, err := configAccessor.ConfigInt("server.port")
+jwtSecret, err := configAccessor.ConfigString("server.jwtSecret")
+mongoURI, err := configAccessor.ConfigString("dbs.chat.uri")
+```
+
 **Core Types**:
 ```go
 type Config struct {
-    Server      ServerConfig
-    LLM         LLMConfig
-    Database    DatabaseConfig
-    Storage     StorageConfig
+    Server       ServerConfig
+    LLM          LLMConfig
+    Database     DatabaseConfig
+    Storage      StorageConfig
     Notification NotificationConfig
-    Kubernetes  KubernetesConfig
+    Kubernetes   KubernetesConfig
 }
 
 type ServerConfig struct {
@@ -414,10 +752,189 @@ type LLMProviderConfig struct {
 }
 ```
 
+**Configuration File** (config.toml):
+```toml
+[server]
+port = 8080
+reconnectTimeout = "15m"
+maxConnections = 10000
+rateLimit = 100
+jwtSecret = "your-secret-key"
+
+[dbs]
+verbose = 1
+slowThreshold = 2
+
+[dbs.chat]
+uri = "mongodb://localhost:27017/chat"
+
+# LLM Providers
+[[llm.providers]]
+id = "openai-gpt4"
+name = "GPT-4"
+type = "openai"
+endpoint = "https://api.openai.com/v1"
+apiKey = "sk-..."
+model = "gpt-4"
+
+[[llm.providers]]
+id = "anthropic-claude"
+name = "Claude"
+type = "anthropic"
+endpoint = "https://api.anthropic.com/v1"
+apiKey = "sk-ant-..."
+model = "claude-3-opus"
+
+# Connection sources for S3
+[connection_sources]
+  [[connection_sources.s3_providers]]
+    name = "aws-chat-storage"
+    endpoint = "s3.us-east-1.amazonaws.com"
+    key = "YOUR_AWS_ACCESS_KEY"
+    pass = "YOUR_AWS_SECRET_KEY"
+    region = "us-east-1"
+
+# Upload configuration
+[userupload]
+site = "CHAT"
+  [[userupload.types]]
+    entryName = "uploads"
+    prefix = "/chat-files"
+    tmpPath = "./temp/uploads"
+    maxSize = "100MB"
+    storage = [
+      { type = "s3", target = "aws-chat-storage", bucket = "chat-files" }
+    ]
+
+# Mail configuration
+[mail]
+defaultFromName = "Chat Support"
+replyToEmail = "support@example.com"
+adminEmail = "admin@example.com"
+
+[[mail.engines.ses]]
+name = "ses-primary"
+accessKeyId = "AKIAXXXXXXXX"
+secretAccessKey = "xxxxxxxx"
+region = "us-east-1"
+from = "noreply@example.com"
+```
+
 **Key Methods**:
-- `Load() (*Config, error)`: Loads configuration from environment/ConfigMap
-- `Validate() error`: Validates configuration
-- `GetLLMProviders() []LLMProviderConfig`: Returns LLM configurations
+- `LoadConfig() error`: Loads configuration from file/environment
+- `Default() (*ConfigAccessor, error)`: Gets default config accessor
+- `ConfigString(key string) (string, error)`: Gets string value
+- `ConfigInt(key string) (int, error)`: Gets integer value
+- `ConfigStringWithDefault(key, defaultValue string) (string, error)`: Gets string with default
+
+**Benefits of goconfig**:
+- TOML configuration file support
+- Multiple configuration files with deep merge
+- Environment variable support
+- Command-line flag support
+- Type-safe accessors with default values
+- Dot notation for nested values
+
+### Log Service (golog)
+
+**Package**: `logging`
+
+**Implementation**: Uses `github.com/real-rm/golog` for structured logging
+
+**Initialization**:
+```go
+// Initialize logger with configuration
+logger, err := golog.InitLog(golog.LogConfig{
+    Dir:            "logs",
+    Level:          "info",
+    StandardOutput: true,
+    InfoFile:       "info.log",
+    WarnFile:       "warn.log",
+    ErrorFile:      "error.log",
+})
+if err != nil {
+    log.Fatal(err)
+}
+defer logger.Close()
+
+// Create module loggers for different components
+authLogger := logger.WithGroup("auth")
+wsLogger := logger.WithGroup("websocket")
+llmLogger := logger.WithGroup("llm")
+```
+
+**Usage**:
+```go
+// Structured logging with key-value pairs
+logger.Info("User connected", "user_id", userID, "session_id", sessionID)
+logger.Warn("High memory usage", "usage", "85%", "threshold", "80%")
+logger.Error("Database error", "error", err, "operation", "insert")
+
+// Formatted logging
+logger.Infof("User %s logged in from %s", username, ipAddress)
+logger.Errorf("Failed to process message: %v", err)
+
+// Module-specific logging (automatically adds module field)
+authLogger.Info("JWT token validated", "user_id", userID)
+wsLogger.Debug("Message received", "type", msgType, "size", msgSize)
+```
+
+**Benefits of golog**:
+- Multiple log levels (Debug, Info, Warn, Error, Fatal)
+- Structured logging with automatic JSON formatting
+- Modular logging with WithGroup()
+- Automatic file information for Warn/Error levels
+- Multiple output destinations (file + stdout)
+- Built on Go standard library log/slog
+
+### Helper Service (gohelper)
+
+**Package**: `helpers`
+
+**Implementation**: Uses `github.com/real-rm/gohelper` for common utilities
+
+**UUID Generation**:
+```go
+// Generate session ID
+sessionID, err := gohelper.GenUUID(32)
+if err != nil {
+    return err
+}
+```
+
+**Email Validation**:
+```go
+// Validate email format
+if !gohelper.IsEmail(email) {
+    return errors.New("invalid email format")
+}
+```
+
+**Time Operations**:
+```go
+// Convert time to string
+timeStr := gohelper.TimeToStr(time.Now())
+
+// Convert string to time
+t, err := gohelper.StrToTime("2024-01-15 14:30:45")
+
+// Convert time to date integer (YYYYMMDD)
+dateInt := gohelper.TimeToDateInt(time.Now())
+```
+
+**Array Operations**:
+```go
+// Check if item exists in slice
+roles := []string{"user", "admin", "moderator"}
+isAdmin := gohelper.Contains(roles, "admin")
+```
+
+**Benefits of gohelper**:
+- Secure UUID generation using crypto/rand
+- Email validation with format checking
+- Time formatting and conversion utilities
+- Generic array operations for any comparable type
+- Thread-safe for concurrent use
 
 ## Data Models
 

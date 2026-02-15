@@ -6,12 +6,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"sync"
+	"time"
 
-	"github.com/yourusername/chat-websocket/internal/message"
-	"github.com/yourusername/chat-websocket/internal/session"
-	"github.com/yourusername/chat-websocket/internal/websocket"
+	"github.com/real-rm/golog"
+	"github.com/real-rm/chatbox/internal/message"
+	"github.com/real-rm/chatbox/internal/session"
+	"github.com/real-rm/chatbox/internal/upload"
+	"github.com/real-rm/chatbox/internal/websocket"
 )
 
 var (
@@ -30,20 +32,23 @@ var (
 // MessageRouter routes messages between clients, LLM backends, and admin users
 type MessageRouter struct {
 	// llmService will be implemented later
-	// uploadService will be implemented later
+	uploadService  *upload.UploadService
 	sessionManager *session.SessionManager
 	connections    map[string]*websocket.Connection // sessionID -> Connection
 	adminConns     map[string]*websocket.Connection // adminID -> Connection
 	mu             sync.RWMutex
-	// logger will be implemented later
+	logger         *golog.Logger
 }
 
 // NewMessageRouter creates a new message router
-func NewMessageRouter(sessionManager *session.SessionManager) *MessageRouter {
+func NewMessageRouter(sessionManager *session.SessionManager, uploadService *upload.UploadService, logger *golog.Logger) *MessageRouter {
+	routerLogger := logger.WithGroup("router")
 	return &MessageRouter{
 		sessionManager: sessionManager,
+		uploadService:  uploadService,
 		connections:    make(map[string]*websocket.Connection),
 		adminConns:     make(map[string]*websocket.Connection),
+		logger:         routerLogger,
 	}
 }
 
@@ -119,7 +124,7 @@ func (mr *MessageRouter) HandleUserMessage(conn *websocket.Connection, msg *mess
 
 	// TODO: Forward to LLM service when implemented
 	// For now, just log the message
-	log.Printf("Routing user message from session %s: %s", msg.SessionID, msg.Content)
+	mr.logger.Debug("Routing user message", "session_id", msg.SessionID, "content_length", len(msg.Content))
 
 	// Placeholder: Echo back a simple response
 	response := &message.Message{
@@ -135,7 +140,7 @@ func (mr *MessageRouter) HandleUserMessage(conn *websocket.Connection, msg *mess
 // handleHelpRequest processes help request messages
 func (mr *MessageRouter) handleHelpRequest(conn *websocket.Connection, msg *message.Message) error {
 	// TODO: Implement help request handling
-	log.Printf("Help request from session %s", msg.SessionID)
+	mr.logger.Info("Help request received", "session_id", msg.SessionID)
 	return nil
 }
 
@@ -169,7 +174,7 @@ func (mr *MessageRouter) handleModelSelection(conn *websocket.Connection, msg *m
 		return fmt.Errorf("failed to set model ID: %w", err)
 	}
 
-	log.Printf("Model selection for session %s: %s", msg.SessionID, msg.ModelID)
+	mr.logger.Info("Model selection", "session_id", msg.SessionID, "model_id", msg.ModelID)
 
 	// Send confirmation message back to client
 	response := &message.Message{
@@ -183,16 +188,219 @@ func (mr *MessageRouter) handleModelSelection(conn *websocket.Connection, msg *m
 }
 
 // handleFileUpload processes file upload messages
+// This handles file upload completion notifications from the client
 func (mr *MessageRouter) handleFileUpload(conn *websocket.Connection, msg *message.Message) error {
-	// TODO: Implement file upload handling
-	log.Printf("File upload for session %s: %s", msg.SessionID, msg.FileID)
+	if conn == nil {
+		return ErrNilConnection
+	}
+	if msg == nil {
+		return ErrNilMessage
+	}
+
+	// Validate session ID
+	if msg.SessionID == "" {
+		return fmt.Errorf("%w: session ID is required", ErrInvalidMessage)
+	}
+
+	// Validate file information
+	if msg.FileID == "" {
+		return fmt.Errorf("%w: file ID is required", ErrInvalidMessage)
+	}
+
+	// Verify session exists
+	sess, err := mr.sessionManager.GetSession(msg.SessionID)
+	if err != nil {
+		return fmt.Errorf("%w: %v", ErrSessionNotFound, err)
+	}
+
+	mr.logger.Info("File upload completed", 
+		"session_id", msg.SessionID, 
+		"file_id", msg.FileID,
+		"file_url", msg.FileURL,
+		"user_id", sess.UserID)
+
+	// Convert message.Message to session.Message for storage
+	sessionMsg := &session.Message{
+		Content:   msg.Content,
+		Timestamp: time.Now(),
+		Sender:    string(msg.Sender),
+		FileID:    msg.FileID,
+		FileURL:   msg.FileURL,
+		Metadata:  msg.Metadata,
+	}
+
+	// Store file upload message in session
+	if err := mr.sessionManager.AddMessage(msg.SessionID, sessionMsg); err != nil {
+		mr.logger.Error("Failed to store file upload message", "error", err, "session_id", msg.SessionID)
+		return fmt.Errorf("failed to store message: %w", err)
+	}
+
+	// Broadcast file upload notification to all session participants
+	notification := &message.Message{
+		Type:      message.TypeFileUpload,
+		SessionID: msg.SessionID,
+		Content:   msg.Content, // Optional description
+		FileID:    msg.FileID,
+		FileURL:   msg.FileURL,
+		Sender:    message.SenderUser,
+		Metadata:  msg.Metadata,
+		Timestamp: time.Now(),
+	}
+
+	if err := mr.BroadcastToSession(msg.SessionID, notification); err != nil {
+		mr.logger.Warn("Failed to broadcast file upload", "error", err, "session_id", msg.SessionID)
+	}
+
 	return nil
 }
 
 // handleVoiceMessage processes voice message uploads
 func (mr *MessageRouter) handleVoiceMessage(conn *websocket.Connection, msg *message.Message) error {
-	// TODO: Implement voice message handling
-	log.Printf("Voice message for session %s: %s", msg.SessionID, msg.FileID)
+	if conn == nil {
+		return ErrNilConnection
+	}
+	if msg == nil {
+		return ErrNilMessage
+	}
+
+	// Validate session ID
+	if msg.SessionID == "" {
+		return fmt.Errorf("%w: session ID is required", ErrInvalidMessage)
+	}
+
+	// Validate file information
+	if msg.FileID == "" {
+		return fmt.Errorf("%w: file ID is required", ErrInvalidMessage)
+	}
+
+	// Verify session exists
+	sess, err := mr.sessionManager.GetSession(msg.SessionID)
+	if err != nil {
+		return fmt.Errorf("%w: %v", ErrSessionNotFound, err)
+	}
+
+	mr.logger.Info("Voice message uploaded", 
+		"session_id", msg.SessionID, 
+		"file_id", msg.FileID,
+		"file_url", msg.FileURL,
+		"user_id", sess.UserID)
+
+	// Convert message.Message to session.Message for storage
+	sessionMsg := &session.Message{
+		Content:   msg.Content,
+		Timestamp: time.Now(),
+		Sender:    string(msg.Sender),
+		FileID:    msg.FileID,
+		FileURL:   msg.FileURL,
+		Metadata:  msg.Metadata,
+	}
+
+	// Store voice message in session
+	if err := mr.sessionManager.AddMessage(msg.SessionID, sessionMsg); err != nil {
+		mr.logger.Error("Failed to store voice message", "error", err, "session_id", msg.SessionID)
+		return fmt.Errorf("failed to store message: %w", err)
+	}
+
+	// TODO: Forward audio file to LLM for transcription when LLM service is implemented
+	// For now, just broadcast the voice message notification
+
+	// Broadcast voice message notification to all session participants
+	notification := &message.Message{
+		Type:      message.TypeVoiceMessage,
+		SessionID: msg.SessionID,
+		Content:   msg.Content, // Optional transcription
+		FileID:    msg.FileID,
+		FileURL:   msg.FileURL,
+		Sender:    message.SenderUser,
+		Metadata:  msg.Metadata,
+		Timestamp: time.Now(),
+	}
+
+	if err := mr.BroadcastToSession(msg.SessionID, notification); err != nil {
+		mr.logger.Warn("Failed to broadcast voice message", "error", err, "session_id", msg.SessionID)
+	}
+
+	return nil
+}
+
+// SendFileUploadError sends a file upload error message to the client
+func (mr *MessageRouter) SendFileUploadError(sessionID string, errorCode string, errorMsg string) error {
+	if sessionID == "" {
+		return ErrInvalidMessage
+	}
+
+	errorMessage := &message.Message{
+		Type:      message.TypeError,
+		SessionID: sessionID,
+		Sender:    message.SenderAI,
+		Error: &message.ErrorInfo{
+			Code:        errorCode,
+			Message:     errorMsg,
+			Recoverable: true,
+		},
+	}
+
+	mr.logger.Warn("File upload error", 
+		"session_id", sessionID, 
+		"error_code", errorCode,
+		"error_message", errorMsg)
+
+	return mr.sendToConnection(sessionID, errorMessage)
+}
+
+// HandleAIGeneratedFile handles files generated by the LLM backend
+// This is called when the LLM generates a file (image, document, etc.)
+func (mr *MessageRouter) HandleAIGeneratedFile(sessionID string, fileURL string, fileDescription string, metadata map[string]string) error {
+	if sessionID == "" {
+		return ErrInvalidMessage
+	}
+
+	if fileURL == "" {
+		return fmt.Errorf("%w: file URL is required", ErrInvalidMessage)
+	}
+
+	// Verify session exists
+	_, err := mr.sessionManager.GetSession(sessionID)
+	if err != nil {
+		return fmt.Errorf("%w: %v", ErrSessionNotFound, err)
+	}
+
+	mr.logger.Info("AI generated file", 
+		"session_id", sessionID, 
+		"file_url", fileURL,
+		"description", fileDescription)
+
+	// Convert to session.Message for storage
+	sessionMsg := &session.Message{
+		Content:   fileDescription,
+		Timestamp: time.Now(),
+		Sender:    string(message.SenderAI),
+		FileURL:   fileURL,
+		Metadata:  metadata,
+	}
+
+	// Store AI message in session
+	if err := mr.sessionManager.AddMessage(sessionID, sessionMsg); err != nil {
+		mr.logger.Error("Failed to store AI generated file message", "error", err, "session_id", sessionID)
+		return fmt.Errorf("failed to store message: %w", err)
+	}
+
+	// Create AI response message with file
+	aiMessage := &message.Message{
+		Type:      message.TypeAIResponse,
+		SessionID: sessionID,
+		Content:   fileDescription,
+		FileURL:   fileURL,
+		Sender:    message.SenderAI,
+		Metadata:  metadata,
+		Timestamp: time.Now(),
+	}
+
+	// Broadcast to all session participants
+	if err := mr.BroadcastToSession(sessionID, aiMessage); err != nil {
+		mr.logger.Warn("Failed to broadcast AI generated file", "error", err, "session_id", sessionID)
+	}
+
 	return nil
 }
 
@@ -239,7 +447,7 @@ func (mr *MessageRouter) BroadcastToSession(sessionID string, msg *message.Messa
 
 	// Send to user connection
 	if err := mr.sendToConnection(sessionID, msg); err != nil {
-		log.Printf("Failed to send to user connection: %v", err)
+		mr.logger.Warn("Failed to send to user connection", "error", err, "session_id", sessionID)
 	}
 
 	// If admin is assisting, send to admin connection too
@@ -257,7 +465,7 @@ func (mr *MessageRouter) BroadcastToSession(sessionID string, msg *message.Messa
 			select {
 			case adminConn.Send() <- data:
 			default:
-				log.Printf("Admin connection send channel is full for admin %s", sess.AssistingAdminID)
+				mr.logger.Warn("Admin connection send channel full", "admin_id", sess.AssistingAdminID)
 			}
 		}
 	}

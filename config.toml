@@ -1,0 +1,134 @@
+# Chat Application Configuration
+
+# Server Configuration
+[server]
+port = 8080
+
+# Chatbox Service Configuration
+[chatbox]
+jwt_secret = "your-secret-key-change-in-production"
+reconnect_timeout = "15m"
+max_connections = 10000
+rate_limit = 100
+
+# WebSocket Configuration
+[chatbox.websocket]
+read_buffer_size = 1024
+write_buffer_size = 1024
+pong_wait = "60s"
+ping_period = "54s"
+write_wait = "10s"
+
+# Database Configuration (for gomongo)
+[dbs]
+verbose = 1
+slowThreshold = 2
+
+[dbs.chat]
+uri = "mongodb://localhost:27017/chat"
+database = "chat"
+collection = "sessions"
+connectTimeout = "10s"
+
+# Connection sources for S3 (for goupload)
+[connection_sources]
+  [[connection_sources.s3_providers]]
+    name = "aws-chat-storage"
+    endpoint = "s3.us-east-1.amazonaws.com"
+    key = "YOUR_AWS_ACCESS_KEY"
+    pass = "YOUR_AWS_SECRET_KEY"
+    region = "us-east-1"
+
+# Upload configuration (for goupload)
+[userupload]
+site = "CHAT"
+  [[userupload.types]]
+    entryName = "uploads"
+    prefix = "/chat-files"
+    tmpPath = "./temp/uploads"
+    maxSize = "100MB"
+    storage = [
+      { type = "s3", target = "aws-chat-storage", bucket = "chat-files" }
+    ]
+
+# LLM Providers Configuration
+[chatbox.llm]
+[[chatbox.llm.providers]]
+id = "openai-gpt4"
+name = "GPT-4"
+type = "openai"
+endpoint = "https://api.openai.com/v1"
+apiKey = "sk-..."
+model = "gpt-4"
+
+[[chatbox.llm.providers]]
+id = "anthropic-claude"
+name = "Claude"
+type = "anthropic"
+endpoint = "https://api.anthropic.com/v1"
+apiKey = "sk-ant-..."
+model = "claude-3-opus"
+
+[[chatbox.llm.providers]]
+id = "dify-assistant"
+name = "Dify Assistant"
+type = "dify"
+endpoint = "https://api.dify.ai/v1"
+apiKey = "dify-..."
+model = "assistant"
+
+# Mail configuration (for gomail)
+[mail]
+defaultFromName = "Chat Support"
+replyToEmail = "support@example.com"
+adminEmail = "admin@example.com"
+
+# SES Engine for production
+[[mail.engines.ses]]
+name = "ses-primary"
+accessKeyId = "AKIAXXXXXXXX"
+secretAccessKey = "xxxxxxxx"
+region = "us-east-1"
+from = "noreply@example.com"
+fromName = "Chat System"
+
+# SMTP Engine for backup
+[[mail.engines.smtp]]
+name = "smtp-backup"
+host = "smtp.example.com"
+port = 587
+user = "user@example.com"
+pass = "password"
+from = "noreply@example.com"
+fromName = "Chat System"
+
+# Mock Engine for testing
+[[mail.engines.mock]]
+name = "mock"
+verbose = true
+
+# SMS Configuration (for gosms)
+[sms]
+provider = "twilio"
+accountSID = "ACXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+authToken = "your_auth_token"
+fromNumber = "+1234567890"
+
+# Notification Configuration
+[notification]
+adminEmails = ["admin@example.com"]
+adminPhones = ["+1234567890"]
+
+# Kubernetes Configuration
+[kubernetes]
+namespace = "default"
+serviceName = "chat-websocket"
+configMapName = "chat-config"
+secretName = "chat-secrets"
+enableK8sProbe = true
+
+# Logging Configuration (for golog)
+[log]
+dir = "logs"
+level = "info"
+standardOutput = true

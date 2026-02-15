@@ -13,8 +13,8 @@ This package provides WebSocket connection handling with JWT authentication for 
 
 ```go
 import (
-    "github.com/yourusername/chat-websocket/internal/auth"
-    "github.com/yourusername/chat-websocket/internal/websocket"
+    "github.com/real-rm/chatbox/internal/auth"
+    "github.com/real-rm/chatbox/internal/websocket"
 )
 
 // Create JWT validator

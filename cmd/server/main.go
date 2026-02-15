@@ -6,27 +6,52 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/yourusername/chat-websocket/internal/config"
+	"github.com/real-rm/goconfig"
+	"github.com/real-rm/golog"
 )
 
 func main() {
-	// Load configuration
-	cfg, err := config.Load()
-	if err != nil {
+	// Load configuration using goconfig
+	if err := goconfig.LoadConfig(); err != nil {
 		log.Fatalf("Failed to load configuration: %v", err)
 	}
 
-	// Validate configuration
-	if err := cfg.Validate(); err != nil {
-		log.Fatalf("Invalid configuration: %v", err)
+	// Get config accessor
+	cfg, err := goconfig.Default()
+	if err != nil {
+		log.Fatalf("Failed to get config accessor: %v", err)
 	}
 
-	log.Printf("Server starting on port %d", cfg.Server.Port)
+	// Initialize golog logger
+	logDir, _ := cfg.ConfigStringWithDefault("log.dir", "logs")
+	logLevel, _ := cfg.ConfigStringWithDefault("log.level", "info")
+	standardOutput, _ := cfg.ConfigBoolWithDefault("log.standardOutput", true)
+	
+	logger, err := golog.InitLog(golog.LogConfig{
+		Dir:            logDir,
+		Level:          logLevel,
+		StandardOutput: standardOutput,
+		InfoFile:       "info.log",
+		WarnFile:       "warn.log",
+		ErrorFile:      "error.log",
+	})
+	if err != nil {
+		log.Fatalf("Failed to initialize logger: %v", err)
+	}
+	defer logger.Close()
+
+	// Get server port
+	port, err := cfg.ConfigIntWithDefault("server.port", 8080)
+	if err != nil {
+		logger.Warn("Failed to get server port, using default", "error", err, "default_port", 8080)
+	}
+
+	logger.Info("Server starting", "port", port)
 
 	// Setup graceful shutdown
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
 	<-sigChan
-	log.Println("Shutting down gracefully...")
+	logger.Info("Shutting down gracefully")
 }

@@ -35,7 +35,8 @@ func TestProperty_SessionContinuityTimeout(t *testing.T) {
 			// Add a buffer for timing imprecision (50ms)
 			const timingBuffer = 50 * time.Millisecond
 
-			sm := NewSessionManager(timeout)
+			logger := getTestLogger()
+			sm := NewSessionManager(timeout, logger)
 
 			// Create initial session
 			session, err := sm.CreateSession(userID)
@@ -123,7 +124,8 @@ func TestProperty_MultipleSessionsPerUser(t *testing.T) {
 			// Limit session count to reasonable number (1-10)
 			count := (sessionCount % 10) + 1
 
-			sm := NewSessionManager(15 * time.Minute)
+			logger := getTestLogger()
+			sm := NewSessionManager(15 * time.Minute, logger)
 			sessionIDs := make([]string, 0, count)
 
 			// Create multiple sessions by creating and ending each one
@@ -197,7 +199,8 @@ func TestProperty_SingleActiveSessionConstraint(t *testing.T) {
 				return true
 			}
 
-			sm := NewSessionManager(15 * time.Minute)
+			logger := getTestLogger()
+			sm := NewSessionManager(15 * time.Minute, logger)
 
 			// Create first session
 			session1, err := sm.CreateSession(userID)
@@ -270,7 +273,8 @@ func TestProperty_AutomaticSessionNameGeneration(t *testing.T) {
 			// The implementation uses a fixed maxLength of 50
 			const maxLen = 50
 
-			sm := NewSessionManager(15 * time.Minute)
+			logger := getTestLogger()
+			sm := NewSessionManager(15 * time.Minute, logger)
 
 			// Create session
 			session, err := sm.CreateSession(userID)

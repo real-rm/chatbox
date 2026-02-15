@@ -81,6 +81,7 @@ func (m *Message) UnmarshalJSON(data []byte) error {
 	}
 	
 	if aux.Timestamp != "" {
+		// Use standard time.Parse for RFC3339 format (JSON standard)
 		t, err := time.Parse(time.RFC3339, aux.Timestamp)
 		if err != nil {
 			return err

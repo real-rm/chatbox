@@ -8,10 +8,24 @@ import (
 	"github.com/leanovate/gopter"
 	"github.com/leanovate/gopter/gen"
 	"github.com/leanovate/gopter/prop"
-	"github.com/yourusername/chat-websocket/internal/message"
-	"github.com/yourusername/chat-websocket/internal/session"
-	"github.com/yourusername/chat-websocket/internal/websocket"
+	"github.com/real-rm/chatbox/internal/message"
+	"github.com/real-rm/chatbox/internal/session"
+	"github.com/real-rm/chatbox/internal/websocket"
+	"github.com/real-rm/golog"
 )
+
+// createTestLogger creates a logger for testing
+func createTestLogger() *golog.Logger {
+	logger, err := golog.InitLog(golog.LogConfig{
+		Dir:            "/tmp/chatbox-router-test-logs",
+		Level:          "error",
+		StandardOutput: false,
+	})
+	if err != nil {
+		panic(fmt.Sprintf("Failed to initialize test logger: %v", err))
+	}
+	return logger
+}
 
 // Feature: chat-application-websocket, Property 12: Message Order Preservation
 // **Validates: Requirements 3.5**
@@ -29,8 +43,9 @@ func TestProperty_MessageOrderPreservation(t *testing.T) {
 				return true // Empty sequence is trivially ordered
 			}
 
-			sm := session.NewSessionManager(15 * time.Minute)
-			router := NewMessageRouter(sm)
+			logger := createTestLogger()
+			sm := session.NewSessionManager(15*time.Minute, logger)
+			router := NewMessageRouter(sm, nil, logger)
 
 			// Create a session
 			sess, err := sm.CreateSession("user-1")
@@ -87,8 +102,9 @@ func TestProperty_ConnectionTracking(t *testing.T) {
 				return true // Skip invalid ranges
 			}
 
-			sm := session.NewSessionManager(15 * time.Minute)
-			router := NewMessageRouter(sm)
+			logger := createTestLogger()
+			sm := session.NewSessionManager(15*time.Minute, logger)
+			router := NewMessageRouter(sm, nil, logger)
 
 			// Create and register multiple connections
 			sessionIDs := make([]string, numSessions)
@@ -165,8 +181,9 @@ func TestProperty_MessageRoutingToCorrectHandler(t *testing.T) {
 
 	properties.Property("messages are routed to correct handlers based on type", prop.ForAll(
 		func(msgType message.MessageType, content string) bool {
-			sm := session.NewSessionManager(15 * time.Minute)
-			router := NewMessageRouter(sm)
+			logger := createTestLogger()
+			sm := session.NewSessionManager(15*time.Minute, logger)
+			router := NewMessageRouter(sm, nil, logger)
 
 			// Create a session
 			sess, err := sm.CreateSession("user-1")
@@ -233,8 +250,9 @@ func TestProperty_ErrorHandlingForInvalidMessages(t *testing.T) {
 
 	properties.Property("router handles invalid messages gracefully", prop.ForAll(
 		func(hasSessionID bool, hasContent bool) bool {
-			sm := session.NewSessionManager(15 * time.Minute)
-			router := NewMessageRouter(sm)
+			logger := createTestLogger()
+			sm := session.NewSessionManager(15*time.Minute, logger)
+			router := NewMessageRouter(sm, nil, logger)
 
 			// Create a session
 			sess, err := sm.CreateSession("user-1")
@@ -298,8 +316,9 @@ func TestProperty_ConcurrentConnectionAccessSafety(t *testing.T) {
 				return true // Skip invalid ranges
 			}
 
-			sm := session.NewSessionManager(15 * time.Minute)
-			router := NewMessageRouter(sm)
+			logger := createTestLogger()
+			sm := session.NewSessionManager(15*time.Minute, logger)
+			router := NewMessageRouter(sm, nil, logger)
 
 			// Perform concurrent operations
 			done := make(chan bool, numOperations)
@@ -355,8 +374,9 @@ func TestProperty_BroadcastToSessionParticipants(t *testing.T) {
 
 	properties.Property("broadcast sends to all session participants", prop.ForAll(
 		func(content string, hasAdmin bool) bool {
-			sm := session.NewSessionManager(15 * time.Minute)
-			router := NewMessageRouter(sm)
+			logger := createTestLogger()
+			sm := session.NewSessionManager(15*time.Minute, logger)
+			router := NewMessageRouter(sm, nil, logger)
 
 			// Create a session
 			sess, err := sm.CreateSession("user-1")

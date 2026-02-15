@@ -6,7 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
+	"github.com/real-rm/gohelper"
+	"github.com/real-rm/golog"
 )
 
 var (
@@ -79,14 +80,17 @@ type SessionManager struct {
 	userSessions     map[string]string      // userID -> active sessionID
 	mu               sync.RWMutex
 	reconnectTimeout time.Duration
+	logger           *golog.Logger
 }
 
 // NewSessionManager creates a new session manager
-func NewSessionManager(reconnectTimeout time.Duration) *SessionManager {
+func NewSessionManager(reconnectTimeout time.Duration, logger *golog.Logger) *SessionManager {
+	sessionLogger := logger.WithGroup("session")
 	return &SessionManager{
 		sessions:         make(map[string]*Session),
 		userSessions:     make(map[string]string),
 		reconnectTimeout: reconnectTimeout,
+		logger:           sessionLogger,
 	}
 }
 
@@ -109,8 +113,15 @@ func (sm *SessionManager) CreateSession(userID string) (*Session, error) {
 
 	// Create new session
 	now := time.Now()
+	
+	// Generate session ID using gohelper
+	sessionID, err := gohelper.GenUUID(32)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate session ID: %w", err)
+	}
+	
 	session := &Session{
-		ID:            uuid.New().String(),
+		ID:            sessionID,
 		UserID:        userID,
 		Name:          "",
 		ModelID:       "",
@@ -131,6 +142,7 @@ func (sm *SessionManager) CreateSession(userID string) (*Session, error) {
 	sm.sessions[session.ID] = session
 	sm.userSessions[userID] = session.ID
 
+	sm.logger.Info("Session created", "session_id", session.ID, "user_id", userID)
 	return session, nil
 }
 
@@ -192,6 +204,7 @@ func (sm *SessionManager) RestoreSession(userID, sessionID string) (*Session, er
 	// Restore user mapping
 	sm.userSessions[userID] = sessionID
 
+	sm.logger.Info("Session restored", "session_id", sessionID, "user_id", userID)
 	return session, nil
 }
 
@@ -217,6 +230,7 @@ func (sm *SessionManager) EndSession(sessionID string) error {
 	// Remove user mapping
 	delete(sm.userSessions, session.UserID)
 
+	sm.logger.Info("Session ended", "session_id", sessionID, "user_id", session.UserID, "duration", time.Since(session.StartTime))
 	return nil
 }
 
@@ -347,6 +361,36 @@ func extractFirstSentenceOrLine(s string) string {
 	
 	// No sentence ending or newline found, return the whole string
 	return s
+}
+
+// AddMessage adds a message to the session
+// Returns error if session not found or message is nil
+func (sm *SessionManager) AddMessage(sessionID string, msg *Message) error {
+	if sessionID == "" {
+		return ErrInvalidSessionID
+	}
+
+	if msg == nil {
+		return errors.New("message cannot be nil")
+	}
+
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+
+	session, exists := sm.sessions[sessionID]
+	if !exists {
+		return fmt.Errorf("%w: %s", ErrSessionNotFound, sessionID)
+	}
+
+	// Add message to session
+	session.Messages = append(session.Messages, msg)
+	session.LastActivity = time.Now()
+
+	sm.logger.Debug("Message added to session", 
+		"session_id", sessionID, 
+		"message_count", len(session.Messages))
+
+	return nil
 }
 
 // UpdateTokenUsage adds tokens to the session's total token count

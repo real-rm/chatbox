@@ -8,10 +8,24 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/real-rm/golog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/yourusername/chat-websocket/internal/auth"
+	"github.com/real-rm/chatbox/internal/auth"
 )
+
+// testLogger creates a test logger for unit tests
+func testLogger() *golog.Logger {
+	logger, err := golog.InitLog(golog.LogConfig{
+		Dir:            ".",     // Use current directory for test logs
+		Level:          "error", // Only log errors in tests
+		StandardOutput: true,    // Output to stdout
+	})
+	if err != nil {
+		panic("failed to create test logger: " + err.Error())
+	}
+	return logger
+}
 
 // TestConnection_WritePump tests the writePump functionality
 func TestConnection_WritePump(t *testing.T) {
@@ -108,7 +122,7 @@ func TestConnection_ReadPump(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			validator := auth.NewJWTValidator("test-secret")
-			handler := NewHandler(validator)
+			handler := NewHandler(validator, testLogger())
 
 			// Create a test server that will act as the client
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -170,7 +184,7 @@ func TestConnection_ReadPump(t *testing.T) {
 // TestConnection_PingPong tests the ping/pong heartbeat mechanism
 func TestConnection_PingPong(t *testing.T) {
 	validator := auth.NewJWTValidator("test-secret")
-	handler := NewHandler(validator)
+	handler := NewHandler(validator, testLogger())
 
 	// Create a test server that responds to pings
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -229,7 +243,7 @@ func TestConnection_PingPong(t *testing.T) {
 // TestConnection_GracefulClose tests graceful connection closure
 func TestConnection_GracefulClose(t *testing.T) {
 	validator := auth.NewJWTValidator("test-secret")
-	handler := NewHandler(validator)
+	handler := NewHandler(validator, testLogger())
 
 	// Create a test server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -290,7 +304,7 @@ func TestConnection_GracefulClose(t *testing.T) {
 // TestConnection_ResourceCleanup tests that resources are cleaned up properly
 func TestConnection_ResourceCleanup(t *testing.T) {
 	validator := auth.NewJWTValidator("test-secret")
-	handler := NewHandler(validator)
+	handler := NewHandler(validator, testLogger())
 
 	// Create a test server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

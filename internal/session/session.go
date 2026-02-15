@@ -493,3 +493,52 @@ func (sm *SessionManager) GetSessionDuration(sessionID string) (time.Duration, e
 
 	return time.Since(session.StartTime), nil
 }
+// SetModelID sets the model ID for the session
+// Returns error if session not found or model ID is empty
+func (sm *SessionManager) SetModelID(sessionID, modelID string) error {
+	if sessionID == "" {
+		return ErrInvalidSessionID
+	}
+
+	if modelID == "" {
+		return errors.New("model ID cannot be empty")
+	}
+
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+
+	session, exists := sm.sessions[sessionID]
+	if !exists {
+		return fmt.Errorf("%w: %s", ErrSessionNotFound, sessionID)
+	}
+
+	session.mu.Lock()
+	defer session.mu.Unlock()
+
+	session.ModelID = modelID
+
+	return nil
+}
+
+// GetModelID returns the model ID for the session
+// Returns empty string if no model is set
+// Returns error if session not found
+func (sm *SessionManager) GetModelID(sessionID string) (string, error) {
+	if sessionID == "" {
+		return "", ErrInvalidSessionID
+	}
+
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+
+	session, exists := sm.sessions[sessionID]
+	if !exists {
+		return "", fmt.Errorf("%w: %s", ErrSessionNotFound, sessionID)
+	}
+
+	session.mu.RLock()
+	defer session.mu.RUnlock()
+
+	return session.ModelID, nil
+}
+

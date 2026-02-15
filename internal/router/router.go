@@ -141,9 +141,45 @@ func (mr *MessageRouter) handleHelpRequest(conn *websocket.Connection, msg *mess
 
 // handleModelSelection processes model selection messages
 func (mr *MessageRouter) handleModelSelection(conn *websocket.Connection, msg *message.Message) error {
-	// TODO: Implement model selection
+	if conn == nil {
+		return ErrNilConnection
+	}
+	if msg == nil {
+		return ErrNilMessage
+	}
+
+	// Validate session ID
+	if msg.SessionID == "" {
+		return fmt.Errorf("%w: session ID is required", ErrInvalidMessage)
+	}
+
+	// Validate model ID
+	if msg.ModelID == "" {
+		return fmt.Errorf("%w: model ID is required", ErrInvalidMessage)
+	}
+
+	// Verify session exists
+	_, err := mr.sessionManager.GetSession(msg.SessionID)
+	if err != nil {
+		return fmt.Errorf("%w: %v", ErrSessionNotFound, err)
+	}
+
+	// Store the selected model in the session
+	if err := mr.sessionManager.SetModelID(msg.SessionID, msg.ModelID); err != nil {
+		return fmt.Errorf("failed to set model ID: %w", err)
+	}
+
 	log.Printf("Model selection for session %s: %s", msg.SessionID, msg.ModelID)
-	return nil
+
+	// Send confirmation message back to client
+	response := &message.Message{
+		Type:      message.TypeConnectionStatus,
+		SessionID: msg.SessionID,
+		Content:   fmt.Sprintf("Model changed to %s", msg.ModelID),
+		Sender:    message.SenderAI,
+	}
+
+	return mr.sendToConnection(msg.SessionID, response)
 }
 
 // handleFileUpload processes file upload messages

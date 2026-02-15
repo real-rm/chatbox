@@ -135,7 +135,7 @@ This implementation plan breaks down the chat application into discrete coding t
     - Implement GetTokenUsage for token aggregation
     - _Requirements: 4.3, 15.1, 18.2, 18.6_
   
-  - [~] 7.4 Write property tests for storage operations
+  - [x] 7.4 Write property tests for storage operations
     - **Property 14: Session Creation and Persistence**
     - **Property 15: Message Persistence**
     - **Property 16: Conversation History Retrieval**
@@ -145,21 +145,21 @@ This implementation plan breaks down the chat application into discrete coding t
     - **Validates: Requirements 4.1, 4.2, 4.3, 4.6, 4.7, 13.4, 15.1**
 
 - [ ] 8. Implement LLM Service integration
-  - [~] 8.1 Create LLMService with provider interface
+  - [x] 8.1 Create LLMService with provider interface
     - Define LLMProvider interface
     - Create LLMRequest and LLMResponse structs
     - Implement provider registry for multiple LLM backends
     - Load LLM configurations from Config_Service
     - _Requirements: 7.1, 7.5_
   
-  - [~] 8.2 Implement LLM provider implementations
+  - [x] 8.2 Implement LLM provider implementations
     - Implement OpenAI provider
     - Implement Anthropic provider
     - Implement Dify provider
     - Implement streaming support for each provider
     - _Requirements: 7.3_
   
-  - [~] 8.3 Implement LLM request handling
+  - [x] 8.3 Implement LLM request handling
     - Implement SendMessage with context inclusion
     - Implement StreamMessage with chunk forwarding
     - Implement token counting and tracking
@@ -167,7 +167,7 @@ This implementation plan breaks down the chat application into discrete coding t
     - Measure and log response times
     - _Requirements: 3.7, 7.2, 7.3, 7.4, 18.13_
   
-  - [~] 8.4 Implement model selection
+  - [x] 8.4 Implement model selection
     - Store selected model in session
     - Use selected model for subsequent requests
     - _Requirements: 7.7_

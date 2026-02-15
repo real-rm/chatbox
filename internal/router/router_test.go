@@ -434,3 +434,213 @@ func TestConcurrentConnectionAccess(t *testing.T) {
 		<-done
 	}
 }
+
+// TestHandleModelSelection tests model selection message handling
+func TestHandleModelSelection(t *testing.T) {
+	sm := session.NewSessionManager(15 * time.Minute)
+	router := NewMessageRouter(sm)
+
+	// Create a session
+	sess, err := sm.CreateSession("user-123")
+	require.NoError(t, err)
+
+	// Create and register connection
+	conn := mockConnection("user-123")
+	err = router.RegisterConnection(sess.ID, conn)
+	require.NoError(t, err)
+
+	// Create model selection message
+	msg := &message.Message{
+		Type:      message.TypeModelSelect,
+		SessionID: sess.ID,
+		ModelID:   "gpt-4",
+		Timestamp: time.Now(),
+		Sender:    message.SenderUser,
+	}
+
+	// Route the message
+	err = router.RouteMessage(conn, msg)
+	require.NoError(t, err)
+
+	// Verify model was set in session
+	modelID, err := sm.GetModelID(sess.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "gpt-4", modelID)
+}
+
+func TestHandleModelSelection_EmptySessionID(t *testing.T) {
+	sm := session.NewSessionManager(15 * time.Minute)
+	router := NewMessageRouter(sm)
+
+	conn := mockConnection("user-123")
+
+	msg := &message.Message{
+		Type:      message.TypeModelSelect,
+		SessionID: "",
+		ModelID:   "gpt-4",
+		Timestamp: time.Now(),
+		Sender:    message.SenderUser,
+	}
+
+	err := router.RouteMessage(conn, msg)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "session ID")
+}
+
+func TestHandleModelSelection_EmptyModelID(t *testing.T) {
+	sm := session.NewSessionManager(15 * time.Minute)
+	router := NewMessageRouter(sm)
+
+	// Create a session
+	sess, err := sm.CreateSession("user-123")
+	require.NoError(t, err)
+
+	conn := mockConnection("user-123")
+
+	msg := &message.Message{
+		Type:      message.TypeModelSelect,
+		SessionID: sess.ID,
+		ModelID:   "",
+		Timestamp: time.Now(),
+		Sender:    message.SenderUser,
+	}
+
+	err = router.RouteMessage(conn, msg)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "model ID")
+}
+
+func TestHandleModelSelection_NonExistentSession(t *testing.T) {
+	sm := session.NewSessionManager(15 * time.Minute)
+	router := NewMessageRouter(sm)
+
+	conn := mockConnection("user-123")
+
+	msg := &message.Message{
+		Type:      message.TypeModelSelect,
+		SessionID: "non-existent-session",
+		ModelID:   "gpt-4",
+		Timestamp: time.Now(),
+		Sender:    message.SenderUser,
+	}
+
+	err := router.RouteMessage(conn, msg)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
+}
+
+func TestHandleModelSelection_UpdateModel(t *testing.T) {
+	sm := session.NewSessionManager(15 * time.Minute)
+	router := NewMessageRouter(sm)
+
+	// Create a session
+	sess, err := sm.CreateSession("user-123")
+	require.NoError(t, err)
+
+	// Create and register connection
+	conn := mockConnection("user-123")
+	err = router.RegisterConnection(sess.ID, conn)
+	require.NoError(t, err)
+
+	// Set initial model
+	msg1 := &message.Message{
+		Type:      message.TypeModelSelect,
+		SessionID: sess.ID,
+		ModelID:   "gpt-3.5-turbo",
+		Timestamp: time.Now(),
+		Sender:    message.SenderUser,
+	}
+
+	err = router.RouteMessage(conn, msg1)
+	require.NoError(t, err)
+
+	// Verify initial model
+	modelID, err := sm.GetModelID(sess.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "gpt-3.5-turbo", modelID)
+
+	// Update to different model
+	msg2 := &message.Message{
+		Type:      message.TypeModelSelect,
+		SessionID: sess.ID,
+		ModelID:   "gpt-4",
+		Timestamp: time.Now(),
+		Sender:    message.SenderUser,
+	}
+
+	err = router.RouteMessage(conn, msg2)
+	require.NoError(t, err)
+
+	// Verify model was updated
+	modelID, err = sm.GetModelID(sess.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "gpt-4", modelID)
+}
+
+func TestHandleModelSelection_NilConnection(t *testing.T) {
+	sm := session.NewSessionManager(15 * time.Minute)
+	router := NewMessageRouter(sm)
+
+	// Create a session
+	sess, err := sm.CreateSession("user-123")
+	require.NoError(t, err)
+
+	msg := &message.Message{
+		Type:      message.TypeModelSelect,
+		SessionID: sess.ID,
+		ModelID:   "gpt-4",
+		Timestamp: time.Now(),
+		Sender:    message.SenderUser,
+	}
+
+	err = router.RouteMessage(nil, msg)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrNilConnection)
+}
+
+func TestHandleModelSelection_NilMessage(t *testing.T) {
+	sm := session.NewSessionManager(15 * time.Minute)
+	router := NewMessageRouter(sm)
+
+	conn := mockConnection("user-123")
+
+	err := router.RouteMessage(conn, nil)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrNilMessage)
+}
+
+func TestModelSelection_Persistence(t *testing.T) {
+	sm := session.NewSessionManager(15 * time.Minute)
+	router := NewMessageRouter(sm)
+
+	// Create a session
+	sess, err := sm.CreateSession("user-123")
+	require.NoError(t, err)
+
+	// Create and register connection
+	conn := mockConnection("user-123")
+	err = router.RegisterConnection(sess.ID, conn)
+	require.NoError(t, err)
+
+	// Set model
+	msg := &message.Message{
+		Type:      message.TypeModelSelect,
+		SessionID: sess.ID,
+		ModelID:   "claude-3",
+		Timestamp: time.Now(),
+		Sender:    message.SenderUser,
+	}
+
+	err = router.RouteMessage(conn, msg)
+	require.NoError(t, err)
+
+	// End and restore session
+	err = sm.EndSession(sess.ID)
+	require.NoError(t, err)
+
+	restored, err := sm.RestoreSession("user-123", sess.ID)
+	require.NoError(t, err)
+
+	// Model should persist across session restoration
+	assert.Equal(t, "claude-3", restored.ModelID)
+}

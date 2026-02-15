@@ -191,6 +191,25 @@ func TestProperty_MessageRoutingToCorrectHandler(t *testing.T) {
 				Timestamp: time.Now(),
 			}
 
+			// For model selection messages, set ModelID instead of Content
+			if msgType == message.TypeModelSelect {
+				// Use a non-empty model ID for model selection
+				if content == "" {
+					msg.ModelID = "gpt-4"
+				} else {
+					msg.ModelID = content
+				}
+			}
+
+			// For file upload and voice messages, set FileID
+			if msgType == message.TypeFileUpload || msgType == message.TypeVoiceMessage {
+				if content == "" {
+					msg.FileID = "file-123"
+				} else {
+					msg.FileID = content
+				}
+			}
+
 			// Route message - should not return error for valid types
 			err = router.RouteMessage(conn, msg)
 			return err == nil

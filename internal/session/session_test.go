@@ -877,3 +877,145 @@ func TestConcurrentMetricsUpdates(t *testing.T) {
 	assert.Equal(t, 100, retrieved.TotalTokens) // 10 * 10
 	assert.Len(t, retrieved.ResponseTimes, 10)
 }
+
+// TestSetModelID tests setting the model ID for a session
+func TestSetModelID(t *testing.T) {
+	sm := NewSessionManager(15 * time.Minute)
+	
+	// Create a session
+	session, err := sm.CreateSession("user-123")
+	require.NoError(t, err)
+	
+	// Set model ID
+	err = sm.SetModelID(session.ID, "gpt-4")
+	require.NoError(t, err)
+	
+	// Verify model ID was set
+	modelID, err := sm.GetModelID(session.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "gpt-4", modelID)
+}
+
+func TestSetModelID_EmptySessionID(t *testing.T) {
+	sm := NewSessionManager(15 * time.Minute)
+	
+	err := sm.SetModelID("", "gpt-4")
+	
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "session ID")
+}
+
+func TestSetModelID_EmptyModelID(t *testing.T) {
+	sm := NewSessionManager(15 * time.Minute)
+	
+	session, err := sm.CreateSession("user-123")
+	require.NoError(t, err)
+	
+	err = sm.SetModelID(session.ID, "")
+	
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "model ID")
+}
+
+func TestSetModelID_NonExistentSession(t *testing.T) {
+	sm := NewSessionManager(15 * time.Minute)
+	
+	err := sm.SetModelID("non-existent-session", "gpt-4")
+	
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
+}
+
+func TestSetModelID_UpdateExistingModel(t *testing.T) {
+	sm := NewSessionManager(15 * time.Minute)
+	
+	// Create a session
+	session, err := sm.CreateSession("user-123")
+	require.NoError(t, err)
+	
+	// Set initial model
+	err = sm.SetModelID(session.ID, "gpt-3.5-turbo")
+	require.NoError(t, err)
+	
+	// Update to different model
+	err = sm.SetModelID(session.ID, "gpt-4")
+	require.NoError(t, err)
+	
+	// Verify model was updated
+	modelID, err := sm.GetModelID(session.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "gpt-4", modelID)
+}
+
+func TestGetModelID(t *testing.T) {
+	sm := NewSessionManager(15 * time.Minute)
+	
+	// Create a session
+	session, err := sm.CreateSession("user-123")
+	require.NoError(t, err)
+	
+	// Set model ID
+	err = sm.SetModelID(session.ID, "claude-3")
+	require.NoError(t, err)
+	
+	// Get model ID
+	modelID, err := sm.GetModelID(session.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "claude-3", modelID)
+}
+
+func TestGetModelID_EmptySessionID(t *testing.T) {
+	sm := NewSessionManager(15 * time.Minute)
+	
+	modelID, err := sm.GetModelID("")
+	
+	require.Error(t, err)
+	assert.Empty(t, modelID)
+	assert.Contains(t, err.Error(), "session ID")
+}
+
+func TestGetModelID_NonExistentSession(t *testing.T) {
+	sm := NewSessionManager(15 * time.Minute)
+	
+	modelID, err := sm.GetModelID("non-existent-session")
+	
+	require.Error(t, err)
+	assert.Empty(t, modelID)
+	assert.Contains(t, err.Error(), "not found")
+}
+
+func TestGetModelID_NoModelSet(t *testing.T) {
+	sm := NewSessionManager(15 * time.Minute)
+	
+	// Create a session without setting model
+	session, err := sm.CreateSession("user-123")
+	require.NoError(t, err)
+	
+	// Get model ID should return empty string
+	modelID, err := sm.GetModelID(session.ID)
+	require.NoError(t, err)
+	assert.Empty(t, modelID)
+}
+
+func TestModelSelection_Persistence(t *testing.T) {
+	sm := NewSessionManager(15 * time.Minute)
+	
+	// Create a session
+	session, err := sm.CreateSession("user-123")
+	require.NoError(t, err)
+	
+	// Set model ID
+	err = sm.SetModelID(session.ID, "gpt-4")
+	require.NoError(t, err)
+	
+	// End the session
+	err = sm.EndSession(session.ID)
+	require.NoError(t, err)
+	
+	// Restore the session
+	restored, err := sm.RestoreSession("user-123", session.ID)
+	require.NoError(t, err)
+	
+	// Model ID should still be set
+	assert.Equal(t, "gpt-4", restored.ModelID)
+}

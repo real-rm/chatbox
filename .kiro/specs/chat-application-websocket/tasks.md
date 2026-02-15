@@ -172,7 +172,7 @@ This implementation plan breaks down the chat application into discrete coding t
     - Use selected model for subsequent requests
     - _Requirements: 7.7_
   
-  - [~] 8.5 Write property tests for LLM service
+  - [x] 8.5 Write property tests for LLM service
     - **Property 10: Valid Message Routing to LLM**
     - **Property 11: LLM Response Delivery**
     - **Property 13: Response Time Tracking**
@@ -183,7 +183,7 @@ This implementation plan breaks down the chat application into discrete coding t
     - **Property 62: Token Usage Tracking and Storage**
     - **Validates: Requirements 3.2, 3.3, 3.7, 7.2, 7.3, 7.4, 7.7, 18.13**
 
-- [~] 9. Checkpoint - Ensure all tests pass
+- [x] 9. Checkpoint - Ensure all tests pass
   - Ensure all tests pass, ask the user if questions arise.
 
 - [ ] 10. Implement file upload service (goupload)

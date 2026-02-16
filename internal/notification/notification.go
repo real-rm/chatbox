@@ -3,6 +3,7 @@ package notification
 import (
 	"context"
 	"fmt"
+	"os"
 	"sync"
 	"time"
 
@@ -88,16 +89,23 @@ func NewNotificationService(
 	}
 
 	// Initialize gosms
-	accountSID, err := config.ConfigString("sms.accountSID")
-	if err != nil {
-		logger.Warn("SMS account SID not configured", "error", err)
-		accountSID = ""
+	// Priority: Environment variables > Config file
+	accountSID := os.Getenv("SMS_ACCOUNT_SID")
+	if accountSID == "" {
+		accountSID, err = config.ConfigString("sms.accountSID")
+		if err != nil {
+			logger.Warn("SMS account SID not configured", "error", err)
+			accountSID = ""
+		}
 	}
 
-	authToken, err := config.ConfigString("sms.authToken")
-	if err != nil {
-		logger.Warn("SMS auth token not configured", "error", err)
-		authToken = ""
+	authToken := os.Getenv("SMS_AUTH_TOKEN")
+	if authToken == "" {
+		authToken, err = config.ConfigString("sms.authToken")
+		if err != nil {
+			logger.Warn("SMS auth token not configured", "error", err)
+			authToken = ""
+		}
 	}
 
 	var smsSender *gosms.SMSSender

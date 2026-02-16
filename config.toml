@@ -6,10 +6,27 @@ port = 8080
 
 # Chatbox Service Configuration
 [chatbox]
-jwt_secret = "your-secret-key-change-in-production"
+# REQUIRED: Set via environment variable JWT_SECRET or Kubernetes secret
+# Generate with: openssl rand -base64 32
+jwt_secret = "PLACEHOLDER_JWT_SECRET"
 reconnect_timeout = "15m"
 max_connections = 10000
 rate_limit = 100
+# Comma-separated list of allowed origins for WebSocket connections
+# Example: "https://example.com,https://app.example.com"
+# Leave empty to allow all origins (development mode only)
+# SECURITY WARNING: Always configure this in production to prevent CSRF attacks
+allowed_origins = ""
+
+# Comma-separated list of allowed origins for CORS (HTTP endpoints like admin API, metrics)
+# Example: "https://admin.example.com,https://dashboard.example.com"
+# Leave empty to disable CORS middleware (endpoints only accessible from same origin)
+# Use this to allow admin dashboards and monitoring tools from different domains
+cors_allowed_origins = ""
+# REQUIRED: Encryption key for message content at rest (must be 32 bytes for AES-256)
+# Set via environment variable ENCRYPTION_KEY or Kubernetes secret
+# Generate with: openssl rand -base64 32
+encryption_key = "PLACEHOLDER_ENCRYPTION_KEY_32_BYTES"
 
 # WebSocket Configuration
 [chatbox.websocket]
@@ -35,8 +52,10 @@ connectTimeout = "10s"
   [[connection_sources.s3_providers]]
     name = "aws-chat-storage"
     endpoint = "s3.us-east-1.amazonaws.com"
-    key = "YOUR_AWS_ACCESS_KEY"
-    pass = "YOUR_AWS_SECRET_KEY"
+    # REQUIRED: Set via environment variable AWS_ACCESS_KEY_ID or Kubernetes secret
+    key = "PLACEHOLDER_AWS_ACCESS_KEY"
+    # REQUIRED: Set via environment variable AWS_SECRET_ACCESS_KEY or Kubernetes secret
+    pass = "PLACEHOLDER_AWS_SECRET_KEY"
     region = "us-east-1"
 
 # Upload configuration (for goupload)
@@ -58,7 +77,8 @@ id = "openai-gpt4"
 name = "GPT-4"
 type = "openai"
 endpoint = "https://api.openai.com/v1"
-apiKey = "sk-..."
+# REQUIRED: Set via environment variable OPENAI_API_KEY or Kubernetes secret
+apiKey = "PLACEHOLDER_OPENAI_API_KEY"
 model = "gpt-4"
 
 [[chatbox.llm.providers]]
@@ -66,7 +86,8 @@ id = "anthropic-claude"
 name = "Claude"
 type = "anthropic"
 endpoint = "https://api.anthropic.com/v1"
-apiKey = "sk-ant-..."
+# REQUIRED: Set via environment variable ANTHROPIC_API_KEY or Kubernetes secret
+apiKey = "PLACEHOLDER_ANTHROPIC_API_KEY"
 model = "claude-3-opus"
 
 [[chatbox.llm.providers]]
@@ -74,7 +95,8 @@ id = "dify-assistant"
 name = "Dify Assistant"
 type = "dify"
 endpoint = "https://api.dify.ai/v1"
-apiKey = "dify-..."
+# REQUIRED: Set via environment variable DIFY_API_KEY or Kubernetes secret
+apiKey = "PLACEHOLDER_DIFY_API_KEY"
 model = "assistant"
 
 # Mail configuration (for gomail)
@@ -86,8 +108,10 @@ adminEmail = "admin@example.com"
 # SES Engine for production
 [[mail.engines.ses]]
 name = "ses-primary"
-accessKeyId = "AKIAXXXXXXXX"
-secretAccessKey = "xxxxxxxx"
+# REQUIRED: Set via environment variable AWS_SES_ACCESS_KEY_ID or Kubernetes secret
+accessKeyId = "PLACEHOLDER_AWS_SES_ACCESS_KEY_ID"
+# REQUIRED: Set via environment variable AWS_SES_SECRET_ACCESS_KEY or Kubernetes secret
+secretAccessKey = "PLACEHOLDER_AWS_SES_SECRET_ACCESS_KEY"
 region = "us-east-1"
 from = "noreply@example.com"
 fromName = "Chat System"
@@ -97,8 +121,10 @@ fromName = "Chat System"
 name = "smtp-backup"
 host = "smtp.example.com"
 port = 587
-user = "user@example.com"
-pass = "password"
+# REQUIRED: Set via environment variable SMTP_USER or Kubernetes secret
+user = "PLACEHOLDER_SMTP_USER"
+# REQUIRED: Set via environment variable SMTP_PASSWORD or Kubernetes secret
+pass = "PLACEHOLDER_SMTP_PASSWORD"
 from = "noreply@example.com"
 fromName = "Chat System"
 
@@ -110,8 +136,10 @@ verbose = true
 # SMS Configuration (for gosms)
 [sms]
 provider = "twilio"
-accountSID = "ACXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
-authToken = "your_auth_token"
+# REQUIRED: Set via environment variable TWILIO_ACCOUNT_SID or Kubernetes secret
+accountSID = "PLACEHOLDER_TWILIO_ACCOUNT_SID"
+# REQUIRED: Set via environment variable TWILIO_AUTH_TOKEN or Kubernetes secret
+authToken = "PLACEHOLDER_TWILIO_AUTH_TOKEN"
 fromNumber = "+1234567890"
 
 # Notification Configuration

@@ -1,0 +1,144 @@
+# Horizontal Pod Autoscaler with Application Metrics
+# This HPA configuration uses both resource metrics and custom application metrics
+# from Prometheus for more intelligent autoscaling.
+#
+# Prerequisites:
+# 1. Prometheus must be deployed and scraping the /metrics endpoint
+# 2. Prometheus Adapter must be configured to expose custom metrics to Kubernetes
+#
+# To deploy Prometheus Adapter:
+#   helm install prometheus-adapter prometheus-community/prometheus-adapter \
+#     --set prometheus.url=http://prometheus-server.monitoring.svc \
+#     --set prometheus.port=80
+#
+# To verify custom metrics are available:
+#   kubectl get --raw /apis/custom.metrics.k8s.io/v1beta1 | jq .
+
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: chatbox-websocket-hpa
+  namespace: default
+  labels:
+    app: chatbox
+    component: websocket
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: chatbox-websocket
+  
+  # Scaling boundaries
+  minReplicas: 3
+  maxReplicas: 10
+  
+  # Metrics for scaling decisions
+  metrics:
+  # Resource-based metrics (always available)
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  
+  # Application-level metrics (requires Prometheus Adapter)
+  # These provide more accurate scaling based on actual application load
+  
+  # Scale based on WebSocket connections per pod
+  - type: Pods
+    pods:
+      metric:
+        name: chatbox_websocket_connections_total
+      target:
+        type: AverageValue
+        averageValue: "100"  # Scale up when average connections per pod exceeds 100
+  
+  # Scale based on active sessions per pod
+  - type: Pods
+    pods:
+      metric:
+        name: chatbox_active_sessions_total
+      target:
+        type: AverageValue
+        averageValue: "50"  # Scale up when average active sessions per pod exceeds 50
+  
+  # Scaling behavior configuration
+  behavior:
+    # Scale down conservatively to avoid connection disruption
+    scaleDown:
+      stabilizationWindowSeconds: 300  # Wait 5 minutes before scaling down
+      policies:
+      - type: Percent
+        value: 50  # Scale down by max 50% of current replicas
+        periodSeconds: 60
+    
+    # Scale up aggressively to handle load spikes
+    scaleUp:
+      stabilizationWindowSeconds: 0  # Scale up immediately
+      policies:
+      - type: Percent
+        value: 100  # Can double the number of pods
+        periodSeconds: 30
+      - type: Pods
+        value: 2  # Or add 2 pods at a time
+        periodSeconds: 30
+      selectPolicy: Max  # Use the policy that scales up the most
+
+---
+# Alternative HPA configuration without custom metrics
+# Use this if Prometheus Adapter is not available
+# Uncomment to use this instead of the above configuration
+
+# apiVersion: autoscaling/v2
+# kind: HorizontalPodAutoscaler
+# metadata:
+#   name: chatbox-websocket-hpa
+#   namespace: default
+#   labels:
+#     app: chatbox
+#     component: websocket
+# spec:
+#   scaleTargetRef:
+#     apiVersion: apps/v1
+#     kind: Deployment
+#     name: chatbox-websocket
+#   minReplicas: 3
+#   maxReplicas: 10
+#   metrics:
+#   - type: Resource
+#     resource:
+#       name: cpu
+#       target:
+#         type: Utilization
+#         averageUtilization: 70
+#   - type: Resource
+#     resource:
+#       name: memory
+#       target:
+#         type: Utilization
+#         averageUtilization: 80
+#   behavior:
+#     scaleDown:
+#       stabilizationWindowSeconds: 300
+#       policies:
+#       - type: Percent
+#         value: 50
+#         periodSeconds: 60
+#     scaleUp:
+#       stabilizationWindowSeconds: 0
+#       policies:
+#       - type: Percent
+#         value: 100
+#         periodSeconds: 30
+#       - type: Pods
+#         value: 2
+#         periodSeconds: 30
+#       selectPolicy: Max

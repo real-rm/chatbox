@@ -64,7 +64,7 @@ func TestProperty_ConnectionUserAssociation(t *testing.T) {
 			}
 
 			// Create a connection
-			handler := NewHandler(validator, testPropertyLogger())
+			handler := NewHandler(validator, nil, testPropertyLogger())
 			conn := handler.createConnection(nil, claims)
 
 			// Verify the connection is associated with the correct user ID
@@ -117,7 +117,7 @@ func TestProperty_WebSocketConnectionEstablishment(t *testing.T) {
 			}
 
 			// Verify we can create a connection with valid claims
-			handler := NewHandler(validator, testPropertyLogger())
+			handler := NewHandler(validator, nil, testPropertyLogger())
 			conn := handler.createConnection(nil, claims)
 
 			// Connection should be created successfully with proper initialization
@@ -191,7 +191,7 @@ func TestProperty_HeartbeatResponse(t *testing.T) {
 			}
 
 			// Create a mock WebSocket connection
-			handler := NewHandler(validator, testPropertyLogger())
+			handler := NewHandler(validator, nil, testPropertyLogger())
 			conn := handler.createConnection(nil, claims)
 
 			// Verify the connection has a send channel (required for heartbeat)
@@ -243,7 +243,7 @@ func TestProperty_ConnectionResourceCleanup(t *testing.T) {
 			}
 
 			// Create handler and connection
-			handler := NewHandler(validator, testPropertyLogger())
+			handler := NewHandler(validator, nil, testPropertyLogger())
 			conn := handler.createConnection(nil, claims)
 
 			// Register the connection
@@ -303,4 +303,135 @@ func createValidToken(t *testing.T, userID string, roles []string) string {
 	require.NoError(t, err)
 
 	return tokenString
+}
+
+// Feature: production-readiness
+// Property: Connection ID Uniqueness
+// **Validates: Requirements 3.1**
+//
+// For any number of connections created for the same user, even when created
+// rapidly in succession, each connection should have a unique connection ID.
+// This ensures multi-device support works correctly without connection conflicts.
+func TestProperty_ConnectionIDUniqueness(t *testing.T) {
+	parameters := gopter.DefaultTestParameters()
+	parameters.MinSuccessfulTests = 50
+	properties := gopter.NewProperties(parameters)
+
+	properties.Property("connection IDs are always unique for rapid connections", prop.ForAll(
+		func(userID string, numConnections uint8) bool {
+			// Skip empty user IDs and ensure we have at least 2 connections to test
+			if userID == "" || numConnections < 2 {
+				return true
+			}
+
+			// Limit to reasonable number of connections for testing
+			if numConnections > 100 {
+				numConnections = 100
+			}
+
+			// Create a valid JWT token
+			token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+				"user_id": userID,
+				"roles":   []string{"user"},
+				"exp":     time.Now().Add(time.Hour).Unix(),
+			})
+
+			tokenString, err := token.SignedString([]byte("test-secret"))
+			if err != nil {
+				return false
+			}
+
+			// Validate the token
+			validator := auth.NewJWTValidator("test-secret")
+			claims, err := validator.ValidateToken(tokenString)
+			if err != nil {
+				return false
+			}
+
+			// Create handler
+			handler := NewHandler(validator, nil, testPropertyLogger())
+
+			// Generate multiple connections rapidly
+			connectionIDs := make(map[string]bool)
+			for i := uint8(0); i < numConnections; i++ {
+				conn := handler.createConnection(nil, claims)
+				
+				// Check if connection ID already exists
+				if connectionIDs[conn.ConnectionID] {
+					return false // Duplicate found!
+				}
+				
+				connectionIDs[conn.ConnectionID] = true
+				
+				// Verify connection ID format (should contain user ID)
+				if conn.ConnectionID == "" {
+					return false
+				}
+			}
+
+			// Verify all connection IDs are unique
+			return len(connectionIDs) == int(numConnections)
+		},
+		gen.Identifier(),
+		gen.UInt8(),
+	))
+
+	properties.TestingRun(t, gopter.ConsoleReporter(false))
+}
+
+// Feature: production-readiness
+// Property: Connection ID Format
+// **Validates: Requirements 3.1**
+//
+// For any connection created, the connection ID should be non-empty and
+// contain the user ID as a prefix for traceability and debugging.
+func TestProperty_ConnectionIDFormat(t *testing.T) {
+	parameters := gopter.DefaultTestParameters()
+	parameters.MinSuccessfulTests = 50
+	properties := gopter.NewProperties(parameters)
+
+	properties.Property("connection IDs are non-empty and contain user ID", prop.ForAll(
+		func(userID string) bool {
+			// Skip empty user IDs as they're invalid
+			if userID == "" {
+				return true
+			}
+
+			// Create a valid JWT token
+			token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+				"user_id": userID,
+				"roles":   []string{"user"},
+				"exp":     time.Now().Add(time.Hour).Unix(),
+			})
+
+			tokenString, err := token.SignedString([]byte("test-secret"))
+			if err != nil {
+				return false
+			}
+
+			// Validate the token
+			validator := auth.NewJWTValidator("test-secret")
+			claims, err := validator.ValidateToken(tokenString)
+			if err != nil {
+				return false
+			}
+
+			// Create handler and connection
+			handler := NewHandler(validator, nil, testPropertyLogger())
+			conn := handler.createConnection(nil, claims)
+
+			// Verify connection ID is non-empty
+			if conn.ConnectionID == "" {
+				return false
+			}
+
+			// Verify connection ID starts with user ID for traceability
+			// This helps with debugging and log correlation
+			return len(conn.ConnectionID) > len(userID) &&
+				conn.ConnectionID[:len(userID)] == userID
+		},
+		gen.Identifier(),
+	))
+
+	properties.TestingRun(t, gopter.ConsoleReporter(false))
 }

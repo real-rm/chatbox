@@ -9,8 +9,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"sort"
 	"time"
 
+	"github.com/real-rm/chatbox/internal/metrics"
 	"github.com/real-rm/chatbox/internal/session"
 	"github.com/real-rm/golog"
 	"github.com/real-rm/gomongo"
@@ -38,37 +40,39 @@ type StorageService struct {
 
 // SessionDocument represents a session stored in MongoDB
 type SessionDocument struct {
-	ID               string            `bson:"_id"`
-	UserID           string            `bson:"user_id"`
-	Name             string            `bson:"name"`
-	ModelID          string            `bson:"model_id"`
-	Messages         []MessageDocument `bson:"messages"`
-	StartTime        time.Time         `bson:"start_time"`
-	EndTime          *time.Time        `bson:"end_time,omitempty"`
-	Duration         int64             `bson:"duration"` // seconds
-	AdminAssisted    bool              `bson:"admin_assisted"`
-	AssistingAdminID string            `bson:"assisting_admin_id,omitempty"`
-	HelpRequested    bool              `bson:"help_requested"`
-	TotalTokens      int               `bson:"total_tokens"`
-	MaxResponseTime  int64             `bson:"max_response_time"` // milliseconds
-	AvgResponseTime  int64             `bson:"avg_response_time"` // milliseconds
-	CreatedAt        time.Time         `bson:"_ts,omitempty"`     // gomongo automatic timestamp
-	ModifiedAt       time.Time         `bson:"_mt,omitempty"`     // gomongo automatic timestamp
+	ID                 string            `bson:"_id"`
+	UserID             string            `bson:"uid"`
+	Name               string            `bson:"nm"`
+	ModelID            string            `bson:"modelId"`
+	Messages           []MessageDocument `bson:"msgs"`
+	StartTime          time.Time         `bson:"ts"`
+	EndTime            *time.Time        `bson:"endTs,omitempty"`
+	Duration           int64             `bson:"dur"` // seconds
+	AdminAssisted      bool              `bson:"adminAssisted"`
+	AssistingAdminID   string            `bson:"assistingAdminId,omitempty"`
+	AssistingAdminName string            `bson:"assistingAdminName,omitempty"`
+	HelpRequested      bool              `bson:"helpRequested"`
+	TotalTokens        int               `bson:"totalTokens"`
+	MaxResponseTime    int64             `bson:"maxRespTime"` // milliseconds
+	AvgResponseTime    int64             `bson:"avgRespTime"` // milliseconds
+	CreatedAt          time.Time         `bson:"_ts,omitempty"`     // gomongo automatic timestamp
+	ModifiedAt         time.Time         `bson:"_mt,omitempty"`     // gomongo automatic timestamp
 }
 
 // MessageDocument represents a message stored in MongoDB
 type MessageDocument struct {
 	Content   string            `bson:"content"`
-	Timestamp time.Time         `bson:"timestamp"`
+	Timestamp time.Time         `bson:"ts"`
 	Sender    string            `bson:"sender"` // "user", "ai", "admin"
-	FileID    string            `bson:"file_id,omitempty"`
-	FileURL   string            `bson:"file_url,omitempty"`
-	Metadata  map[string]string `bson:"metadata,omitempty"`
+	FileID    string            `bson:"fileId,omitempty"`
+	FileURL   string            `bson:"fileUrl,omitempty"`
+	Metadata  map[string]string `bson:"meta,omitempty"`
 }
 
 // SessionMetadata represents summary information about a session
 type SessionMetadata struct {
 	ID              string
+	UserID          string // User ID for admin views
 	Name            string
 	LastMessageTime time.Time
 	MessageCount    int
@@ -78,6 +82,23 @@ type SessionMetadata struct {
 	TotalTokens     int
 	MaxResponseTime int64 // milliseconds
 	AvgResponseTime int64 // milliseconds
+}
+// SessionListOptions defines filtering, sorting, and pagination options for listing sessions
+type SessionListOptions struct {
+	// Pagination
+	Limit  int // Maximum number of results to return (default: 100, max: 1000)
+	Offset int // Number of results to skip for pagination
+
+	// Filtering
+	UserID        string     // Filter by specific user ID
+	StartTimeFrom *time.Time // Filter sessions starting after this time
+	StartTimeTo   *time.Time // Filter sessions starting before this time
+	AdminAssisted *bool      // Filter by admin assistance status (nil = all, true = assisted only, false = not assisted)
+	Active        *bool      // Filter by active status (nil = all, true = active only, false = ended only)
+
+	// Sorting
+	SortBy    string // Field to sort by: "ts", "endTs", "message_count", "totalTokens", "uid"
+	SortOrder string // Sort order: "asc" or "desc" (default: "desc")
 }
 
 // Metrics represents aggregated session metrics for admin monitoring
@@ -108,6 +129,55 @@ func NewStorageService(mongo *gomongo.Mongo, dbName, collName string, logger *go
 		encryptionKey: encryptionKey,
 	}
 }
+// EnsureIndexes creates the necessary indexes for the sessions collection
+// This should be called during application initialization to ensure optimal query performance
+func (s *StorageService) EnsureIndexes(ctx context.Context) error {
+	// Create index for user_id (uid) - used for user-specific session queries
+	userIDIndex := mongo.IndexModel{
+		Keys: bson.D{{Key: "uid", Value: 1}},
+		Options: options.Index().SetName("idx_user_id"),
+	}
+
+	// Create index for start_time (ts) - used for time-based queries and sorting
+	startTimeIndex := mongo.IndexModel{
+		Keys: bson.D{{Key: "ts", Value: -1}}, // Descending for most recent first
+		Options: options.Index().SetName("idx_start_time"),
+	}
+
+	// Create index for admin_assisted - used for filtering admin-assisted sessions
+	adminAssistedIndex := mongo.IndexModel{
+		Keys: bson.D{{Key: "adminAssisted", Value: 1}},
+		Options: options.Index().SetName("idx_admin_assisted"),
+	}
+
+	// Create compound index for common query patterns (user_id + start_time)
+	compoundIndex := mongo.IndexModel{
+		Keys: bson.D{
+			{Key: "uid", Value: 1},
+			{Key: "ts", Value: -1},
+		},
+		Options: options.Index().SetName("idx_user_start_time"),
+	}
+
+	// Create all indexes
+	indexes := []mongo.IndexModel{
+		userIDIndex,
+		startTimeIndex,
+		adminAssistedIndex,
+		compoundIndex,
+	}
+
+	_, err := s.collection.CreateIndexes(ctx, indexes)
+	if err != nil {
+		return fmt.Errorf("failed to create indexes: %w", err)
+	}
+
+	s.logger.Info("MongoDB indexes created successfully",
+		"indexes", []string{"idx_user_id", "idx_start_time", "idx_admin_assisted", "idx_user_start_time"},
+	)
+
+	return nil
+}
 
 // CreateSession creates a new session document in MongoDB
 func (s *StorageService) CreateSession(sess *session.Session) error {
@@ -130,6 +200,10 @@ func (s *StorageService) CreateSession(sess *session.Session) error {
 	if err != nil {
 		return fmt.Errorf("failed to create session: %w", err)
 	}
+
+	// Increment session metrics
+	metrics.SessionsCreated.Inc()
+	metrics.ActiveSessions.Inc()
 
 	return nil
 }
@@ -238,20 +312,21 @@ func (s *StorageService) sessionToDocument(sess *session.Session) *SessionDocume
 	}
 
 	return &SessionDocument{
-		ID:               sess.ID,
-		UserID:           sess.UserID,
-		Name:             sess.Name,
-		ModelID:          sess.ModelID,
-		Messages:         messages,
-		StartTime:        sess.StartTime,
-		EndTime:          sess.EndTime,
-		Duration:         duration,
-		AdminAssisted:    sess.AdminAssisted,
-		AssistingAdminID: sess.AssistingAdminID,
-		HelpRequested:    sess.HelpRequested,
-		TotalTokens:      sess.TotalTokens,
-		MaxResponseTime:  maxResponseTime,
-		AvgResponseTime:  avgResponseTime,
+		ID:                 sess.ID,
+		UserID:             sess.UserID,
+		Name:               sess.Name,
+		ModelID:            sess.ModelID,
+		Messages:           messages,
+		StartTime:          sess.StartTime,
+		EndTime:            sess.EndTime,
+		Duration:           duration,
+		AdminAssisted:      sess.AdminAssisted,
+		AssistingAdminID:   sess.AssistingAdminID,
+		AssistingAdminName: sess.AssistingAdminName,
+		HelpRequested:      sess.HelpRequested,
+		TotalTokens:        sess.TotalTokens,
+		MaxResponseTime:    maxResponseTime,
+		AvgResponseTime:    avgResponseTime,
 	}
 }
 
@@ -307,7 +382,7 @@ func (s *StorageService) documentToSession(doc *SessionDocument) *session.Sessio
 		HelpRequested:      doc.HelpRequested,
 		AdminAssisted:      doc.AdminAssisted,
 		AssistingAdminID:   doc.AssistingAdminID,
-		AssistingAdminName: "", // Not stored in document
+		AssistingAdminName: doc.AssistingAdminName,
 		TotalTokens:        doc.TotalTokens,
 		ResponseTimes:      responseTimes,
 	}
@@ -348,8 +423,8 @@ func (s *StorageService) AddMessage(sessionID string, msg *session.Message) erro
 	// Push message to messages array using gomongo (automatically updates _mt)
 	filter := bson.M{"_id": sessionID}
 	update := bson.M{
-		"$push": bson.M{"messages": msgDoc},
-		"$set":  bson.M{"last_activity": time.Now()},
+		"$push": bson.M{"msgs": msgDoc},
+		"$set":  bson.M{"lastActivity": time.Now()},
 	}
 
 	result, err := s.collection.UpdateOne(ctx, filter, update)
@@ -390,8 +465,8 @@ func (s *StorageService) EndSession(sessionID string, endTime time.Time) error {
 	filter := bson.M{"_id": sessionID}
 	update := bson.M{
 		"$set": bson.M{
-			"end_time": endTime,
-			"duration": duration,
+			"endTs": endTime,
+			"dur":   duration,
 		},
 	}
 
@@ -403,6 +478,10 @@ func (s *StorageService) EndSession(sessionID string, endTime time.Time) error {
 	if result.MatchedCount == 0 {
 		return ErrSessionNotFound
 	}
+
+	// Decrement active sessions metric
+	metrics.SessionsEnded.Inc()
+	metrics.ActiveSessions.Dec()
 
 	return nil
 }
@@ -486,11 +565,11 @@ func (s *StorageService) ListUserSessions(userID string, limit int) ([]*SessionM
 	defer cancel()
 
 	// Build query filter
-	filter := bson.M{"user_id": userID}
+	filter := bson.M{"uid": userID}
 
-	// Build find options with sorting by start_time (descending)
+	// Build find options with sorting by ts (descending)
 	findOptions := options.Find()
-	findOptions.SetSort(bson.D{{Key: "start_time", Value: -1}})
+	findOptions.SetSort(bson.D{{Key: "ts", Value: -1}})
 
 	if limit > 0 {
 		findOptions.SetLimit(int64(limit))
@@ -519,6 +598,7 @@ func (s *StorageService) ListUserSessions(userID string, limit int) ([]*SessionM
 
 		metadata := &SessionMetadata{
 			ID:              doc.ID,
+			UserID:          doc.UserID,
 			Name:            doc.Name,
 			LastMessageTime: lastMessageTime,
 			MessageCount:    len(doc.Messages),
@@ -540,6 +620,210 @@ func (s *StorageService) ListUserSessions(userID string, limit int) ([]*SessionM
 	return sessions, nil
 }
 
+// ListAllSessions retrieves all sessions across all users ordered by start time (most recent first)
+// The limit parameter controls the maximum number of sessions to return (0 = no limit)
+// This is primarily used by admin endpoints to view all sessions in the system
+func (s *StorageService) ListAllSessions(limit int) ([]*SessionMetadata, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Build find options with sorting by ts (descending)
+	findOptions := options.Find()
+	findOptions.SetSort(bson.D{{Key: "ts", Value: -1}})
+
+	if limit > 0 {
+		findOptions.SetLimit(int64(limit))
+	}
+
+	// Execute query using gomongo (no filter = all documents)
+	cursor, err := s.collection.Find(ctx, bson.M{}, findOptions)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list all sessions: %w", err)
+	}
+	defer cursor.Close(ctx)
+
+	// Decode results
+	var sessions []*SessionMetadata
+	for cursor.Next(ctx) {
+		var doc SessionDocument
+		if err := cursor.Decode(&doc); err != nil {
+			return nil, fmt.Errorf("failed to decode session document: %w", err)
+		}
+
+		// Determine last message time
+		lastMessageTime := doc.StartTime
+		if len(doc.Messages) > 0 {
+			lastMessageTime = doc.Messages[len(doc.Messages)-1].Timestamp
+		}
+
+		metadata := &SessionMetadata{
+			ID:              doc.ID,
+			UserID:          doc.UserID, // Include user ID for admin view
+			Name:            doc.Name,
+			LastMessageTime: lastMessageTime,
+			MessageCount:    len(doc.Messages),
+			AdminAssisted:   doc.AdminAssisted,
+			StartTime:       doc.StartTime,
+			EndTime:         doc.EndTime,
+			TotalTokens:     doc.TotalTokens,
+			MaxResponseTime: doc.MaxResponseTime,
+			AvgResponseTime: doc.AvgResponseTime,
+		}
+
+		sessions = append(sessions, metadata)
+	}
+
+	if err := cursor.Err(); err != nil {
+		return nil, fmt.Errorf("cursor error: %w", err)
+	}
+
+	return sessions, nil
+}
+// ListAllSessionsWithOptions lists all sessions with filtering, sorting, and pagination
+// This method is designed for admin dashboards to efficiently query large session datasets
+func (s *StorageService) ListAllSessionsWithOptions(opts *SessionListOptions) ([]*SessionMetadata, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Set defaults
+	if opts == nil {
+		opts = &SessionListOptions{}
+	}
+	if opts.Limit <= 0 {
+		opts.Limit = 100
+	}
+	if opts.Limit > 1000 {
+		opts.Limit = 1000 // Cap at 1000 for performance
+	}
+	if opts.SortBy == "" {
+		opts.SortBy = "ts"
+	}
+	if opts.SortOrder == "" {
+		opts.SortOrder = "desc"
+	}
+
+	// Build filter
+	filter := bson.M{}
+
+	if opts.UserID != "" {
+		filter["uid"] = opts.UserID
+	}
+
+	if opts.StartTimeFrom != nil {
+		filter["ts"] = bson.M{"$gte": *opts.StartTimeFrom}
+	}
+
+	if opts.StartTimeTo != nil {
+		if existingFilter, ok := filter["ts"].(bson.M); ok {
+			existingFilter["$lte"] = *opts.StartTimeTo
+		} else {
+			filter["ts"] = bson.M{"$lte": *opts.StartTimeTo}
+		}
+	}
+
+	if opts.AdminAssisted != nil {
+		filter["adminAssisted"] = *opts.AdminAssisted
+	}
+
+	if opts.Active != nil {
+		if *opts.Active {
+			// Active sessions have no endTs
+			filter["endTs"] = bson.M{"$exists": false}
+		} else {
+			// Ended sessions have endTs
+			filter["endTs"] = bson.M{"$exists": true}
+		}
+	}
+
+	// Build sort
+	sortOrder := -1 // descending
+	if opts.SortOrder == "asc" {
+		sortOrder = 1
+	}
+
+	sortField := "ts"
+	switch opts.SortBy {
+	case "endTs":
+		sortField = "endTs"
+	case "message_count":
+		// We'll need to sort by array size, which requires aggregation
+		// For now, we'll sort by ts and handle message_count in application
+		sortField = "ts"
+	case "totalTokens":
+		sortField = "totalTokens"
+	case "uid":
+		sortField = "uid"
+	default:
+		sortField = "ts"
+	}
+
+	// Build find options
+	findOptions := options.Find()
+	findOptions.SetSort(bson.D{{Key: sortField, Value: sortOrder}})
+	findOptions.SetLimit(int64(opts.Limit))
+	findOptions.SetSkip(int64(opts.Offset))
+
+	// Execute query
+	cursor, err := s.collection.Find(ctx, filter, findOptions)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list sessions with options: %w", err)
+	}
+	defer cursor.Close(ctx)
+
+	// Decode results
+	var sessions []*SessionMetadata
+	for cursor.Next(ctx) {
+		var doc SessionDocument
+		if err := cursor.Decode(&doc); err != nil {
+			return nil, fmt.Errorf("failed to decode session document: %w", err)
+		}
+
+		// Determine last message time
+		lastMessageTime := doc.StartTime
+		if len(doc.Messages) > 0 {
+			lastMessageTime = doc.Messages[len(doc.Messages)-1].Timestamp
+		}
+
+		metadata := &SessionMetadata{
+			ID:              doc.ID,
+			UserID:          doc.UserID,
+			Name:            doc.Name,
+			LastMessageTime: lastMessageTime,
+			MessageCount:    len(doc.Messages),
+			AdminAssisted:   doc.AdminAssisted,
+			StartTime:       doc.StartTime,
+			EndTime:         doc.EndTime,
+			TotalTokens:     doc.TotalTokens,
+			MaxResponseTime: doc.MaxResponseTime,
+			AvgResponseTime: doc.AvgResponseTime,
+		}
+
+		sessions = append(sessions, metadata)
+	}
+
+	if err := cursor.Err(); err != nil {
+		return nil, fmt.Errorf("cursor error: %w", err)
+	}
+
+	// If sorting by message_count, sort in application
+	if opts.SortBy == "message_count" {
+		sortByMessageCount(sessions, opts.SortOrder == "asc")
+	}
+
+	return sessions, nil
+}
+
+// sortByMessageCount sorts sessions by message count in place using O(n log n) algorithm
+func sortByMessageCount(sessions []*SessionMetadata, ascending bool) {
+	sort.Slice(sessions, func(i, j int) bool {
+		if ascending {
+			return sessions[i].MessageCount < sessions[j].MessageCount
+		}
+		return sessions[i].MessageCount > sessions[j].MessageCount
+	})
+}
+
+
 // GetSessionMetrics calculates aggregated metrics for all sessions within a time period
 // Returns metrics including total sessions, active sessions, token usage, and response times
 func (s *StorageService) GetSessionMetrics(startTime, endTime time.Time) (*Metrics, error) {
@@ -552,7 +836,7 @@ func (s *StorageService) GetSessionMetrics(startTime, endTime time.Time) (*Metri
 
 	// Build query filter for sessions within time range
 	filter := bson.M{
-		"start_time": bson.M{
+		"ts": bson.M{
 			"$gte": startTime,
 			"$lte": endTime,
 		},
@@ -645,14 +929,10 @@ func (s *StorageService) GetSessionMetrics(startTime, endTime time.Time) (*Metri
 			timestamps = append(timestamps, ts)
 		}
 
-		// Simple sort (bubble sort for small datasets)
-		for i := 0; i < len(timestamps); i++ {
-			for j := i + 1; j < len(timestamps); j++ {
-				if timestamps[i] > timestamps[j] {
-					timestamps[i], timestamps[j] = timestamps[j], timestamps[i]
-				}
-			}
-		}
+		// Sort timestamps using efficient O(n log n) algorithm
+		sort.Slice(timestamps, func(i, j int) bool {
+			return timestamps[i] < timestamps[j]
+		})
 
 		// Calculate running concurrent count
 		currentConcurrent := 0
@@ -688,14 +968,14 @@ func (s *StorageService) GetTokenUsage(startTime, endTime time.Time) (int, error
 	// Use MongoDB aggregation pipeline to sum token usage
 	pipeline := mongo.Pipeline{
 		{{Key: "$match", Value: bson.M{
-			"start_time": bson.M{
+			"ts": bson.M{
 				"$gte": startTime,
 				"$lte": endTime,
 			},
 		}}},
 		{{Key: "$group", Value: bson.M{
-			"_id":          nil,
-			"total_tokens": bson.M{"$sum": "$total_tokens"},
+			"_id":        nil,
+			"totalTokens": bson.M{"$sum": "$totalTokens"},
 		}}},
 	}
 
@@ -707,7 +987,7 @@ func (s *StorageService) GetTokenUsage(startTime, endTime time.Time) (int, error
 
 	// Extract result
 	var result struct {
-		TotalTokens int `bson:"total_tokens"`
+		TotalTokens int `bson:"totalTokens"`
 	}
 
 	if cursor.Next(ctx) {

@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/real-rm/chatbox/internal/metrics"
 	"github.com/real-rm/goconfig"
 	"github.com/real-rm/golog"
 )
@@ -138,6 +140,8 @@ func NewLLMService(cfg *goconfig.ConfigAccessor, logger *golog.Logger) (*LLMServ
 }
 
 // loadLLMProviders loads LLM provider configurations from ConfigAccessor
+// Priority: Environment variables > Config file
+// This allows Kubernetes secrets to override config.toml values
 func loadLLMProviders(cfg *goconfig.ConfigAccessor) ([]LLMProviderConfig, error) {
 	// Get the llm.providers array from config
 	providersConfig, err := cfg.Config("llm.providers")
@@ -171,6 +175,13 @@ func loadLLMProviders(cfg *goconfig.ConfigAccessor) ([]LLMProviderConfig, error)
 			Endpoint: getStringFromMap(providerMap, "endpoint"),
 			APIKey:   getStringFromMap(providerMap, "apiKey"),
 			Model:    getStringFromMap(providerMap, "model"),
+		}
+
+		// Override API key from environment variable if available
+		// Format: LLM_PROVIDER_<INDEX>_API_KEY (e.g., LLM_PROVIDER_1_API_KEY)
+		envKey := fmt.Sprintf("LLM_PROVIDER_%d_API_KEY", i+1)
+		if envAPIKey := os.Getenv(envKey); envAPIKey != "" {
+			provider.APIKey = envAPIKey
 		}
 
 		// Validate required fields
@@ -251,6 +262,9 @@ func (s *LLMService) SendMessage(ctx context.Context, modelID string, messages [
 	if err != nil {
 		return nil, err
 	}
+	
+	// Get provider name for metrics
+	providerName := s.getProviderName(modelID)
 
 	req := &LLMRequest{
 		ModelID:  modelID,
@@ -281,21 +295,37 @@ func (s *LLMService) SendMessage(ctx context.Context, modelID string, messages [
 			}
 		}
 
+		// Increment LLM requests metric
+		metrics.LLMRequests.WithLabelValues(providerName).Inc()
+
 		// Measure response time
 		startTime := time.Now()
 		resp, err := provider.SendMessage(ctx, req)
 		duration := time.Since(startTime)
+		
+		// Record latency metric
+		metrics.LLMLatency.WithLabelValues(providerName).Observe(duration.Seconds())
 
 		if err == nil {
 			// Success - ensure duration is set
 			if resp.Duration == 0 {
 				resp.Duration = duration
 			}
+			
+			// Record token usage metric
+			if resp.TokensUsed > 0 {
+				metrics.TokensUsed.WithLabelValues(providerName).Add(float64(resp.TokensUsed))
+			}
+			
 			s.logger.Info("LLM request successful", "model_id", modelID, "duration", duration, "tokens", resp.TokensUsed)
 			return resp, nil
 		}
 
 		lastErr = err
+		
+		// Increment LLM errors metric
+		metrics.LLMErrors.WithLabelValues(providerName).Inc()
+		
 		s.logger.Warn("LLM request failed", "model_id", modelID, "attempt", attempt+1, "error", err)
 
 		// Check if error is retryable
@@ -318,6 +348,9 @@ func (s *LLMService) StreamMessage(ctx context.Context, modelID string, messages
 	if err != nil {
 		return nil, err
 	}
+	
+	// Get provider name for metrics
+	providerName := s.getProviderName(modelID)
 
 	req := &LLMRequest{
 		ModelID:  modelID,
@@ -348,6 +381,12 @@ func (s *LLMService) StreamMessage(ctx context.Context, modelID string, messages
 			}
 		}
 
+		// Increment LLM requests metric
+		metrics.LLMRequests.WithLabelValues(providerName).Inc()
+		
+		// Track start time for latency measurement
+		startTime := time.Now()
+
 		chunkChan, err := provider.StreamMessage(ctx, req)
 		if err == nil {
 			// Success - wrap channel to track response time
@@ -355,7 +394,14 @@ func (s *LLMService) StreamMessage(ctx context.Context, modelID string, messages
 			wrappedChan := make(chan *LLMChunk)
 			go func() {
 				defer close(wrappedChan)
+				firstChunk := true
 				for chunk := range chunkChan {
+					// Record latency for first chunk (time to first token)
+					if firstChunk {
+						duration := time.Since(startTime)
+						metrics.LLMLatency.WithLabelValues(providerName).Observe(duration.Seconds())
+						firstChunk = false
+					}
 					wrappedChan <- chunk
 				}
 			}()
@@ -363,6 +409,10 @@ func (s *LLMService) StreamMessage(ctx context.Context, modelID string, messages
 		}
 
 		lastErr = err
+		
+		// Increment LLM errors metric
+		metrics.LLMErrors.WithLabelValues(providerName).Inc()
+		
 		s.logger.Warn("LLM stream request failed", "model_id", modelID, "attempt", attempt+1, "error", err)
 
 		// Check if error is retryable
@@ -429,6 +479,20 @@ func (s *LLMService) getProvider(modelID string) (LLMProvider, error) {
 
 	return provider, nil
 }
+// getProviderName returns the provider name (type) for a given model ID
+// Returns "unknown" if the model is not found
+func (s *LLMService) getProviderName(modelID string) string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	// Check the models map to find the matching model
+	if modelInfo, exists := s.models[modelID]; exists {
+		return modelInfo.Type
+	}
+
+	return "unknown"
+}
+
 
 // isRetryableError determines if an error should trigger a retry
 func isRetryableError(err error) bool {

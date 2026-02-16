@@ -470,6 +470,7 @@ func TestSessionToDocument_Conversion(t *testing.T) {
 	assert.Equal(t, 100, doc.TotalTokens)
 	assert.Equal(t, int64(2000), doc.MaxResponseTime) // 2 seconds
 	assert.Equal(t, int64(1500), doc.AvgResponseTime) // 1.5 seconds average
+	assert.Equal(t, "Admin User", doc.AssistingAdminName)
 }
 
 func TestDocumentToSession_Conversion(t *testing.T) {
@@ -591,6 +592,33 @@ func TestDocumentToSession_NoResponseTimes(t *testing.T) {
 	sess := service.documentToSession(doc)
 
 	assert.Empty(t, sess.ResponseTimes)
+}
+
+func TestAdminNameRoundTrip(t *testing.T) {
+	service := &StorageService{}
+
+	now := time.Now()
+	originalSession := &session.Session{
+		ID:                 "admin-name-test",
+		UserID:             "user-123",
+		Name:               "Admin Name Test",
+		StartTime:          now,
+		AdminAssisted:      true,
+		AssistingAdminID:   "admin-456",
+		AssistingAdminName: "John Admin",
+		Messages:           []*session.Message{},
+	}
+
+	// Convert session to document
+	doc := service.sessionToDocument(originalSession)
+	assert.Equal(t, "admin-456", doc.AssistingAdminID)
+	assert.Equal(t, "John Admin", doc.AssistingAdminName)
+
+	// Convert document back to session
+	restoredSession := service.documentToSession(doc)
+	assert.Equal(t, "admin-456", restoredSession.AssistingAdminID)
+	assert.Equal(t, "John Admin", restoredSession.AssistingAdminName)
+	assert.True(t, restoredSession.AdminAssisted)
 }
 
 func TestAddMessage_ValidMessage(t *testing.T) {
@@ -1324,3 +1352,850 @@ func TestGetTokenUsage_PartialTimeRange(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, 200, totalTokens) // Only the session in range
 }
+
+func TestListAllSessionsWithOptions_Pagination(t *testing.T) {
+	mongoClient, logger, cleanup := setupTestMongoDB(t)
+	defer cleanup()
+
+	service := NewStorageService(mongoClient, "test_chat_db", "sessions", logger, nil)
+
+	// Create 25 sessions
+	for i := 0; i < 25; i++ {
+		sess := &session.Session{
+			ID:        fmt.Sprintf("session-%d", i),
+			UserID:    "user-1",
+			Name:      fmt.Sprintf("Session %d", i),
+			Messages:  []*session.Message{},
+			StartTime: time.Now().Add(time.Duration(-i) * time.Hour),
+		}
+		err := service.CreateSession(sess)
+		require.NoError(t, err)
+	}
+
+	// Test pagination - first page
+	opts := &SessionListOptions{
+		Limit:  10,
+		Offset: 0,
+	}
+	sessions, err := service.ListAllSessionsWithOptions(opts)
+	assert.NoError(t, err)
+	assert.Equal(t, 10, len(sessions))
+
+	// Test pagination - second page
+	opts.Offset = 10
+	sessions, err = service.ListAllSessionsWithOptions(opts)
+	assert.NoError(t, err)
+	assert.Equal(t, 10, len(sessions))
+
+	// Test pagination - third page
+	opts.Offset = 20
+	sessions, err = service.ListAllSessionsWithOptions(opts)
+	assert.NoError(t, err)
+	assert.Equal(t, 5, len(sessions))
+}
+
+func TestListAllSessionsWithOptions_FilterByUser(t *testing.T) {
+	mongoClient, logger, cleanup := setupTestMongoDB(t)
+	defer cleanup()
+
+	service := NewStorageService(mongoClient, "test_chat_db", "sessions", logger, nil)
+
+	// Create sessions for different users
+	users := []string{"user-1", "user-2", "user-3"}
+	for _, userID := range users {
+		for i := 0; i < 3; i++ {
+			sess := &session.Session{
+				ID:        fmt.Sprintf("%s-session-%d", userID, i),
+				UserID:    userID,
+				Name:      fmt.Sprintf("Session %d", i),
+				Messages:  []*session.Message{},
+				StartTime: time.Now(),
+			}
+			err := service.CreateSession(sess)
+			require.NoError(t, err)
+		}
+	}
+
+	// Filter by user-2
+	opts := &SessionListOptions{
+		UserID: "user-2",
+		Limit:  100,
+	}
+	sessions, err := service.ListAllSessionsWithOptions(opts)
+	assert.NoError(t, err)
+	assert.Equal(t, 3, len(sessions))
+	for _, sess := range sessions {
+		assert.Equal(t, "user-2", sess.UserID)
+	}
+}
+
+func TestListAllSessionsWithOptions_FilterByDateRange(t *testing.T) {
+	mongoClient, logger, cleanup := setupTestMongoDB(t)
+	defer cleanup()
+
+	service := NewStorageService(mongoClient, "test_chat_db", "sessions", logger, nil)
+
+	now := time.Now()
+
+	// Create sessions at different times
+	sessions := []*session.Session{
+		{
+			ID:        "old-session",
+			UserID:    "user-1",
+			Name:      "Old Session",
+			Messages:  []*session.Message{},
+			StartTime: now.Add(-10 * time.Hour),
+		},
+		{
+			ID:        "recent-session-1",
+			UserID:    "user-1",
+			Name:      "Recent Session 1",
+			Messages:  []*session.Message{},
+			StartTime: now.Add(-2 * time.Hour),
+		},
+		{
+			ID:        "recent-session-2",
+			UserID:    "user-1",
+			Name:      "Recent Session 2",
+			Messages:  []*session.Message{},
+			StartTime: now.Add(-1 * time.Hour),
+		},
+		{
+			ID:        "future-session",
+			UserID:    "user-1",
+			Name:      "Future Session",
+			Messages:  []*session.Message{},
+			StartTime: now.Add(1 * time.Hour),
+		},
+	}
+
+	for _, sess := range sessions {
+		err := service.CreateSession(sess)
+		require.NoError(t, err)
+	}
+
+	// Filter by date range (last 3 hours)
+	startTimeFrom := now.Add(-3 * time.Hour)
+	startTimeTo := now
+	opts := &SessionListOptions{
+		StartTimeFrom: &startTimeFrom,
+		StartTimeTo:   &startTimeTo,
+		Limit:         100,
+	}
+	result, err := service.ListAllSessionsWithOptions(opts)
+	assert.NoError(t, err)
+	assert.Equal(t, 2, len(result))
+}
+
+func TestListAllSessionsWithOptions_FilterByAdminAssisted(t *testing.T) {
+	mongoClient, logger, cleanup := setupTestMongoDB(t)
+	defer cleanup()
+
+	service := NewStorageService(mongoClient, "test_chat_db", "sessions", logger, nil)
+
+	// Create sessions with and without admin assistance
+	sessions := []*session.Session{
+		{
+			ID:            "assisted-1",
+			UserID:        "user-1",
+			Name:          "Assisted Session 1",
+			Messages:      []*session.Message{},
+			StartTime:     time.Now(),
+			AdminAssisted: true,
+		},
+		{
+			ID:            "assisted-2",
+			UserID:        "user-2",
+			Name:          "Assisted Session 2",
+			Messages:      []*session.Message{},
+			StartTime:     time.Now(),
+			AdminAssisted: true,
+		},
+		{
+			ID:            "not-assisted-1",
+			UserID:        "user-3",
+			Name:          "Not Assisted Session",
+			Messages:      []*session.Message{},
+			StartTime:     time.Now(),
+			AdminAssisted: false,
+		},
+	}
+
+	for _, sess := range sessions {
+		err := service.CreateSession(sess)
+		require.NoError(t, err)
+	}
+
+	// Filter for admin assisted sessions
+	adminAssisted := true
+	opts := &SessionListOptions{
+		AdminAssisted: &adminAssisted,
+		Limit:         100,
+	}
+	result, err := service.ListAllSessionsWithOptions(opts)
+	assert.NoError(t, err)
+	assert.Equal(t, 2, len(result))
+	for _, sess := range result {
+		assert.True(t, sess.AdminAssisted)
+	}
+
+	// Filter for non-assisted sessions
+	notAssisted := false
+	opts.AdminAssisted = &notAssisted
+	result, err = service.ListAllSessionsWithOptions(opts)
+	assert.NoError(t, err)
+	assert.Equal(t, 1, len(result))
+	assert.False(t, result[0].AdminAssisted)
+}
+
+func TestListAllSessionsWithOptions_FilterByActiveStatus(t *testing.T) {
+	mongoClient, logger, cleanup := setupTestMongoDB(t)
+	defer cleanup()
+
+	service := NewStorageService(mongoClient, "test_chat_db", "sessions", logger, nil)
+
+	now := time.Now()
+	endTime := now.Add(-1 * time.Hour)
+
+	// Create active and ended sessions
+	sessions := []*session.Session{
+		{
+			ID:        "active-1",
+			UserID:    "user-1",
+			Name:      "Active Session 1",
+			Messages:  []*session.Message{},
+			StartTime: now,
+			EndTime:   nil,
+		},
+		{
+			ID:        "active-2",
+			UserID:    "user-2",
+			Name:      "Active Session 2",
+			Messages:  []*session.Message{},
+			StartTime: now,
+			EndTime:   nil,
+		},
+		{
+			ID:        "ended-1",
+			UserID:    "user-3",
+			Name:      "Ended Session",
+			Messages:  []*session.Message{},
+			StartTime: now.Add(-2 * time.Hour),
+			EndTime:   &endTime,
+		},
+	}
+
+	for _, sess := range sessions {
+		err := service.CreateSession(sess)
+		require.NoError(t, err)
+	}
+
+	// Filter for active sessions
+	active := true
+	opts := &SessionListOptions{
+		Active: &active,
+		Limit:  100,
+	}
+	result, err := service.ListAllSessionsWithOptions(opts)
+	assert.NoError(t, err)
+	assert.Equal(t, 2, len(result))
+	for _, sess := range result {
+		assert.Nil(t, sess.EndTime)
+	}
+
+	// Filter for ended sessions
+	notActive := false
+	opts.Active = &notActive
+	result, err = service.ListAllSessionsWithOptions(opts)
+	assert.NoError(t, err)
+	assert.Equal(t, 1, len(result))
+	assert.NotNil(t, result[0].EndTime)
+}
+
+func TestListAllSessionsWithOptions_SortByStartTime(t *testing.T) {
+	mongoClient, logger, cleanup := setupTestMongoDB(t)
+	defer cleanup()
+
+	service := NewStorageService(mongoClient, "test_chat_db", "sessions", logger, nil)
+
+	now := time.Now()
+
+	// Create sessions at different times
+	sessions := []*session.Session{
+		{
+			ID:        "session-3",
+			UserID:    "user-1",
+			Name:      "Session 3",
+			Messages:  []*session.Message{},
+			StartTime: now.Add(-1 * time.Hour),
+		},
+		{
+			ID:        "session-1",
+			UserID:    "user-1",
+			Name:      "Session 1",
+			Messages:  []*session.Message{},
+			StartTime: now.Add(-3 * time.Hour),
+		},
+		{
+			ID:        "session-2",
+			UserID:    "user-1",
+			Name:      "Session 2",
+			Messages:  []*session.Message{},
+			StartTime: now.Add(-2 * time.Hour),
+		},
+	}
+
+	for _, sess := range sessions {
+		err := service.CreateSession(sess)
+		require.NoError(t, err)
+	}
+
+	// Sort by start_time descending (default)
+	opts := &SessionListOptions{
+		SortBy:    "start_time",
+		SortOrder: "desc",
+		Limit:     100,
+	}
+	result, err := service.ListAllSessionsWithOptions(opts)
+	assert.NoError(t, err)
+	assert.Equal(t, 3, len(result))
+	assert.Equal(t, "session-3", result[0].ID)
+	assert.Equal(t, "session-2", result[1].ID)
+	assert.Equal(t, "session-1", result[2].ID)
+
+	// Sort by start_time ascending
+	opts.SortOrder = "asc"
+	result, err = service.ListAllSessionsWithOptions(opts)
+	assert.NoError(t, err)
+	assert.Equal(t, 3, len(result))
+	assert.Equal(t, "session-1", result[0].ID)
+	assert.Equal(t, "session-2", result[1].ID)
+	assert.Equal(t, "session-3", result[2].ID)
+}
+
+func TestListAllSessionsWithOptions_SortByMessageCount(t *testing.T) {
+	mongoClient, logger, cleanup := setupTestMongoDB(t)
+	defer cleanup()
+
+	service := NewStorageService(mongoClient, "test_chat_db", "sessions", logger, nil)
+
+	// Create sessions with different message counts
+	sessions := []*session.Session{
+		{
+			ID:       "session-1",
+			UserID:   "user-1",
+			Name:     "Session 1",
+			Messages: []*session.Message{{Content: "msg1", Timestamp: time.Now(), Sender: "user"}},
+			StartTime: time.Now(),
+		},
+		{
+			ID:       "session-2",
+			UserID:   "user-1",
+			Name:     "Session 2",
+			Messages: []*session.Message{
+				{Content: "msg1", Timestamp: time.Now(), Sender: "user"},
+				{Content: "msg2", Timestamp: time.Now(), Sender: "ai"},
+				{Content: "msg3", Timestamp: time.Now(), Sender: "user"},
+			},
+			StartTime: time.Now(),
+		},
+		{
+			ID:       "session-3",
+			UserID:   "user-1",
+			Name:     "Session 3",
+			Messages: []*session.Message{
+				{Content: "msg1", Timestamp: time.Now(), Sender: "user"},
+				{Content: "msg2", Timestamp: time.Now(), Sender: "ai"},
+			},
+			StartTime: time.Now(),
+		},
+	}
+
+	for _, sess := range sessions {
+		err := service.CreateSession(sess)
+		require.NoError(t, err)
+	}
+
+	// Sort by message_count descending
+	opts := &SessionListOptions{
+		SortBy:    "message_count",
+		SortOrder: "desc",
+		Limit:     100,
+	}
+	result, err := service.ListAllSessionsWithOptions(opts)
+	assert.NoError(t, err)
+	assert.Equal(t, 3, len(result))
+	assert.Equal(t, "session-2", result[0].ID)
+	assert.Equal(t, 3, result[0].MessageCount)
+	assert.Equal(t, "session-3", result[1].ID)
+	assert.Equal(t, 2, result[1].MessageCount)
+	assert.Equal(t, "session-1", result[2].ID)
+	assert.Equal(t, 1, result[2].MessageCount)
+
+	// Sort by message_count ascending
+	opts.SortOrder = "asc"
+	result, err = service.ListAllSessionsWithOptions(opts)
+	assert.NoError(t, err)
+	assert.Equal(t, 3, len(result))
+	assert.Equal(t, "session-1", result[0].ID)
+	assert.Equal(t, "session-3", result[1].ID)
+	assert.Equal(t, "session-2", result[2].ID)
+}
+
+func TestListAllSessionsWithOptions_SortByTotalTokens(t *testing.T) {
+	mongoClient, logger, cleanup := setupTestMongoDB(t)
+	defer cleanup()
+
+	service := NewStorageService(mongoClient, "test_chat_db", "sessions", logger, nil)
+
+	// Create sessions with different token counts
+	sessions := []*session.Session{
+		{
+			ID:          "session-1",
+			UserID:      "user-1",
+			Name:        "Session 1",
+			Messages:    []*session.Message{},
+			StartTime:   time.Now(),
+			TotalTokens: 100,
+		},
+		{
+			ID:          "session-2",
+			UserID:      "user-1",
+			Name:        "Session 2",
+			Messages:    []*session.Message{},
+			StartTime:   time.Now(),
+			TotalTokens: 500,
+		},
+		{
+			ID:          "session-3",
+			UserID:      "user-1",
+			Name:        "Session 3",
+			Messages:    []*session.Message{},
+			StartTime:   time.Now(),
+			TotalTokens: 250,
+		},
+	}
+
+	for _, sess := range sessions {
+		err := service.CreateSession(sess)
+		require.NoError(t, err)
+	}
+
+	// Sort by total_tokens descending
+	opts := &SessionListOptions{
+		SortBy:    "total_tokens",
+		SortOrder: "desc",
+		Limit:     100,
+	}
+	result, err := service.ListAllSessionsWithOptions(opts)
+	assert.NoError(t, err)
+	assert.Equal(t, 3, len(result))
+	assert.Equal(t, "session-2", result[0].ID)
+	assert.Equal(t, 500, result[0].TotalTokens)
+	assert.Equal(t, "session-3", result[1].ID)
+	assert.Equal(t, 250, result[1].TotalTokens)
+	assert.Equal(t, "session-1", result[2].ID)
+	assert.Equal(t, 100, result[2].TotalTokens)
+}
+
+func TestListAllSessionsWithOptions_DefaultValues(t *testing.T) {
+	mongoClient, logger, cleanup := setupTestMongoDB(t)
+	defer cleanup()
+
+	service := NewStorageService(mongoClient, "test_chat_db", "sessions", logger, nil)
+
+	// Create a few sessions
+	for i := 0; i < 5; i++ {
+		sess := &session.Session{
+			ID:        fmt.Sprintf("session-%d", i),
+			UserID:    "user-1",
+			Name:      fmt.Sprintf("Session %d", i),
+			Messages:  []*session.Message{},
+			StartTime: time.Now().Add(time.Duration(-i) * time.Hour),
+		}
+		err := service.CreateSession(sess)
+		require.NoError(t, err)
+	}
+
+	// Test with nil options (should use defaults)
+	result, err := service.ListAllSessionsWithOptions(nil)
+	assert.NoError(t, err)
+	assert.Equal(t, 5, len(result))
+
+	// Test with empty options (should use defaults)
+	opts := &SessionListOptions{}
+	result, err = service.ListAllSessionsWithOptions(opts)
+	assert.NoError(t, err)
+	assert.Equal(t, 5, len(result))
+	// Should be sorted by start_time descending by default
+	assert.Equal(t, "session-0", result[0].ID)
+}
+
+func TestListAllSessionsWithOptions_LimitCap(t *testing.T) {
+	mongoClient, logger, cleanup := setupTestMongoDB(t)
+	defer cleanup()
+
+	service := NewStorageService(mongoClient, "test_chat_db", "sessions", logger, nil)
+
+	// Create a session
+	sess := &session.Session{
+		ID:        "session-1",
+		UserID:    "user-1",
+		Name:      "Session 1",
+		Messages:  []*session.Message{},
+		StartTime: time.Now(),
+	}
+	err := service.CreateSession(sess)
+	require.NoError(t, err)
+
+	// Test with limit > 1000 (should be capped at 1000)
+	opts := &SessionListOptions{
+		Limit: 5000,
+	}
+	result, err := service.ListAllSessionsWithOptions(opts)
+	assert.NoError(t, err)
+	assert.Equal(t, 1, len(result))
+}
+
+func TestListAllSessionsWithOptions_CombinedFilters(t *testing.T) {
+	mongoClient, logger, cleanup := setupTestMongoDB(t)
+	defer cleanup()
+
+	service := NewStorageService(mongoClient, "test_chat_db", "sessions", logger, nil)
+
+	now := time.Now()
+	endTime := now.Add(-1 * time.Hour)
+
+	// Create diverse sessions
+	sessions := []*session.Session{
+		{
+			ID:            "match-1",
+			UserID:        "user-1",
+			Name:          "Match 1",
+			Messages:      []*session.Message{{Content: "msg", Timestamp: now, Sender: "user"}},
+			StartTime:     now.Add(-2 * time.Hour),
+			AdminAssisted: true,
+			EndTime:       nil,
+		},
+		{
+			ID:            "match-2",
+			UserID:        "user-1",
+			Name:          "Match 2",
+			Messages:      []*session.Message{{Content: "msg", Timestamp: now, Sender: "user"}},
+			StartTime:     now.Add(-1 * time.Hour),
+			AdminAssisted: true,
+			EndTime:       nil,
+		},
+		{
+			ID:            "no-match-user",
+			UserID:        "user-2",
+			Name:          "No Match User",
+			Messages:      []*session.Message{},
+			StartTime:     now.Add(-1 * time.Hour),
+			AdminAssisted: true,
+			EndTime:       nil,
+		},
+		{
+			ID:            "no-match-admin",
+			UserID:        "user-1",
+			Name:          "No Match Admin",
+			Messages:      []*session.Message{},
+			StartTime:     now.Add(-1 * time.Hour),
+			AdminAssisted: false,
+			EndTime:       nil,
+		},
+		{
+			ID:            "no-match-ended",
+			UserID:        "user-1",
+			Name:          "No Match Ended",
+			Messages:      []*session.Message{},
+			StartTime:     now.Add(-1 * time.Hour),
+			AdminAssisted: true,
+			EndTime:       &endTime,
+		},
+	}
+
+	for _, sess := range sessions {
+		err := service.CreateSession(sess)
+		require.NoError(t, err)
+	}
+
+	// Filter: user-1, admin assisted, active, last 3 hours
+	adminAssisted := true
+	active := true
+	startTimeFrom := now.Add(-3 * time.Hour)
+	opts := &SessionListOptions{
+		UserID:        "user-1",
+		AdminAssisted: &adminAssisted,
+		Active:        &active,
+		StartTimeFrom: &startTimeFrom,
+		Limit:         100,
+	}
+	result, err := service.ListAllSessionsWithOptions(opts)
+	assert.NoError(t, err)
+	assert.Equal(t, 2, len(result))
+	assert.Equal(t, "match-2", result[0].ID)
+	assert.Equal(t, "match-1", result[1].ID)
+}
+
+// TestListAllSessionsWithOptions_LargeDataset tests performance with large datasets
+func TestListAllSessionsWithOptions_LargeDataset(t *testing.T) {
+	mongoClient, logger, cleanup := setupTestMongoDB(t)
+	defer cleanup()
+
+	service := NewStorageService(mongoClient, "test_db", "test_sessions_large", logger, nil)
+	require.NotNil(t, service)
+
+	now := time.Now()
+
+	// Create 1000 sessions with varied data
+	t.Log("Creating 1000 test sessions...")
+	for i := 0; i < 1000; i++ {
+		userID := fmt.Sprintf("user-%d", i%100) // 100 different users
+		adminAssisted := i%3 == 0               // ~33% admin assisted
+		var endTime *time.Time
+		if i%2 == 0 { // 50% ended sessions
+			et := now.Add(time.Duration(i) * time.Minute)
+			endTime = &et
+		}
+
+		sess := &session.Session{
+			ID:            fmt.Sprintf("session-%d", i),
+			UserID:        userID,
+			Name:          fmt.Sprintf("Session %d", i),
+			Messages:      []*session.Message{{Content: fmt.Sprintf("msg-%d", i), Timestamp: now, Sender: "user"}},
+			StartTime:     now.Add(-time.Duration(i) * time.Minute),
+			AdminAssisted: adminAssisted,
+			TotalTokens:   i * 10,
+			EndTime:       endTime,
+		}
+
+		err := service.CreateSession(sess)
+		require.NoError(t, err)
+	}
+	t.Log("Created 1000 test sessions")
+
+	// Test 1: Pagination through large dataset
+	t.Run("Pagination", func(t *testing.T) {
+		// First page
+		opts := &SessionListOptions{
+			Limit:     100,
+			Offset:    0,
+			SortBy:    "start_time",
+			SortOrder: "desc",
+		}
+		result, err := service.ListAllSessionsWithOptions(opts)
+		assert.NoError(t, err)
+		assert.Equal(t, 100, len(result))
+
+		// Second page
+		opts.Offset = 100
+		result, err = service.ListAllSessionsWithOptions(opts)
+		assert.NoError(t, err)
+		assert.Equal(t, 100, len(result))
+
+		// Last page
+		opts.Offset = 900
+		result, err = service.ListAllSessionsWithOptions(opts)
+		assert.NoError(t, err)
+		assert.Equal(t, 100, len(result))
+	})
+
+	// Test 2: Filter by user with large dataset
+	t.Run("FilterByUser", func(t *testing.T) {
+		opts := &SessionListOptions{
+			UserID:    "user-0",
+			Limit:     100,
+			SortBy:    "start_time",
+			SortOrder: "desc",
+		}
+		result, err := service.ListAllSessionsWithOptions(opts)
+		assert.NoError(t, err)
+		assert.Equal(t, 10, len(result)) // 1000 sessions / 100 users = 10 per user
+		for _, sess := range result {
+			assert.Equal(t, "user-0", sess.UserID)
+		}
+	})
+
+	// Test 3: Filter by admin assisted
+	t.Run("FilterByAdminAssisted", func(t *testing.T) {
+		adminAssisted := true
+		opts := &SessionListOptions{
+			AdminAssisted: &adminAssisted,
+			Limit:         500,
+			SortBy:        "start_time",
+			SortOrder:     "desc",
+		}
+		result, err := service.ListAllSessionsWithOptions(opts)
+		assert.NoError(t, err)
+		// Should be ~333 sessions (1000 / 3)
+		assert.True(t, len(result) >= 300 && len(result) <= 350)
+		for _, sess := range result {
+			assert.True(t, sess.AdminAssisted)
+		}
+	})
+
+	// Test 4: Filter by active status
+	t.Run("FilterByActiveStatus", func(t *testing.T) {
+		active := true
+		opts := &SessionListOptions{
+			Active:    &active,
+			Limit:     600,
+			SortBy:    "start_time",
+			SortOrder: "desc",
+		}
+		result, err := service.ListAllSessionsWithOptions(opts)
+		assert.NoError(t, err)
+		// Should be 500 sessions (50% active)
+		assert.Equal(t, 500, len(result))
+		for _, sess := range result {
+			assert.Nil(t, sess.EndTime)
+		}
+	})
+
+	// Test 5: Sort by total tokens
+	t.Run("SortByTotalTokens", func(t *testing.T) {
+		opts := &SessionListOptions{
+			Limit:     100,
+			SortBy:    "total_tokens",
+			SortOrder: "desc",
+		}
+		result, err := service.ListAllSessionsWithOptions(opts)
+		assert.NoError(t, err)
+		assert.Equal(t, 100, len(result))
+		// Verify descending order
+		for i := 1; i < len(result); i++ {
+			assert.True(t, result[i-1].TotalTokens >= result[i].TotalTokens)
+		}
+	})
+
+	// Test 6: Sort by message count
+	t.Run("SortByMessageCount", func(t *testing.T) {
+		opts := &SessionListOptions{
+			Limit:     100,
+			SortBy:    "message_count",
+			SortOrder: "asc",
+		}
+		result, err := service.ListAllSessionsWithOptions(opts)
+		assert.NoError(t, err)
+		assert.Equal(t, 100, len(result))
+		// All sessions have 1 message, so order doesn't matter much
+		for _, sess := range result {
+			assert.Equal(t, 1, sess.MessageCount)
+		}
+	})
+
+	// Test 7: Combined filters with large dataset
+	t.Run("CombinedFilters", func(t *testing.T) {
+		adminAssisted := true
+		active := false
+		startTimeFrom := now.Add(-600 * time.Minute)
+		startTimeTo := now.Add(-400 * time.Minute)
+		opts := &SessionListOptions{
+			AdminAssisted: &adminAssisted,
+			Active:        &active,
+			StartTimeFrom: &startTimeFrom,
+			StartTimeTo:   &startTimeTo,
+			Limit:         100,
+			SortBy:        "start_time",
+			SortOrder:     "desc",
+		}
+		result, err := service.ListAllSessionsWithOptions(opts)
+		assert.NoError(t, err)
+		// Should find sessions in range [400, 600] that are admin assisted and ended
+		// That's 200 sessions, ~66 admin assisted, all ended (even indices)
+		assert.True(t, len(result) > 0)
+		for _, sess := range result {
+			assert.True(t, sess.AdminAssisted)
+			assert.NotNil(t, sess.EndTime)
+			assert.True(t, sess.StartTime.After(startTimeFrom) || sess.StartTime.Equal(startTimeFrom))
+			assert.True(t, sess.StartTime.Before(startTimeTo) || sess.StartTime.Equal(startTimeTo))
+		}
+	})
+
+	// Test 8: Performance test - measure query time
+	t.Run("Performance", func(t *testing.T) {
+		start := time.Now()
+		opts := &SessionListOptions{
+			Limit:     100,
+			Offset:    0,
+			SortBy:    "start_time",
+			SortOrder: "desc",
+		}
+		_, err := service.ListAllSessionsWithOptions(opts)
+		elapsed := time.Since(start)
+		assert.NoError(t, err)
+		// Query should complete in less than 1 second
+		assert.True(t, elapsed < time.Second, "Query took %v, expected < 1s", elapsed)
+		t.Logf("Query completed in %v", elapsed)
+	})
+}
+
+// TestEnsureIndexes verifies that MongoDB indexes are created correctly
+func TestEnsureIndexes(t *testing.T) {
+	mongo, logger, cleanup := setupTestMongoDB(t)
+	if mongo == nil {
+		return // Test was skipped
+	}
+	defer cleanup()
+
+	// Create a test collection
+	testCollName := fmt.Sprintf("test_indexes_%d", time.Now().Unix())
+	storageService := NewStorageService(mongo, "test_chat_db", testCollName, logger, nil)
+
+	// Ensure indexes
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	err := storageService.EnsureIndexes(ctx)
+	require.NoError(t, err, "EnsureIndexes should succeed")
+
+	// Verify indexes work by creating a test session and querying it
+	sess := &session.Session{
+		ID:        "test-session-" + time.Now().Format("20060102150405"),
+		UserID:    "test-user",
+		StartTime: time.Now(),
+		Messages:  []*session.Message{},
+	}
+
+	err = storageService.CreateSession(sess)
+	require.NoError(t, err, "Should be able to create session")
+
+	// Query using indexed field (uid)
+	sessions, err := storageService.ListUserSessions("test-user", 10)
+	require.NoError(t, err, "Should be able to query by user_id (indexed)")
+	assert.Len(t, sessions, 1, "Should find the created session")
+
+	// Clean up
+	_ = storageService.collection.Drop(ctx)
+}
+
+// TestEnsureIndexesIdempotent verifies that calling EnsureIndexes multiple times is safe
+func TestEnsureIndexesIdempotent(t *testing.T) {
+	mongo, logger, cleanup := setupTestMongoDB(t)
+	if mongo == nil {
+		return // Test was skipped
+	}
+	defer cleanup()
+
+	// Create a test collection
+	testCollName := fmt.Sprintf("test_indexes_idempotent_%d", time.Now().Unix())
+	storageService := NewStorageService(mongo, "test_chat_db", testCollName, logger, nil)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Call EnsureIndexes multiple times
+	err := storageService.EnsureIndexes(ctx)
+	require.NoError(t, err, "First EnsureIndexes should succeed")
+
+	err = storageService.EnsureIndexes(ctx)
+	require.NoError(t, err, "Second EnsureIndexes should succeed (idempotent)")
+
+	err = storageService.EnsureIndexes(ctx)
+	require.NoError(t, err, "Third EnsureIndexes should succeed (idempotent)")
+
+	// Clean up test collection
+	_ = storageService.collection.Drop(ctx)
+}
+

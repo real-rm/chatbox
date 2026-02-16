@@ -181,3 +181,61 @@ func TestExtractClaims_RoundTrip(t *testing.T) {
 	assert.Equal(t, originalUserID, claims.UserID)
 	assert.Equal(t, originalRoles, claims.Roles)
 }
+
+func TestValidateToken_WithName(t *testing.T) {
+	validator := NewJWTValidator(testSecret)
+
+	// Create token with name claim
+	claims := jwt.MapClaims{
+		"user_id": "admin-123",
+		"name":    "John Admin",
+		"roles":   []string{"admin"},
+		"exp":     time.Now().Add(time.Hour).Unix(),
+		"iat":     time.Now().Unix(),
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, _ := token.SignedString([]byte(testSecret))
+
+	extractedClaims, err := validator.ValidateToken(tokenString)
+
+	require.NoError(t, err)
+	assert.Equal(t, "admin-123", extractedClaims.UserID)
+	assert.Equal(t, "John Admin", extractedClaims.Name)
+	assert.Equal(t, []string{"admin"}, extractedClaims.Roles)
+}
+
+func TestValidateToken_WithoutName(t *testing.T) {
+	validator := NewJWTValidator(testSecret)
+
+	// Create token without name claim - should default to user_id
+	tokenString := createTestToken("user-456", []string{"user"}, time.Hour)
+
+	extractedClaims, err := validator.ValidateToken(tokenString)
+
+	require.NoError(t, err)
+	assert.Equal(t, "user-456", extractedClaims.UserID)
+	assert.Equal(t, "user-456", extractedClaims.Name) // Should default to user_id
+	assert.Equal(t, []string{"user"}, extractedClaims.Roles)
+}
+
+func TestValidateToken_WithEmptyName(t *testing.T) {
+	validator := NewJWTValidator(testSecret)
+
+	// Create token with empty name claim - should default to user_id
+	claims := jwt.MapClaims{
+		"user_id": "user-789",
+		"name":    "",
+		"roles":   []string{"user"},
+		"exp":     time.Now().Add(time.Hour).Unix(),
+		"iat":     time.Now().Unix(),
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, _ := token.SignedString([]byte(testSecret))
+
+	extractedClaims, err := validator.ValidateToken(tokenString)
+
+	require.NoError(t, err)
+	assert.Equal(t, "user-789", extractedClaims.UserID)
+	assert.Equal(t, "user-789", extractedClaims.Name) // Should default to user_id when empty
+	assert.Equal(t, []string{"user"}, extractedClaims.Roles)
+}

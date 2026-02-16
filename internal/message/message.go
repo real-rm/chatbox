@@ -21,15 +21,17 @@ const (
 	TypeAdminLeave       MessageType = "admin_leave"
 	TypeModelSelect      MessageType = "model_select"
 	TypeLoading          MessageType = "loading"
+	TypeNotification     MessageType = "notification"
 )
 
 // SenderType represents who sent the message
 type SenderType string
 
 const (
-	SenderUser  SenderType = "user"
-	SenderAI    SenderType = "ai"
-	SenderAdmin SenderType = "admin"
+	SenderUser   SenderType = "user"
+	SenderAI     SenderType = "ai"
+	SenderAdmin  SenderType = "admin"
+	SenderSystem SenderType = "system"
 )
 
 // ErrorInfo contains error details

@@ -21,6 +21,7 @@ var (
 // Claims represents the JWT claims extracted from a token
 type Claims struct {
 	UserID string
+	Name   string
 	Roles  []string
 }
 
@@ -82,6 +83,13 @@ func (v *JWTValidator) ValidateToken(tokenString string) (*Claims, error) {
 		return nil, fmt.Errorf("%w: user_id claim missing or invalid", ErrMissingClaims)
 	}
 
+	// Extract name (optional field)
+	name, _ := mapClaims["name"].(string)
+	// If name is not present or empty, default to user_id
+	if name == "" {
+		name = userID
+	}
+
 	// Extract roles
 	rolesInterface, ok := mapClaims["roles"]
 	if !ok {
@@ -96,6 +104,7 @@ func (v *JWTValidator) ValidateToken(tokenString string) (*Claims, error) {
 
 	return &Claims{
 		UserID: userID,
+		Name:   name,
 		Roles:  roles,
 	}, nil
 }

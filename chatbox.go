@@ -6,11 +6,16 @@ package chatbox
 import (
 	"context"
 	"fmt"
+	"os"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/real-rm/chatbox/internal/auth"
+	"github.com/real-rm/chatbox/internal/httperrors"
 	"github.com/real-rm/chatbox/internal/llm"
 	"github.com/real-rm/chatbox/internal/notification"
 	"github.com/real-rm/chatbox/internal/router"
@@ -48,9 +53,16 @@ func Register(r *gin.Engine, config *goconfig.ConfigAccessor, logger *golog.Logg
 	chatboxLogger.Info("Initializing chatbox service")
 
 	// Load configuration
-	jwtSecret, err := config.ConfigString("chatbox.jwt_secret")
-	if err != nil {
-		return fmt.Errorf("failed to get JWT secret: %w", err)
+	// Priority: Environment variable > Config file
+	// This allows Kubernetes secrets to override config.toml values
+	var err error
+	jwtSecret := os.Getenv("JWT_SECRET")
+	if jwtSecret == "" {
+		// Fall back to config file
+		jwtSecret, err = config.ConfigString("chatbox.jwt_secret")
+		if err != nil {
+			return fmt.Errorf("failed to get JWT secret: %w", err)
+		}
 	}
 
 	reconnectTimeoutStr, err := config.ConfigStringWithDefault("chatbox.reconnect_timeout", "15m")
@@ -77,8 +89,52 @@ func Register(r *gin.Engine, config *goconfig.ConfigAccessor, logger *golog.Logg
 		return fmt.Errorf("failed to create upload service: %w", err)
 	}
 
-	// Create storage service
-	storageService := storage.NewStorageService(mongo, "chat", "sessions", chatboxLogger, nil)
+	// Load encryption key for message content at rest
+	// Load encryption key for message content at rest
+	// Priority: Environment variable > Config file
+	// The key should be 32 bytes for AES-256 encryption
+	var encryptionKey []byte
+	encryptionKeyStr := os.Getenv("ENCRYPTION_KEY")
+	if encryptionKeyStr == "" {
+		// Fall back to config file
+		encryptionKeyStr, err = config.ConfigStringWithDefault("chatbox.encryption_key", "")
+		if err != nil {
+			return fmt.Errorf("failed to get encryption key: %w", err)
+		}
+	}
+	if encryptionKeyStr != "" {
+		// Convert string to bytes - ensure it's exactly 32 bytes for AES-256
+		encryptionKey = []byte(encryptionKeyStr)
+		if len(encryptionKey) != 32 {
+			chatboxLogger.Warn("Encryption key is not 32 bytes, padding or truncating",
+				"actual_length", len(encryptionKey),
+				"required_length", 32)
+			// Pad or truncate to 32 bytes
+			if len(encryptionKey) < 32 {
+				// Pad with zeros
+				padded := make([]byte, 32)
+				copy(padded, encryptionKey)
+				encryptionKey = padded
+			} else {
+				// Truncate to 32 bytes
+				encryptionKey = encryptionKey[:32]
+			}
+		}
+		chatboxLogger.Info("Message encryption enabled", "key_length", len(encryptionKey))
+	} else {
+		chatboxLogger.Warn("No encryption key configured, messages will be stored unencrypted")
+	}
+
+	// Create storage service with encryption key
+	storageService := storage.NewStorageService(mongo, "chat", "sessions", chatboxLogger, encryptionKey)
+
+	// Ensure MongoDB indexes are created for optimal query performance
+	indexCtx, indexCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer indexCancel()
+	if err := storageService.EnsureIndexes(indexCtx); err != nil {
+		chatboxLogger.Warn("Failed to create MongoDB indexes", "error", err)
+		// Don't fail startup - indexes can be created manually if needed
+	}
 
 	// Create session manager
 	sessionManager := session.NewSessionManager(reconnectTimeout, chatboxLogger)
@@ -101,14 +157,56 @@ func Register(r *gin.Engine, config *goconfig.ConfigAccessor, logger *golog.Logg
 	// Create JWT validator
 	validator := auth.NewJWTValidator(jwtSecret)
 
-	// Create WebSocket handler with Gin adapter
-	wsHandler := websocket.NewHandler(validator, chatboxLogger)
+	// Create WebSocket handler with router
+	wsHandler := websocket.NewHandler(validator, messageRouter, chatboxLogger)
+	
+	// Configure allowed origins for WebSocket connections
+	allowedOriginsStr, err := config.ConfigStringWithDefault("chatbox.allowed_origins", "")
+	if err == nil && allowedOriginsStr != "" {
+		origins := strings.Split(allowedOriginsStr, ",")
+		for i, origin := range origins {
+			origins[i] = strings.TrimSpace(origin)
+		}
+		wsHandler.SetAllowedOrigins(origins)
+	} else {
+		chatboxLogger.Warn("No allowed origins configured, allowing all origins (development mode)")
+	}
 
 	// Store global references for graceful shutdown
 	shutdownMu.Lock()
 	globalWSHandler = wsHandler
 	globalLogger = chatboxLogger
 	shutdownMu.Unlock()
+
+	// Configure CORS middleware
+	// Load CORS configuration from config file or environment
+	corsOriginsStr, err := config.ConfigStringWithDefault("chatbox.cors_allowed_origins", "")
+	if err == nil && corsOriginsStr != "" {
+		// Parse allowed origins from comma-separated string
+		allowedOrigins := strings.Split(corsOriginsStr, ",")
+		for i, origin := range allowedOrigins {
+			allowedOrigins[i] = strings.TrimSpace(origin)
+		}
+
+		// Configure CORS middleware
+		corsConfig := cors.Config{
+			AllowOrigins:     allowedOrigins,
+			AllowMethods:     []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+			AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
+			ExposeHeaders:    []string{"Content-Length"},
+			AllowCredentials: true,
+			MaxAge:           12 * time.Hour,
+		}
+
+		// Apply CORS middleware to the router
+		r.Use(cors.New(corsConfig))
+
+		chatboxLogger.Info("CORS middleware configured",
+			"allowed_origins", allowedOrigins,
+			"allow_credentials", true)
+	} else {
+		chatboxLogger.Warn("No CORS origins configured, CORS middleware not enabled")
+	}
 
 	// Register routes
 	chatGroup := r.Group("/chat")
@@ -120,38 +218,42 @@ func Register(r *gin.Engine, config *goconfig.ConfigAccessor, logger *golog.Logg
 		})
 
 		// User session list endpoint (authenticated but not admin-only)
-		chatGroup.GET("/sessions", userAuthMiddleware(validator), handleUserSessions(storageService))
+		chatGroup.GET("/sessions", userAuthMiddleware(validator, chatboxLogger), handleUserSessions(storageService, chatboxLogger))
 
 		// Admin HTTP endpoints
 		adminGroup := chatGroup.Group("/admin")
-		adminGroup.Use(authMiddleware(validator))
+		adminGroup.Use(authMiddleware(validator, chatboxLogger))
 		{
-			adminGroup.GET("/sessions", handleListSessions(storageService, sessionManager))
-			adminGroup.GET("/metrics", handleGetMetrics(storageService))
-			adminGroup.POST("/takeover/:sessionID", handleAdminTakeover(messageRouter))
+			adminGroup.GET("/sessions", handleListSessions(storageService, sessionManager, chatboxLogger))
+			adminGroup.GET("/metrics", handleGetMetrics(storageService, chatboxLogger))
+			adminGroup.POST("/takeover/:sessionID", handleAdminTakeover(messageRouter, chatboxLogger))
 		}
 
 		// Health check endpoints
 		chatGroup.GET("/healthz", handleHealthCheck)
-		chatGroup.GET("/readyz", handleReadyCheck(mongo))
+		chatGroup.GET("/readyz", handleReadyCheck(mongo, chatboxLogger))
 	}
+
+	// Prometheus metrics endpoint (public, no authentication required)
+	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	chatboxLogger.Info("Chatbox service registered successfully",
 		"websocket_endpoint", "/chat/ws",
 		"admin_endpoints", "/chat/admin/*",
 		"health_endpoints", "/chat/healthz, /chat/readyz",
+		"metrics_endpoint", "/metrics",
 	)
 
 	return nil
 }
 
 // authMiddleware creates a Gin middleware for JWT authentication
-func authMiddleware(validator *auth.JWTValidator) gin.HandlerFunc {
+func authMiddleware(validator *auth.JWTValidator, logger *golog.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Extract token from Authorization header
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
-			c.JSON(401, gin.H{"error": "Missing authorization header"})
+			httperrors.RespondUnauthorized(c, httperrors.MsgInvalidAuthHeader)
 			c.Abort()
 			return
 		}
@@ -161,7 +263,7 @@ func authMiddleware(validator *auth.JWTValidator) gin.HandlerFunc {
 		if len(authHeader) > 7 && authHeader[:7] == "Bearer " {
 			token = authHeader[7:]
 		} else {
-			c.JSON(401, gin.H{"error": "Invalid authorization header format"})
+			httperrors.RespondUnauthorized(c, httperrors.MsgInvalidAuthHeader)
 			c.Abort()
 			return
 		}
@@ -169,7 +271,12 @@ func authMiddleware(validator *auth.JWTValidator) gin.HandlerFunc {
 		// Validate token
 		claims, err := validator.ValidateToken(token)
 		if err != nil {
-			c.JSON(401, gin.H{"error": fmt.Sprintf("Invalid token: %v", err)})
+			// Log detailed error server-side
+			logger.Warn("Token validation failed",
+				"error", err,
+				"component", "auth")
+			// Send generic error to client
+			httperrors.RespondInvalidToken(c)
 			c.Abort()
 			return
 		}
@@ -184,7 +291,11 @@ func authMiddleware(validator *auth.JWTValidator) gin.HandlerFunc {
 		}
 
 		if !hasAdminRole {
-			c.JSON(403, gin.H{"error": "Insufficient permissions"})
+			logger.Warn("Insufficient permissions for admin endpoint",
+				"user_id", claims.UserID,
+				"roles", claims.Roles,
+				"component", "auth")
+			httperrors.RespondForbidden(c)
 			c.Abort()
 			return
 		}
@@ -196,12 +307,12 @@ func authMiddleware(validator *auth.JWTValidator) gin.HandlerFunc {
 }
 
 // userAuthMiddleware creates a Gin middleware for JWT authentication (without admin check)
-func userAuthMiddleware(validator *auth.JWTValidator) gin.HandlerFunc {
+func userAuthMiddleware(validator *auth.JWTValidator, logger *golog.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Extract token from Authorization header
 		authHeader := c.GetHeader("Authorization")
 		if authHeader == "" {
-			c.JSON(401, gin.H{"error": "Missing authorization header"})
+			httperrors.RespondUnauthorized(c, httperrors.MsgInvalidAuthHeader)
 			c.Abort()
 			return
 		}
@@ -211,7 +322,7 @@ func userAuthMiddleware(validator *auth.JWTValidator) gin.HandlerFunc {
 		if len(authHeader) > 7 && authHeader[:7] == "Bearer " {
 			token = authHeader[7:]
 		} else {
-			c.JSON(401, gin.H{"error": "Invalid authorization header format"})
+			httperrors.RespondUnauthorized(c, httperrors.MsgInvalidAuthHeader)
 			c.Abort()
 			return
 		}
@@ -219,7 +330,12 @@ func userAuthMiddleware(validator *auth.JWTValidator) gin.HandlerFunc {
 		// Validate token
 		claims, err := validator.ValidateToken(token)
 		if err != nil {
-			c.JSON(401, gin.H{"error": fmt.Sprintf("Invalid token: %v", err)})
+			// Log detailed error server-side
+			logger.Warn("Token validation failed",
+				"error", err,
+				"component", "auth")
+			// Send generic error to client
+			httperrors.RespondInvalidToken(c)
 			c.Abort()
 			return
 		}
@@ -231,25 +347,32 @@ func userAuthMiddleware(validator *auth.JWTValidator) gin.HandlerFunc {
 }
 
 // handleUserSessions returns a handler for listing the authenticated user's sessions
-func handleUserSessions(storage *storage.StorageService) gin.HandlerFunc {
+func handleUserSessions(storageService *storage.StorageService, logger *golog.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Get claims from context
 		claimsInterface, exists := c.Get("claims")
 		if !exists {
-			c.JSON(401, gin.H{"error": "Unauthorized"})
+			httperrors.RespondUnauthorized(c, "")
 			return
 		}
 
 		claims, ok := claimsInterface.(*auth.Claims)
 		if !ok {
-			c.JSON(500, gin.H{"error": "Invalid claims"})
+			logger.Error("Invalid claims type in context", "component", "http")
+			httperrors.RespondInternalError(c)
 			return
 		}
 
 		// Get user's sessions
-		sessions, err := storage.ListUserSessions(claims.UserID, 0)
+		sessions, err := storageService.ListUserSessions(claims.UserID, 0)
 		if err != nil {
-			c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to list sessions: %v", err)})
+			// Log detailed error server-side
+			logger.Error("Failed to list user sessions",
+				"user_id", claims.UserID,
+				"error", err,
+				"component", "http")
+			// Send generic error to client
+			httperrors.RespondInternalError(c)
 			return
 		}
 
@@ -261,16 +384,19 @@ func handleUserSessions(storage *storage.StorageService) gin.HandlerFunc {
 	}
 }
 
-// handleListSessions returns a handler for listing sessions
-func handleListSessions(storage *storage.StorageService, sessionManager *session.SessionManager) gin.HandlerFunc {
+// handleListSessions returns a handler for listing sessions with pagination, filtering, and sorting
+func handleListSessions(storageService *storage.StorageService, sessionManager *session.SessionManager, logger *golog.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Get query parameters for filtering and sorting
+		// Parse query parameters
 		userID := c.Query("user_id")
-		status := c.Query("status")                          // "active" or "ended"
-		adminAssisted := c.Query("admin_assisted")           // "true" or "false"
-		sortBy := c.DefaultQuery("sort_by", "last_activity") // "last_activity", "start_time", "duration", "user_id"
-		sortOrder := c.DefaultQuery("sort_order", "desc")    // "asc" or "desc"
+		status := c.Query("status")                       // "active" or "ended"
+		adminAssistedStr := c.Query("admin_assisted")     // "true" or "false"
+		sortBy := c.DefaultQuery("sort_by", "start_time") // "start_time", "end_time", "message_count", "total_tokens", "user_id"
+		sortOrder := c.DefaultQuery("sort_order", "desc") // "asc" or "desc"
 		limitStr := c.DefaultQuery("limit", "100")
+		offsetStr := c.DefaultQuery("offset", "0")
+		startTimeFromStr := c.Query("start_time_from") // RFC3339 format
+		startTimeToStr := c.Query("start_time_to")     // RFC3339 format
 
 		// Parse limit
 		limit := 100
@@ -280,127 +406,96 @@ func handleListSessions(storage *storage.StorageService, sessionManager *session
 			}
 		}
 
-		// If user_id is specified, get sessions for that user
-		if userID != "" {
-			sessions, err := storage.ListUserSessions(userID, limit)
+		// Parse offset
+		offset := 0
+		if o, err := fmt.Sscanf(offsetStr, "%d", &offset); err == nil && o == 1 {
+			if offset < 0 {
+				offset = 0
+			}
+		}
+
+		// Parse admin_assisted filter
+		var adminAssisted *bool
+		if adminAssistedStr != "" {
+			val := adminAssistedStr == "true"
+			adminAssisted = &val
+		}
+
+		// Parse active status filter
+		var active *bool
+		if status != "" {
+			if status == "active" {
+				val := true
+				active = &val
+			} else if status == "ended" {
+				val := false
+				active = &val
+			}
+		}
+
+		// Parse time range filters
+		var startTimeFrom, startTimeTo *time.Time
+		if startTimeFromStr != "" {
+			t, err := time.Parse(time.RFC3339, startTimeFromStr)
 			if err != nil {
-				c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to list sessions: %v", err)})
+				logger.Warn("Invalid start_time_from parameter",
+					"value", startTimeFromStr,
+					"error", err,
+					"component", "http")
+				httperrors.RespondBadRequest(c, httperrors.MsgInvalidTimeFormat)
 				return
 			}
+			startTimeFrom = &t
+		}
+		if startTimeToStr != "" {
+			t, err := time.Parse(time.RFC3339, startTimeToStr)
+			if err != nil {
+				logger.Warn("Invalid start_time_to parameter",
+					"value", startTimeToStr,
+					"error", err,
+					"component", "http")
+				httperrors.RespondBadRequest(c, httperrors.MsgInvalidTimeFormat)
+				return
+			}
+			startTimeTo = &t
+		}
 
-			// Filter by status and admin_assisted if specified
-			filtered := filterSessions(sessions, status, adminAssisted)
+		// Build options for ListAllSessionsWithOptions
+		opts := &storage.SessionListOptions{
+			Limit:         limit,
+			Offset:        offset,
+			UserID:        userID,
+			StartTimeFrom: startTimeFrom,
+			StartTimeTo:   startTimeTo,
+			AdminAssisted: adminAssisted,
+			Active:        active,
+			SortBy:        sortBy,
+			SortOrder:     sortOrder,
+		}
 
-			// Sort sessions
-			sorted := sortSessions(filtered, sortBy, sortOrder)
-
-			c.JSON(200, gin.H{"sessions": sorted, "count": len(sorted)})
+		// List sessions with options
+		sessions, err := storageService.ListAllSessionsWithOptions(opts)
+		if err != nil {
+			// Log detailed error server-side
+			logger.Error("Failed to list sessions",
+				"error", err,
+				"component", "http")
+			// Send generic error to client
+			httperrors.RespondInternalError(c)
 			return
 		}
 
-		// TODO: Implement listing all sessions across all users
-		// For now, return empty list if no user_id specified
-		c.JSON(200, gin.H{"sessions": []interface{}{}, "count": 0})
+		c.JSON(200, gin.H{
+			"sessions": sessions,
+			"count":    len(sessions),
+			"limit":    limit,
+			"offset":   offset,
+		})
 	}
-}
-
-// filterSessions filters sessions based on status and admin_assisted flags
-func filterSessions(sessions []*storage.SessionMetadata, status, adminAssisted string) []*storage.SessionMetadata {
-	if status == "" && adminAssisted == "" {
-		return sessions
-	}
-
-	filtered := []*storage.SessionMetadata{}
-	for _, sess := range sessions {
-		// Filter by status
-		if status != "" {
-			isActive := sess.EndTime == nil
-			if status == "active" && !isActive {
-				continue
-			}
-			if status == "ended" && isActive {
-				continue
-			}
-		}
-
-		// Filter by admin_assisted
-		if adminAssisted != "" {
-			if adminAssisted == "true" && !sess.AdminAssisted {
-				continue
-			}
-			if adminAssisted == "false" && sess.AdminAssisted {
-				continue
-			}
-		}
-
-		filtered = append(filtered, sess)
-	}
-
-	return filtered
-}
-
-// sortSessions sorts sessions based on the specified field and order
-func sortSessions(sessions []*storage.SessionMetadata, sortBy, sortOrder string) []*storage.SessionMetadata {
-	// Simple bubble sort for now (good enough for small lists)
-	// TODO: Use more efficient sorting for large lists
-	sorted := make([]*storage.SessionMetadata, len(sessions))
-	copy(sorted, sessions)
-
-	ascending := sortOrder == "asc"
-
-	for i := 0; i < len(sorted); i++ {
-		for j := i + 1; j < len(sorted); j++ {
-			shouldSwap := false
-
-			switch sortBy {
-			case "last_activity":
-				if ascending {
-					shouldSwap = sorted[i].LastMessageTime.After(sorted[j].LastMessageTime)
-				} else {
-					shouldSwap = sorted[i].LastMessageTime.Before(sorted[j].LastMessageTime)
-				}
-			case "start_time":
-				if ascending {
-					shouldSwap = sorted[i].StartTime.After(sorted[j].StartTime)
-				} else {
-					shouldSwap = sorted[i].StartTime.Before(sorted[j].StartTime)
-				}
-			case "duration":
-				dur1 := getDuration(sorted[i])
-				dur2 := getDuration(sorted[j])
-				if ascending {
-					shouldSwap = dur1 > dur2
-				} else {
-					shouldSwap = dur1 < dur2
-				}
-			case "user_id":
-				// Not applicable for single user queries, but included for completeness
-				if ascending {
-					shouldSwap = sorted[i].ID > sorted[j].ID
-				} else {
-					shouldSwap = sorted[i].ID < sorted[j].ID
-				}
-			}
-
-			if shouldSwap {
-				sorted[i], sorted[j] = sorted[j], sorted[i]
-			}
-		}
-	}
-
-	return sorted
-}
-
-// getDuration calculates the duration of a session
-func getDuration(sess *storage.SessionMetadata) int64 {
-	if sess.EndTime != nil {
-		return sess.EndTime.Unix() - sess.StartTime.Unix()
-	}
-	return time.Now().Unix() - sess.StartTime.Unix()
 }
 
 // handleGetMetrics returns a handler for getting session metrics
-func handleGetMetrics(storage *storage.StorageService) gin.HandlerFunc {
+func handleGetMetrics(storageService *storage.StorageService, logger *golog.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Get query parameters for time range
 		startTimeStr := c.Query("start_time")
@@ -413,7 +508,11 @@ func handleGetMetrics(storage *storage.StorageService) gin.HandlerFunc {
 		if startTimeStr != "" {
 			startTime, err = time.Parse(time.RFC3339, startTimeStr)
 			if err != nil {
-				c.JSON(400, gin.H{"error": fmt.Sprintf("Invalid start_time format: %v", err)})
+				logger.Warn("Invalid start_time parameter",
+					"value", startTimeStr,
+					"error", err,
+					"component", "http")
+				httperrors.RespondBadRequest(c, httperrors.MsgInvalidTimeFormat)
 				return
 			}
 		} else {
@@ -424,7 +523,11 @@ func handleGetMetrics(storage *storage.StorageService) gin.HandlerFunc {
 		if endTimeStr != "" {
 			endTime, err = time.Parse(time.RFC3339, endTimeStr)
 			if err != nil {
-				c.JSON(400, gin.H{"error": fmt.Sprintf("Invalid end_time format: %v", err)})
+				logger.Warn("Invalid end_time parameter",
+					"value", endTimeStr,
+					"error", err,
+					"component", "http")
+				httperrors.RespondBadRequest(c, httperrors.MsgInvalidTimeFormat)
 				return
 			}
 		} else {
@@ -433,16 +536,26 @@ func handleGetMetrics(storage *storage.StorageService) gin.HandlerFunc {
 		}
 
 		// Get metrics from storage
-		metrics, err := storage.GetSessionMetrics(startTime, endTime)
+		metrics, err := storageService.GetSessionMetrics(startTime, endTime)
 		if err != nil {
-			c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to get metrics: %v", err)})
+			// Log detailed error server-side
+			logger.Error("Failed to get session metrics",
+				"error", err,
+				"component", "http")
+			// Send generic error to client
+			httperrors.RespondInternalError(c)
 			return
 		}
 
 		// Get total token usage
-		totalTokens, err := storage.GetTokenUsage(startTime, endTime)
+		totalTokens, err := storageService.GetTokenUsage(startTime, endTime)
 		if err != nil {
-			c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to get token usage: %v", err)})
+			// Log detailed error server-side
+			logger.Error("Failed to get token usage",
+				"error", err,
+				"component", "http")
+			// Send generic error to client
+			httperrors.RespondInternalError(c)
 			return
 		}
 
@@ -460,25 +573,26 @@ func handleGetMetrics(storage *storage.StorageService) gin.HandlerFunc {
 }
 
 // handleAdminTakeover returns a handler for admin session takeover
-func handleAdminTakeover(messageRouter *router.MessageRouter) gin.HandlerFunc {
+func handleAdminTakeover(messageRouter *router.MessageRouter, logger *golog.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		sessionID := c.Param("sessionID")
 
 		if sessionID == "" {
-			c.JSON(400, gin.H{"error": "Session ID is required"})
+			httperrors.RespondBadRequest(c, "Session ID is required")
 			return
 		}
 
 		// Get admin claims from context (set by authMiddleware)
 		claimsInterface, exists := c.Get("claims")
 		if !exists {
-			c.JSON(401, gin.H{"error": "Authentication required"})
+			httperrors.RespondUnauthorized(c, "")
 			return
 		}
 
 		claims, ok := claimsInterface.(*auth.Claims)
 		if !ok {
-			c.JSON(500, gin.H{"error": "Invalid claims format"})
+			logger.Error("Invalid claims type in context", "component", "http")
+			httperrors.RespondInternalError(c)
 			return
 		}
 
@@ -486,10 +600,18 @@ func handleAdminTakeover(messageRouter *router.MessageRouter) gin.HandlerFunc {
 		// In a real implementation, this would be a WebSocket connection
 		// For now, we'll just mark the session as admin-assisted
 		adminConn := websocket.NewConnection(claims.UserID, claims.Roles)
+		adminConn.Name = claims.Name // Set admin name from JWT claims
 
 		// Handle admin takeover
 		if err := messageRouter.HandleAdminTakeover(adminConn, sessionID); err != nil {
-			c.JSON(500, gin.H{"error": fmt.Sprintf("Failed to initiate takeover: %v", err)})
+			// Log detailed error server-side
+			logger.Error("Failed to initiate admin takeover",
+				"session_id", sessionID,
+				"admin_id", claims.UserID,
+				"error", err,
+				"component", "http")
+			// Send generic error to client
+			httperrors.RespondInternalError(c)
 			return
 		}
 
@@ -515,7 +637,7 @@ func handleHealthCheck(c *gin.Context) {
 // handleReadyCheck returns a handler for readiness probe endpoint.
 // This endpoint checks if the application is ready to serve traffic.
 // It performs comprehensive checks on all critical dependencies.
-func handleReadyCheck(mongo *gomongo.Mongo) gin.HandlerFunc {
+func handleReadyCheck(mongo *gomongo.Mongo, logger *golog.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		checks := make(map[string]interface{})
 		allReady := true
@@ -528,10 +650,30 @@ func handleReadyCheck(mongo *gomongo.Mongo) gin.HandlerFunc {
 			}
 			allReady = false
 		} else {
-			// MongoDB is initialized - gomongo handles connection pooling internally
-			// We assume if mongo is not nil, it's ready
-			checks["mongodb"] = map[string]interface{}{
-				"status": "ready",
+			// Verify MongoDB connection by pinging the server
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			
+			// Use Ping() to check MongoDB connectivity
+			// This is the recommended way to verify database health
+			testColl := mongo.Coll("admin", "system.version")
+			err := testColl.Ping(ctx)
+			if err != nil {
+				// Log detailed error server-side
+				logger.Warn("MongoDB health check failed",
+					"error", err,
+					"component", "health")
+				
+				// Send generic error to client
+				checks["mongodb"] = map[string]interface{}{
+					"status": "not ready",
+					"reason": "Database connectivity check failed",
+				}
+				allReady = false
+			} else {
+				checks["mongodb"] = map[string]interface{}{
+					"status": "ready",
+				}
 			}
 		}
 

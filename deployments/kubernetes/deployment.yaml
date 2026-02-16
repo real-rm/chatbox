@@ -74,6 +74,11 @@ spec:
             secretKeyRef:
               name: chat-secrets
               key: JWT_SECRET
+        - name: ENCRYPTION_KEY
+          valueFrom:
+            secretKeyRef:
+              name: chat-secrets
+              key: ENCRYPTION_KEY
         - name: S3_ACCESS_KEY_ID
           valueFrom:
             secretKeyRef:
@@ -94,6 +99,16 @@ spec:
             secretKeyRef:
               name: chat-secrets
               key: SMTP_PASS
+        - name: SMS_ACCOUNT_SID
+          valueFrom:
+            secretKeyRef:
+              name: chat-secrets
+              key: SMS_ACCOUNT_SID
+        - name: SMS_AUTH_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: chat-secrets
+              key: SMS_AUTH_TOKEN
         - name: SMS_API_KEY
           valueFrom:
             secretKeyRef:
@@ -109,6 +124,11 @@ spec:
             secretKeyRef:
               name: chat-secrets
               key: LLM_PROVIDER_2_API_KEY
+        - name: LLM_PROVIDER_3_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: chat-secrets
+              key: LLM_PROVIDER_3_API_KEY
         
         # Resource limits and requests
         resources:
@@ -213,7 +233,7 @@ spec:
       #         topologyKey: kubernetes.io/hostname
 
 ---
-# Horizontal Pod Autoscaler (optional - for automatic scaling)
+# Horizontal Pod Autoscaler - scales based on resource and application metrics
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
@@ -227,6 +247,7 @@ spec:
   minReplicas: 3
   maxReplicas: 10
   metrics:
+  # Resource-based metrics
   - type: Resource
     resource:
       name: cpu
@@ -239,6 +260,22 @@ spec:
       target:
         type: Utilization
         averageUtilization: 80
+  # Application-level metrics (requires Prometheus Adapter or similar)
+  # Uncomment when Prometheus Adapter is configured in your cluster
+  # - type: Pods
+  #   pods:
+  #     metric:
+  #       name: chatbox_websocket_connections_total
+  #     target:
+  #       type: AverageValue
+  #       averageValue: "100"  # Scale when average connections per pod exceeds 100
+  # - type: Pods
+  #   pods:
+  #     metric:
+  #       name: chatbox_active_sessions_total
+  #     target:
+  #       type: AverageValue
+  #       averageValue: "50"  # Scale when average active sessions per pod exceeds 50
   behavior:
     scaleDown:
       stabilizationWindowSeconds: 300

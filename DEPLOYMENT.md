@@ -85,7 +85,83 @@ go build -o chatbox-server cmd/server/main.go
 
 ## Building the Docker Image
 
-### Build Locally
+### Prerequisites for Building
+
+The chatbox application uses private Go modules from the `github.com/real-rm` organization. To build the Docker image, you need:
+
+1. **GitHub Personal Access Token (PAT)** with `repo` scope
+   - Create at: https://github.com/settings/tokens
+   - Required scopes: `repo` (for private repository access)
+
+2. **GitHub CLI (gh)** - Alternative to manual token management
+   ```bash
+   # Install GitHub CLI
+   brew install gh  # macOS
+   # or follow: https://cli.github.com/manual/installation
+   
+   # Authenticate
+   gh auth login
+   ```
+
+### Build with Private Modules
+
+The Dockerfile is configured to authenticate with GitHub for private module access:
+
+```bash
+# Option 1: Using GitHub CLI (Recommended)
+GITHUB_TOKEN=$(gh auth token) docker build \
+  --build-arg GITHUB_TOKEN=$GITHUB_TOKEN \
+  -t chatbox-websocket:v1.0.0 .
+
+# Option 2: Using Personal Access Token
+docker build \
+  --build-arg GITHUB_TOKEN=ghp_your_token_here \
+  -t chatbox-websocket:v1.0.0 .
+
+# Option 3: Using environment variable
+export GITHUB_TOKEN=$(gh auth token)
+docker build \
+  --build-arg GITHUB_TOKEN=$GITHUB_TOKEN \
+  -t chatbox-websocket:v1.0.0 .
+```
+
+**Security Note**: The `GITHUB_TOKEN` is only used during the build process and is not stored in the final image. However, Docker will show a warning about using secrets in build arguments - this is expected.
+
+### CI/CD Environment Setup
+
+For automated builds in CI/CD pipelines, see the comprehensive **[CI_SETUP.md](CI_SETUP.md)** documentation.
+
+**Quick Start**:
+- GitHub Actions: Use `.github/workflows/docker-build.yml` (included)
+- GitLab CI: Use `.gitlab-ci.yml` (included)
+- Test locally: Run `./test_ci_build.sh`
+
+For automated builds in CI/CD pipelines (GitHub Actions, GitLab CI, Jenkins, etc.):
+
+1. **Store GitHub Token as Secret**:
+   - GitHub Actions: Add as repository secret `GITHUB_TOKEN`
+   - GitLab CI: Add as CI/CD variable `GITHUB_TOKEN`
+   - Jenkins: Add as credential
+
+2. **Example GitHub Actions Workflow**:
+   ```yaml
+   - name: Build Docker image
+     run: |
+       docker build \
+         --build-arg GITHUB_TOKEN=${{ secrets.GITHUB_TOKEN }} \
+         -t chatbox-websocket:${{ github.sha }} .
+   ```
+
+3. **Example GitLab CI**:
+   ```yaml
+   build:
+     script:
+       - docker build --build-arg GITHUB_TOKEN=$GITHUB_TOKEN -t chatbox-websocket:$CI_COMMIT_SHA .
+   ```
+
+### Build Locally (Without Private Modules)
+
+If you have the private modules already cached locally:
 
 ```bash
 # Build the image
@@ -120,18 +196,32 @@ make build-push REGISTRY=your-registry.com IMAGE_TAG=v1.0.0
 
 ### Step 1: Prepare Configuration
 
+**IMPORTANT: Secret Management**
+
+See [SECRET_MANAGEMENT.md](./SECRET_MANAGEMENT.md) for comprehensive guidance on secret management, including:
+- Kubernetes secrets setup
+- External secret managers (AWS Secrets Manager, HashiCorp Vault)
+- Secret rotation procedures
+- Security best practices
+
 1. **Edit Secret** (`deployments/kubernetes/secret.yaml`):
    ```bash
    # Generate strong JWT secret
    openssl rand -base64 32
    
+   # Generate encryption key for message content (32 bytes for AES-256)
+   openssl rand -base64 32
+   
    # Update secret.yaml with:
    # - JWT_SECRET (generated above)
+   # - ENCRYPTION_KEY (generated above) - CRITICAL for message encryption
    # - S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY
    # - LLM_PROVIDER_*_API_KEY (OpenAI, Anthropic, etc.)
    # - SMTP credentials
    # - SMS credentials (if using)
    ```
+   
+   **IMPORTANT**: See [KEY_MANAGEMENT.md](../KEY_MANAGEMENT.md) for comprehensive guidance on encryption key generation, storage, rotation, and security best practices.
 
 2. **Edit ConfigMap** (`deployments/kubernetes/configmap.yaml`):
    ```yaml
@@ -286,6 +376,67 @@ The service can be configured using environment variables or config.toml file:
 | `RATE_LIMIT` | Requests per second limit | `100` |
 
 See `deployments/kubernetes/configmap.yaml` for full list.
+
+### CORS and Origin Validation
+
+The application provides two layers of origin validation for security:
+
+#### CORS for HTTP Endpoints
+
+Configure CORS to allow admin dashboards and monitoring tools to access HTTP endpoints:
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `CORS_ALLOWED_ORIGINS` | Comma-separated list of allowed origins for HTTP endpoints | `https://admin.example.com,https://dashboard.example.com` |
+
+**Behavior**:
+- Empty value = CORS middleware disabled (same-origin only)
+- Configured = Allows cross-origin requests from listed domains
+- Handles preflight OPTIONS requests automatically
+- Allows credentials (cookies, auth headers)
+
+**Example Configuration**:
+```yaml
+# In configmap.yaml
+CORS_ALLOWED_ORIGINS: "https://admin.example.com,https://dashboard.example.com"
+
+# Or via environment variable
+export CORS_ALLOWED_ORIGINS="https://admin.example.com,https://dashboard.example.com"
+```
+
+#### WebSocket Origin Validation
+
+Configure allowed origins for WebSocket connections to prevent CSRF attacks:
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `WS_ALLOWED_ORIGINS` | Comma-separated list of allowed origins for WebSocket connections | `https://chat.example.com,https://app.example.com` |
+
+**Security Warning**: Empty value allows ALL origins (development only). Always configure this in production.
+
+**Example Configuration**:
+```yaml
+# In configmap.yaml
+WS_ALLOWED_ORIGINS: "https://chat.example.com,https://app.example.com"
+
+# Or via environment variable
+export WS_ALLOWED_ORIGINS="https://chat.example.com,https://app.example.com"
+```
+
+**Testing CORS**:
+```bash
+# Test CORS preflight
+curl -X OPTIONS http://your-service/chat/admin/sessions \
+  -H "Origin: https://admin.example.com" \
+  -H "Access-Control-Request-Method: GET" \
+  -v
+
+# Test WebSocket origin
+wscat -c ws://your-service/chat/ws?token=TOKEN \
+  --origin https://chat.example.com
+```
+
+For detailed CORS configuration, see [deployments/kubernetes/README.md](deployments/kubernetes/README.md#cors-and-origin-validation).
 
 ### Session Affinity
 
@@ -495,6 +646,8 @@ resources:
 
 **Never commit secrets to version control!**
 
+For comprehensive secret management documentation, see [SECRET_MANAGEMENT.md](./SECRET_MANAGEMENT.md).
+
 Use one of these approaches:
 
 1. **Kubernetes Secrets** (default):
@@ -509,6 +662,44 @@ Use one of these approaches:
 
 3. **Sealed Secrets**:
    - Encrypt secrets for safe storage in Git
+
+## Database Indexes
+
+### Automatic Index Creation
+
+MongoDB indexes are **automatically created** when the application starts. The application includes an `EnsureIndexes` function that creates all necessary indexes during initialization.
+
+**For comprehensive index documentation, see [docs/MONGODB_INDEXES.md](docs/MONGODB_INDEXES.md)**
+
+**Quick Summary:**
+- Indexes are created automatically during application startup
+- 30-second timeout for index creation
+- Non-blocking (app continues if creation fails)
+- Idempotent (safe to run multiple times)
+
+**Indexes Created:**
+- `idx_user_id` - User-specific session queries
+- `idx_start_time` - Time-based sorting (descending)
+- `idx_admin_assisted` - Admin session filtering
+- `idx_user_start_time` - Compound index for common patterns
+
+**Verification:**
+
+```bash
+# Check application logs for index creation
+kubectl logs -n chatbox -l app=chatbox | grep "MongoDB indexes"
+
+# Expected output:
+# INFO MongoDB indexes created successfully indexes=[idx_user_id, idx_start_time, idx_admin_assisted, idx_user_start_time]
+```
+
+For detailed information including:
+- Index definitions and query patterns
+- Manual creation procedures
+- Performance considerations
+- Troubleshooting guide
+
+See the complete documentation: [docs/MONGODB_INDEXES.md](docs/MONGODB_INDEXES.md)
 
 ## Backup and Recovery
 

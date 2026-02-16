@@ -4,10 +4,11 @@ This directory contains Kubernetes manifests for deploying the chatbox WebSocket
 
 ## Files Overview
 
-- `deployment.yaml` - Deployment manifest with health probes, resource limits, and HPA
+- `deployment.yaml` - Deployment manifest with health probes, resource limits, and basic HPA
 - `service.yaml` - Service manifest with session affinity for WebSocket connections
 - `configmap.yaml` - ConfigMap for non-sensitive configuration
 - `secret.yaml` - Secret for sensitive data (API keys, credentials)
+- `hpa.yaml` - Advanced HPA configuration with application metrics (requires Prometheus Adapter)
 - `README.md` - This file
 
 ## Prerequisites
@@ -36,17 +37,47 @@ This directory contains Kubernetes manifests for deploying the chatbox WebSocket
 
 ### 1. Update Configuration
 
-**Edit `secret.yaml`** - Replace all placeholder values with actual credentials:
+**CRITICAL: Secret Management**
+
+This application follows security best practices for secret management:
+- **Never commit secrets to source control**
+- **Use Kubernetes secrets or external secret managers**
+- **Environment variables override config.toml values**
+
+See [SECRET_MANAGEMENT.md](../../SECRET_MANAGEMENT.md) for comprehensive secret management documentation.
+
+**Quick Start - Create Secrets:**
+
+Option 1: Use the interactive script (recommended):
 ```bash
-# CRITICAL: Change these values before deploying!
-JWT_SECRET: "your-strong-random-jwt-secret-at-least-32-characters"
-S3_ACCESS_KEY_ID: "your-actual-s3-access-key"
-S3_SECRET_ACCESS_KEY: "your-actual-s3-secret-key"
-LLM_PROVIDER_1_API_KEY: "sk-your-actual-openai-api-key"
-# ... etc
+./deployments/kubernetes/create-secrets.sh default
 ```
 
-**Edit `configmap.yaml`** - Update configuration values:
+Option 2: Manual creation:
+```bash
+# Generate strong secrets
+JWT_SECRET=$(openssl rand -base64 32)
+ENCRYPTION_KEY=$(openssl rand -base64 32)
+
+# Create the secret
+kubectl create secret generic chat-secrets \
+  --from-literal=JWT_SECRET="$JWT_SECRET" \
+  --from-literal=ENCRYPTION_KEY="$ENCRYPTION_KEY" \
+  --from-literal=S3_ACCESS_KEY_ID="your-s3-access-key" \
+  --from-literal=S3_SECRET_ACCESS_KEY="your-s3-secret-key" \
+  --from-literal=SMTP_USER="smtp-username" \
+  --from-literal=SMTP_PASS="smtp-password" \
+  --from-literal=SMS_ACCOUNT_SID="ACXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX" \
+  --from-literal=SMS_AUTH_TOKEN="your-twilio-auth-token" \
+  --from-literal=LLM_PROVIDER_1_API_KEY="sk-your-openai-api-key" \
+  --from-literal=LLM_PROVIDER_2_API_KEY="sk-ant-your-anthropic-api-key" \
+  --from-literal=LLM_PROVIDER_3_API_KEY="your-dify-api-key" \
+  --namespace=default
+```
+
+**IMPORTANT**: See [KEY_MANAGEMENT.md](../../KEY_MANAGEMENT.md) for detailed guidance on encryption key generation, storage, rotation, and best practices.
+
+**Edit `configmap.yaml`** - Update non-sensitive configuration values:
 ```bash
 # Update MongoDB URI to point to your MongoDB instance
 MONGO_URI: "mongodb://your-mongo-host:27017/chat"
@@ -62,6 +93,12 @@ ADMIN_PHONES: "+1234567890"
 # Update SMTP settings
 SMTP_HOST: "smtp.yourdomain.com"
 EMAIL_FROM: "noreply@yourdomain.com"
+
+# Configure CORS for admin endpoints (IMPORTANT for production)
+CORS_ALLOWED_ORIGINS: "https://admin.yourdomain.com,https://dashboard.yourdomain.com"
+
+# Configure WebSocket origin validation (CRITICAL for security)
+WS_ALLOWED_ORIGINS: "https://chat.yourdomain.com,https://app.yourdomain.com"
 ```
 
 **Edit `service.yaml`** - Update ingress host:
@@ -116,6 +153,13 @@ kubectl get pods -n default -l app=chatbox
 # Check logs
 kubectl logs -n default -l app=chatbox --tail=100 -f
 
+# Verify secrets are loaded from environment variables
+kubectl exec -it $(kubectl get pod -l app=chatbox -o jsonpath='{.items[0].metadata.name}') -n default -- env | grep -E "JWT_SECRET|ENCRYPTION_KEY"
+
+# Verify MongoDB indexes were created
+kubectl logs -n default -l app=chatbox | grep "MongoDB indexes"
+# Expected: INFO MongoDB indexes created successfully
+
 # Check health endpoints
 kubectl port-forward -n default svc/chatbox-websocket 8080:80
 curl http://localhost:8080/chat/healthz
@@ -125,7 +169,136 @@ curl http://localhost:8080/chat/readyz
 wscat -c ws://localhost:8080/chat/ws?token=YOUR_JWT_TOKEN
 ```
 
+**Verify Secret Management:**
+
+```bash
+# Confirm secret exists
+kubectl get secret chat-secrets -n default
+
+# View secret keys (not values)
+kubectl describe secret chat-secrets -n default
+
+# Check if secrets are properly mounted in pods
+kubectl get deployment chatbox-websocket -o yaml | grep -A 20 "env:"
+```
+
+**Verify Database Indexes:**
+
+MongoDB indexes are automatically created when the application starts. To verify:
+
+```bash
+# Check application logs for successful index creation
+kubectl logs -n default -l app=chatbox | grep "MongoDB indexes"
+
+# Expected output:
+# INFO MongoDB indexes created successfully indexes=[idx_user_id, idx_start_time, idx_admin_assisted, idx_user_start_time]
+```
+
+The following indexes are created automatically:
+- `idx_user_id` - For user-specific queries
+- `idx_start_time` - For time-based sorting (descending)
+- `idx_admin_assisted` - For filtering admin sessions
+- `idx_user_start_time` - Compound index for common query patterns
+
+Index creation is idempotent and non-blocking. If it fails, the application logs a warning but continues to start.
+
+**For comprehensive index documentation, see [docs/MONGODB_INDEXES.md](../../docs/MONGODB_INDEXES.md)**
+
 ## Configuration Details
+
+### CORS and Origin Validation
+
+The application supports two types of origin validation for security:
+
+#### 1. CORS for HTTP Endpoints (Admin API, Metrics)
+
+CORS (Cross-Origin Resource Sharing) allows web applications from different origins to access HTTP endpoints like the admin API and metrics endpoint.
+
+**Configuration**: Set `CORS_ALLOWED_ORIGINS` in `configmap.yaml`
+
+```yaml
+# Example: Allow admin dashboard and monitoring tools
+CORS_ALLOWED_ORIGINS: "https://admin.example.com,https://dashboard.example.com,https://grafana.example.com"
+```
+
+**Behavior**:
+- If `CORS_ALLOWED_ORIGINS` is empty, CORS middleware is NOT applied (endpoints only accessible from same origin)
+- If configured, the middleware handles preflight OPTIONS requests automatically
+- Allowed methods: GET, POST, PUT, PATCH, DELETE, OPTIONS
+- Credentials (cookies, auth headers) are allowed
+- Preflight responses are cached for 12 hours
+
+**Use Cases**:
+- Admin dashboard hosted on different domain
+- Monitoring tools (Grafana, Prometheus UI) accessing metrics
+- Third-party integrations calling admin API
+
+#### 2. WebSocket Origin Validation
+
+WebSocket connections require origin validation to prevent CSRF attacks and unauthorized access.
+
+**Configuration**: Set `WS_ALLOWED_ORIGINS` in `configmap.yaml`
+
+```yaml
+# Example: Allow chat frontend from multiple domains
+WS_ALLOWED_ORIGINS: "https://chat.example.com,https://app.example.com,https://mobile.example.com"
+```
+
+**Behavior**:
+- If `WS_ALLOWED_ORIGINS` is empty, ALL origins are allowed (INSECURE - development only)
+- If configured, only listed origins can establish WebSocket connections
+- Invalid origins receive 403 Forbidden response
+- Origin validation happens during WebSocket upgrade handshake
+
+**Security Warning**: Never leave `WS_ALLOWED_ORIGINS` empty in production. This creates a serious security vulnerability allowing any website to connect to your WebSocket server.
+
+#### Configuration Examples
+
+**Development Environment**:
+```yaml
+# Allow localhost for development
+CORS_ALLOWED_ORIGINS: "http://localhost:3000,http://localhost:8080"
+WS_ALLOWED_ORIGINS: "http://localhost:3000,http://localhost:8080"
+```
+
+**Production Environment**:
+```yaml
+# Only allow production domains
+CORS_ALLOWED_ORIGINS: "https://admin.example.com,https://dashboard.example.com"
+WS_ALLOWED_ORIGINS: "https://chat.example.com,https://app.example.com"
+```
+
+**Multi-Environment Setup**:
+```yaml
+# Support staging and production
+CORS_ALLOWED_ORIGINS: "https://admin.example.com,https://admin-staging.example.com"
+WS_ALLOWED_ORIGINS: "https://chat.example.com,https://chat-staging.example.com"
+```
+
+#### Verification
+
+After deployment, verify CORS is working:
+
+```bash
+# Test CORS preflight request
+curl -X OPTIONS http://your-service/chat/admin/sessions \
+  -H "Origin: https://admin.example.com" \
+  -H "Access-Control-Request-Method: GET" \
+  -v
+
+# Expected response headers:
+# Access-Control-Allow-Origin: https://admin.example.com
+# Access-Control-Allow-Methods: GET, POST, PUT, PATCH, DELETE, OPTIONS
+# Access-Control-Allow-Credentials: true
+
+# Test WebSocket origin validation
+wscat -c ws://your-service/chat/ws?token=YOUR_TOKEN \
+  --origin https://chat.example.com
+
+# Check application logs for CORS configuration
+kubectl logs -l app=chatbox | grep CORS
+# Expected: "CORS middleware configured" with allowed origins
+```
 
 ### Session Affinity for WebSocket
 
@@ -176,7 +349,7 @@ Adjust based on your load:
 
 ### Horizontal Pod Autoscaler (HPA)
 
-The HPA automatically scales pods based on CPU and memory usage:
+The HPA automatically scales pods based on resource usage and application metrics:
 
 ```yaml
 minReplicas: 3
@@ -184,9 +357,51 @@ maxReplicas: 10
 metrics:
   - CPU: 70% utilization
   - Memory: 80% utilization
+  - WebSocket connections: 100 per pod (requires Prometheus Adapter)
+  - Active sessions: 50 per pod (requires Prometheus Adapter)
 ```
 
-**Note**: Requires metrics-server to be installed in your cluster.
+**Basic Setup (Resource Metrics Only)**:
+- Requires metrics-server to be installed in your cluster
+- Scales based on CPU and memory usage
+- Use the HPA configuration in `deployment.yaml`
+
+**Advanced Setup (Application Metrics)**:
+- Requires Prometheus and Prometheus Adapter
+- Scales based on actual application load (connections, sessions)
+- Use the HPA configuration in `hpa.yaml`
+
+To enable application metrics scaling:
+
+1. **Deploy Prometheus** (if not already installed):
+   ```bash
+   helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+   helm install prometheus prometheus-community/prometheus
+   ```
+
+2. **Deploy Prometheus Adapter**:
+   ```bash
+   helm install prometheus-adapter prometheus-community/prometheus-adapter \
+     --set prometheus.url=http://prometheus-server.monitoring.svc \
+     --set prometheus.port=80
+   ```
+
+3. **Verify custom metrics are available**:
+   ```bash
+   kubectl get --raw /apis/custom.metrics.k8s.io/v1beta1 | jq .
+   ```
+
+4. **Apply the advanced HPA configuration**:
+   ```bash
+   kubectl apply -f deployments/kubernetes/hpa.yaml
+   ```
+
+The application exposes the following metrics for autoscaling:
+- `chatbox_websocket_connections_total` - Current WebSocket connections
+- `chatbox_active_sessions_total` - Current active chat sessions
+- `chatbox_llm_latency_seconds` - LLM response latency (for monitoring)
+
+See [internal/metrics/README.md](../../internal/metrics/README.md) for complete metrics documentation.
 
 ## Deployment Strategies
 
@@ -246,6 +461,35 @@ kubectl describe hpa chatbox-websocket-hpa
 ```
 
 ## Monitoring
+
+### Prometheus Metrics
+
+The application exposes Prometheus metrics at the `/metrics` endpoint. The deployment is pre-configured with annotations for Prometheus scraping:
+
+```yaml
+annotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8080"
+  prometheus.io/path: "/metrics"
+```
+
+**Available Metrics**:
+- Connection metrics: `chatbox_websocket_connections_total`, `chatbox_active_sessions_total`
+- Message metrics: `chatbox_messages_received_total`, `chatbox_messages_sent_total`
+- LLM metrics: `chatbox_llm_requests_total`, `chatbox_llm_latency_seconds`, `chatbox_llm_errors_total`
+- Session metrics: `chatbox_sessions_created_total`, `chatbox_sessions_ended_total`
+- Admin metrics: `chatbox_admin_takeovers_total`
+
+See [internal/metrics/README.md](../../internal/metrics/README.md) for complete metrics documentation.
+
+**To view metrics**:
+```bash
+# Port forward to access metrics endpoint
+kubectl port-forward -n default svc/chatbox-websocket 8080:80
+
+# View metrics
+curl http://localhost:8080/metrics
+```
 
 ### Logs
 
@@ -353,11 +597,17 @@ kubectl get secret chat-secrets -o yaml
 # Generate strong JWT secret
 openssl rand -base64 32
 
+# Generate encryption key for message content
+openssl rand -base64 32
+
 # Update secret
 kubectl create secret generic chat-secrets \
   --from-literal=JWT_SECRET=$(openssl rand -base64 32) \
+  --from-literal=ENCRYPTION_KEY=$(openssl rand -base64 32) \
   --dry-run=client -o yaml | kubectl apply -f -
 ```
+
+**See [KEY_MANAGEMENT.md](../../KEY_MANAGEMENT.md) for comprehensive encryption key management guidance.**
 
 ### 2. Enable RBAC
 

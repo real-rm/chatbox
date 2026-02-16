@@ -110,7 +110,8 @@ func TestUnregisterConnection(t *testing.T) {
 func TestRouteMessage_UserMessage(t *testing.T) {
 	logger := createTestLogger()
 	sm := session.NewSessionManager(15*time.Minute, logger)
-	router := NewMessageRouter(sm, nil, nil, nil, logger)
+	mockLLM := &mockLLMService{}
+	router := NewMessageRouter(sm, mockLLM, nil, nil, logger)
 
 	// Create a session
 	sess, err := sm.CreateSession("user-1")
@@ -134,6 +135,10 @@ func TestRouteMessage_UserMessage(t *testing.T) {
 	// Route message
 	err = router.RouteMessage(conn, msg)
 	assert.NoError(t, err)
+	
+	// Verify LLM service was called with streaming
+	assert.True(t, mockLLM.streamCalled, "StreamMessage should be called")
+	assert.False(t, mockLLM.sendMessageCalled, "SendMessage should not be called")
 }
 
 func TestRouteMessage_InvalidMessageType(t *testing.T) {
@@ -187,7 +192,8 @@ func TestRouteMessage_NilInputs(t *testing.T) {
 func TestHandleUserMessage(t *testing.T) {
 	logger := createTestLogger()
 	sm := session.NewSessionManager(15*time.Minute, logger)
-	router := NewMessageRouter(sm, nil, nil, nil, logger)
+	mockLLM := &mockLLMService{}
+	router := NewMessageRouter(sm, mockLLM, nil, nil, logger)
 
 	// Create a session
 	sess, err := sm.CreateSession("user-1")
@@ -399,7 +405,8 @@ func TestGetConnection(t *testing.T) {
 func TestMessageOrderPreservation(t *testing.T) {
 	logger := createTestLogger()
 	sm := session.NewSessionManager(15*time.Minute, logger)
-	router := NewMessageRouter(sm, nil, nil, nil, logger)
+	mockLLM := &mockLLMService{}
+	router := NewMessageRouter(sm, mockLLM, nil, nil, logger)
 
 	// Create a session
 	sess, err := sm.CreateSession("user-1")

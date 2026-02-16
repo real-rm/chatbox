@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/gorilla/websocket"
 	"github.com/real-rm/chatbox/internal/auth"
 	"github.com/real-rm/golog"
@@ -122,7 +123,7 @@ func TestConnection_ReadPump(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			validator := auth.NewJWTValidator("test-secret")
-			handler := NewHandler(validator, testLogger())
+			handler := NewHandler(validator, nil, testLogger())
 
 			// Create a test server that will act as the client
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -184,7 +185,7 @@ func TestConnection_ReadPump(t *testing.T) {
 // TestConnection_PingPong tests the ping/pong heartbeat mechanism
 func TestConnection_PingPong(t *testing.T) {
 	validator := auth.NewJWTValidator("test-secret")
-	handler := NewHandler(validator, testLogger())
+	handler := NewHandler(validator, nil, testLogger())
 
 	// Create a test server that responds to pings
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -243,7 +244,7 @@ func TestConnection_PingPong(t *testing.T) {
 // TestConnection_GracefulClose tests graceful connection closure
 func TestConnection_GracefulClose(t *testing.T) {
 	validator := auth.NewJWTValidator("test-secret")
-	handler := NewHandler(validator, testLogger())
+	handler := NewHandler(validator, nil, testLogger())
 
 	// Create a test server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -304,7 +305,7 @@ func TestConnection_GracefulClose(t *testing.T) {
 // TestConnection_ResourceCleanup tests that resources are cleaned up properly
 func TestConnection_ResourceCleanup(t *testing.T) {
 	validator := auth.NewJWTValidator("test-secret")
-	handler := NewHandler(validator, testLogger())
+	handler := NewHandler(validator, nil, testLogger())
 
 	// Create a test server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -352,4 +353,229 @@ func TestConnection_ResourceCleanup(t *testing.T) {
 	_, exists := handler.connections[connection.UserID]
 	handler.mu.RUnlock()
 	assert.False(t, exists, "connection should be unregistered after cleanup")
+}
+
+// TestHandler_CheckOrigin tests the origin validation functionality
+func TestHandler_CheckOrigin(t *testing.T) {
+	tests := []struct {
+		name           string
+		allowedOrigins []string
+		requestOrigin  string
+		expectedResult bool
+		description    string
+	}{
+		{
+			name:           "no origins configured allows all",
+			allowedOrigins: []string{},
+			requestOrigin:  "https://example.com",
+			expectedResult: true,
+			description:    "When no origins are configured, all origins should be allowed (development mode)",
+		},
+		{
+			name:           "exact match allowed",
+			allowedOrigins: []string{"https://example.com", "https://app.example.com"},
+			requestOrigin:  "https://example.com",
+			expectedResult: true,
+			description:    "Exact match of allowed origin should be accepted",
+		},
+		{
+			name:           "second origin allowed",
+			allowedOrigins: []string{"https://example.com", "https://app.example.com"},
+			requestOrigin:  "https://app.example.com",
+			expectedResult: true,
+			description:    "Second configured origin should be accepted",
+		},
+		{
+			name:           "disallowed origin rejected",
+			allowedOrigins: []string{"https://example.com"},
+			requestOrigin:  "https://evil.com",
+			expectedResult: false,
+			description:    "Origin not in allowed list should be rejected",
+		},
+		{
+			name:           "subdomain not allowed by default",
+			allowedOrigins: []string{"https://example.com"},
+			requestOrigin:  "https://sub.example.com",
+			expectedResult: false,
+			description:    "Subdomain should not match parent domain",
+		},
+		{
+			name:           "http vs https mismatch",
+			allowedOrigins: []string{"https://example.com"},
+			requestOrigin:  "http://example.com",
+			expectedResult: false,
+			description:    "Protocol mismatch should be rejected",
+		},
+		{
+			name:           "port mismatch",
+			allowedOrigins: []string{"https://example.com:443"},
+			requestOrigin:  "https://example.com:8080",
+			expectedResult: false,
+			description:    "Port mismatch should be rejected",
+		},
+		{
+			name:           "empty origin with restrictions",
+			allowedOrigins: []string{"https://example.com"},
+			requestOrigin:  "",
+			expectedResult: false,
+			description:    "Empty origin should be rejected when restrictions are configured",
+		},
+		{
+			name:           "localhost allowed",
+			allowedOrigins: []string{"http://localhost:3000"},
+			requestOrigin:  "http://localhost:3000",
+			expectedResult: true,
+			description:    "Localhost with port should be allowed if configured",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			validator := auth.NewJWTValidator("test-secret")
+			handler := NewHandler(validator, nil, testLogger())
+
+			// Configure allowed origins
+			if len(tt.allowedOrigins) > 0 {
+				handler.SetAllowedOrigins(tt.allowedOrigins)
+			}
+
+			// Create a mock request with the origin header
+			req := httptest.NewRequest("GET", "/ws", nil)
+			req.Header.Set("Origin", tt.requestOrigin)
+
+			// Test the checkOrigin method
+			result := handler.checkOrigin(req)
+
+			assert.Equal(t, tt.expectedResult, result, tt.description)
+		})
+	}
+}
+
+// TestHandler_SetAllowedOrigins tests the SetAllowedOrigins configuration method
+func TestHandler_SetAllowedOrigins(t *testing.T) {
+	validator := auth.NewJWTValidator("test-secret")
+	handler := NewHandler(validator, nil, testLogger())
+
+	// Test setting origins
+	origins := []string{"https://example.com", "https://app.example.com"}
+	handler.SetAllowedOrigins(origins)
+
+	// Verify origins are set correctly
+	handler.mu.RLock()
+	assert.Equal(t, 2, len(handler.allowedOrigins))
+	assert.True(t, handler.allowedOrigins["https://example.com"])
+	assert.True(t, handler.allowedOrigins["https://app.example.com"])
+	handler.mu.RUnlock()
+
+	// Test updating origins
+	newOrigins := []string{"https://newsite.com"}
+	handler.SetAllowedOrigins(newOrigins)
+
+	// Verify old origins are replaced
+	handler.mu.RLock()
+	assert.Equal(t, 1, len(handler.allowedOrigins))
+	assert.True(t, handler.allowedOrigins["https://newsite.com"])
+	assert.False(t, handler.allowedOrigins["https://example.com"])
+	handler.mu.RUnlock()
+
+	// Test setting empty origins
+	handler.SetAllowedOrigins([]string{})
+
+	// Verify origins are cleared
+	handler.mu.RLock()
+	assert.Equal(t, 0, len(handler.allowedOrigins))
+	handler.mu.RUnlock()
+}
+
+// TestHandler_OriginValidationIntegration tests origin validation during WebSocket upgrade
+func TestHandler_OriginValidationIntegration(t *testing.T) {
+	// Helper function to create a valid JWT token for testing
+	createTestToken := func(userID string, roles []string, secret string) string {
+		claims := jwt.MapClaims{
+			"user_id": userID,
+			"roles":   roles,
+			"exp":     time.Now().Add(time.Hour).Unix(),
+			"iat":     time.Now().Unix(),
+		}
+		token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+		tokenString, _ := token.SignedString([]byte(secret))
+		return tokenString
+	}
+
+	// Create a valid JWT token
+	testSecret := "test-secret"
+	validator := auth.NewJWTValidator(testSecret)
+	token := createTestToken("test-user", []string{"user"}, testSecret)
+
+	tests := []struct {
+		name           string
+		allowedOrigins []string
+		requestOrigin  string
+		expectUpgrade  bool
+		description    string
+	}{
+		{
+			name:           "allowed origin upgrades successfully",
+			allowedOrigins: []string{"https://example.com"},
+			requestOrigin:  "https://example.com",
+			expectUpgrade:  true,
+			description:    "WebSocket upgrade should succeed with allowed origin",
+		},
+		{
+			name:           "disallowed origin fails upgrade",
+			allowedOrigins: []string{"https://example.com"},
+			requestOrigin:  "https://evil.com",
+			expectUpgrade:  false,
+			description:    "WebSocket upgrade should fail with disallowed origin",
+		},
+		{
+			name:           "no restrictions allows upgrade",
+			allowedOrigins: []string{},
+			requestOrigin:  "https://any-origin.com",
+			expectUpgrade:  true,
+			description:    "WebSocket upgrade should succeed when no restrictions configured",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			handler := NewHandler(validator, nil, testLogger())
+
+			// Configure allowed origins
+			if len(tt.allowedOrigins) > 0 {
+				handler.SetAllowedOrigins(tt.allowedOrigins)
+			}
+
+			// Create a test server with the handler
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				handler.HandleWebSocket(w, r)
+			}))
+			defer server.Close()
+
+			// Create WebSocket URL with token
+			wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "?token=" + token
+
+			// Create dialer with origin header
+			dialer := websocket.Dialer{}
+			headers := http.Header{}
+			headers.Set("Origin", tt.requestOrigin)
+
+			// Attempt to connect
+			conn, resp, err := dialer.Dial(wsURL, headers)
+
+			if tt.expectUpgrade {
+				// Should succeed
+				assert.NoError(t, err, tt.description)
+				if conn != nil {
+					conn.Close()
+				}
+			} else {
+				// Should fail with 403 Forbidden
+				assert.Error(t, err, tt.description)
+				if resp != nil {
+					assert.Equal(t, http.StatusForbidden, resp.StatusCode, "Expected 403 Forbidden for disallowed origin")
+				}
+			}
+		})
+	}
 }

@@ -7,12 +7,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
 	chaterrors "github.com/real-rm/chatbox/internal/errors"
 	"github.com/real-rm/chatbox/internal/llm"
 	"github.com/real-rm/chatbox/internal/message"
+	"github.com/real-rm/chatbox/internal/metrics"
 	"github.com/real-rm/chatbox/internal/ratelimit"
 	"github.com/real-rm/chatbox/internal/session"
 	"github.com/real-rm/chatbox/internal/upload"
@@ -150,7 +152,6 @@ func (mr *MessageRouter) RouteMessage(conn *websocket.Connection, msg *message.M
 }
 
 // HandleUserMessage processes user messages and forwards them to the LLM
-// For now, this is a placeholder that will be fully implemented when LLM service is ready
 func (mr *MessageRouter) HandleUserMessage(conn *websocket.Connection, msg *message.Message) error {
 	if conn == nil {
 		return ErrNilConnection
@@ -164,7 +165,7 @@ func (mr *MessageRouter) HandleUserMessage(conn *websocket.Connection, msg *mess
 		return chaterrors.ErrMissingField("session_id")
 	}
 
-	_, err := mr.sessionManager.GetSession(msg.SessionID)
+	sess, err := mr.sessionManager.GetSession(msg.SessionID)
 	if err != nil {
 		return chaterrors.NewValidationError(
 			chaterrors.ErrCodeMissingField,
@@ -173,19 +174,108 @@ func (mr *MessageRouter) HandleUserMessage(conn *websocket.Connection, msg *mess
 		)
 	}
 
-	// TODO: Forward to LLM service when implemented
-	// For now, just log the message
-	mr.logger.Debug("Routing user message", "session_id", msg.SessionID, "content_length", len(msg.Content))
+	mr.logger.Debug("Routing user message to LLM",
+		"session_id", msg.SessionID,
+		"content_length", len(msg.Content),
+		"model_id", sess.ModelID)
 
-	// Placeholder: Echo back a simple response
-	response := &message.Message{
-		Type:      message.TypeAIResponse,
+	// Send loading indicator to client
+	loadingMsg := &message.Message{
+		Type:      message.TypeLoading,
 		SessionID: msg.SessionID,
-		Content:   fmt.Sprintf("Received: %s", msg.Content),
 		Sender:    message.SenderAI,
+		Timestamp: time.Now(),
+	}
+	if err := mr.sendToConnection(msg.SessionID, loadingMsg); err != nil {
+		mr.logger.Warn("Failed to send loading indicator", "error", err)
 	}
 
-	return mr.sendToConnection(msg.SessionID, response)
+	// Prepare messages for LLM (convert from message.Message to llm.ChatMessage)
+	llmMessages := []llm.ChatMessage{
+		{
+			Role:    "user",
+			Content: msg.Content,
+		},
+	}
+
+	// Use default model if not set
+	modelID := sess.ModelID
+	if modelID == "" {
+		modelID = "gpt-4" // Default model
+	}
+
+	// Forward to LLM service with streaming
+	ctx := context.Background()
+	startTime := time.Now()
+	
+	// Use streaming for real-time response
+	chunkChan, err := mr.llmService.StreamMessage(ctx, modelID, llmMessages)
+	if err != nil {
+		mr.logger.Error("LLM service error",
+			"session_id", msg.SessionID,
+			"model_id", modelID,
+			"error", err)
+		
+		// Create appropriate error based on the failure
+		llmErr := chaterrors.ErrLLMUnavailable(err)
+		
+		// Send error response to client
+		errorMsg := &message.Message{
+			Type:      message.TypeError,
+			SessionID: msg.SessionID,
+			Sender:    message.SenderAI,
+			Error:     llmErr.ToErrorInfo(),
+			Timestamp: time.Now(),
+		}
+		return mr.sendToConnection(msg.SessionID, errorMsg)
+	}
+
+	// Stream response chunks to client
+	var fullContent strings.Builder
+	var tokenCount int
+	
+	for chunk := range chunkChan {
+		if chunk.Content != "" {
+			fullContent.WriteString(chunk.Content)
+			
+			// Send chunk to client
+			chunkMsg := &message.Message{
+				Type:      message.TypeAIResponse,
+				SessionID: msg.SessionID,
+				Content:   chunk.Content,
+				Sender:    message.SenderAI,
+				ModelID:   modelID,
+				Timestamp: time.Now(),
+				Metadata: map[string]string{
+					"streaming": "true",
+					"done":      fmt.Sprintf("%t", chunk.Done),
+				},
+			}
+			
+			if err := mr.sendToConnection(msg.SessionID, chunkMsg); err != nil {
+				mr.logger.Warn("Failed to send chunk to client",
+					"session_id", msg.SessionID,
+					"error", err)
+			}
+		}
+		
+		// If this is the final chunk, break
+		if chunk.Done {
+			break
+		}
+	}
+
+	// Record response time
+	responseTime := time.Since(startTime)
+	mr.sessionManager.RecordResponseTime(msg.SessionID, responseTime)
+
+	// Estimate token usage (rough estimate: ~4 chars per token)
+	if fullContent.Len() > 0 {
+		tokenCount = fullContent.Len() / 4
+		mr.sessionManager.UpdateTokenUsage(msg.SessionID, tokenCount)
+	}
+
+	return nil
 }
 
 // handleHelpRequest processes help request messages
@@ -768,9 +858,11 @@ func (mr *MessageRouter) HandleAdminTakeover(adminConn *websocket.Connection, se
 		)
 	}
 
-	// Get admin name from connection (assuming it's in the JWT claims)
-	adminName := adminConn.UserID // Default to user ID if name not available
-	// TODO: Extract admin name from JWT claims if available
+	// Get admin name from connection (extracted from JWT claims)
+	adminName := adminConn.Name
+	if adminName == "" {
+		adminName = adminConn.UserID // Fallback to user ID if name not available
+	}
 
 	// Mark session as admin-assisted
 	if err := mr.sessionManager.MarkAdminAssisted(sessionID, adminConn.UserID, adminName); err != nil {
@@ -782,6 +874,9 @@ func (mr *MessageRouter) HandleAdminTakeover(adminConn *websocket.Connection, se
 	mr.mu.Lock()
 	mr.adminConns[adminConn.UserID] = adminConn
 	mr.mu.Unlock()
+	
+	// Increment admin takeover metric
+	metrics.AdminTakeovers.Inc()
 
 	mr.logger.Info("Admin takeover initiated",
 		"session_id", sessionID,
@@ -794,7 +889,7 @@ func (mr *MessageRouter) HandleAdminTakeover(adminConn *websocket.Connection, se
 		Type:      message.TypeAdminJoin,
 		SessionID: sessionID,
 		Content:   fmt.Sprintf("Administrator %s has joined the session", adminName),
-		Sender:    message.SenderAI,
+		Sender:    message.SenderAdmin,
 		Timestamp: time.Now(),
 		Metadata: map[string]string{
 			"admin_id":   adminConn.UserID,
@@ -861,7 +956,7 @@ func (mr *MessageRouter) HandleAdminLeave(adminID, sessionID string) error {
 		Type:      message.TypeAdminLeave,
 		SessionID: sessionID,
 		Content:   fmt.Sprintf("Administrator %s has left the session", adminName),
-		Sender:    message.SenderAI,
+		Sender:    message.SenderAdmin,
 		Timestamp: time.Now(),
 		Metadata: map[string]string{
 			"admin_id":   adminID,

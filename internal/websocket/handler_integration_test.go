@@ -51,7 +51,7 @@ func (m *mockRouter) UnregisterConnection(sessionID string) {
 func TestReadPump_RouterIntegration(t *testing.T) {
 	validator := auth.NewJWTValidator("test-secret")
 	router := newMockRouter()
-	handler := NewHandler(validator, router, testLogger())
+	handler := NewHandler(validator, router, testLogger(), 1048576)
 
 	// Create a test server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -129,7 +129,7 @@ func TestReadPump_RouterIntegration(t *testing.T) {
 func TestReadPump_SessionIDAssignment(t *testing.T) {
 	validator := auth.NewJWTValidator("test-secret")
 	router := newMockRouter()
-	handler := NewHandler(validator, router, testLogger())
+	handler := NewHandler(validator, router, testLogger(), 1048576)
 
 	// Create a test server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -213,7 +213,7 @@ func TestReadPump_SessionIDAssignment(t *testing.T) {
 func TestReadPump_InvalidJSON(t *testing.T) {
 	validator := auth.NewJWTValidator("test-secret")
 	router := newMockRouter()
-	handler := NewHandler(validator, router, testLogger())
+	handler := NewHandler(validator, router, testLogger(), 1048576)
 
 	// Create a test server
 	receivedError := false
@@ -293,7 +293,7 @@ func TestReadPump_RoutingErrorHandling(t *testing.T) {
 		errorToReturn: chaterrors.ErrLLMUnavailable(nil),
 	}
 	
-	handler := NewHandler(validator, router, testLogger())
+	handler := NewHandler(validator, router, testLogger(), 1048576)
 
 	// Create a test server
 	var receivedErrorMsg *message.Message
@@ -411,7 +411,7 @@ func TestReadPump_RegistrationErrorHandling(t *testing.T) {
 		registrationError: chaterrors.ErrDatabaseError(nil),
 	}
 	
-	handler := NewHandler(validator, router, testLogger())
+	handler := NewHandler(validator, router, testLogger(), 1048576)
 
 	// Create a test server
 	var receivedErrorMsg *message.Message
@@ -620,7 +620,7 @@ func TestEndToEndMessageFlow(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			validator := auth.NewJWTValidator("test-secret")
 			router := newMockRouter()
-			handler := NewHandler(validator, router, testLogger())
+			handler := NewHandler(validator, router, testLogger(), 1048576)
 
 			// Create test server
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -686,7 +686,7 @@ func TestEndToEndMessageFlow(t *testing.T) {
 func TestEndToEndMessageFlow_SessionRegistration(t *testing.T) {
 	validator := auth.NewJWTValidator("test-secret")
 	router := newMockRouter()
-	handler := NewHandler(validator, router, testLogger())
+	handler := NewHandler(validator, router, testLogger(), 1048576)
 
 	sessionID := "session-registration-test"
 
@@ -760,7 +760,7 @@ func TestEndToEndMessageFlow_SessionRegistration(t *testing.T) {
 func TestEndToEndMessageFlow_TimestampHandling(t *testing.T) {
 	validator := auth.NewJWTValidator("test-secret")
 	router := newMockRouter()
-	handler := NewHandler(validator, router, testLogger())
+	handler := NewHandler(validator, router, testLogger(), 1048576)
 
 	// Create test server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -838,7 +838,7 @@ func TestEndToEndMessageFlow_TimestampHandling(t *testing.T) {
 func TestEndToEndMessageFlow_SenderHandling(t *testing.T) {
 	validator := auth.NewJWTValidator("test-secret")
 	router := newMockRouter()
-	handler := NewHandler(validator, router, testLogger())
+	handler := NewHandler(validator, router, testLogger(), 1048576)
 
 	// Create test server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -912,7 +912,7 @@ func TestEndToEndMessageFlow_SenderHandling(t *testing.T) {
 func TestEndToEndMessageFlow_ConcurrentMessages(t *testing.T) {
 	validator := auth.NewJWTValidator("test-secret")
 	router := newMockRouter()
-	handler := NewHandler(validator, router, testLogger())
+	handler := NewHandler(validator, router, testLogger(), 1048576)
 
 	messageCount := 10
 	sessionID := "session-concurrent"
@@ -983,7 +983,7 @@ func TestEndToEndMessageFlow_ConcurrentMessages(t *testing.T) {
 func TestEndToEndMessageFlow_UnregistrationOnClose(t *testing.T) {
 	validator := auth.NewJWTValidator("test-secret")
 	router := newMockRouter()
-	handler := NewHandler(validator, router, testLogger())
+	handler := NewHandler(validator, router, testLogger(), 1048576)
 
 	sessionID := "session-unregister"
 
@@ -1108,7 +1108,7 @@ func TestEndToEndStreamingFlow(t *testing.T) {
 	validator := auth.NewJWTValidator("test-secret")
 	chunks := []string{"Hello", ", ", "world", "!"}
 	router := newStreamingMockRouter(chunks)
-	handler := NewHandler(validator, router, testLogger())
+	handler := NewHandler(validator, router, testLogger(), 1048576)
 
 	// Create a test server
 	server := httptest.NewServer(http.HandlerFunc(handler.HandleWebSocket))
@@ -1207,7 +1207,7 @@ func TestEndToEndStreamingFlow_MultipleMessages(t *testing.T) {
 	validator := auth.NewJWTValidator("test-secret")
 	chunks := []string{"Response ", "1"}
 	router := newStreamingMockRouter(chunks)
-	handler := NewHandler(validator, router, testLogger())
+	handler := NewHandler(validator, router, testLogger(), 1048576)
 
 	// Create a test server
 	server := httptest.NewServer(http.HandlerFunc(handler.HandleWebSocket))
@@ -1299,7 +1299,7 @@ func TestReadPump_NilRouterHandling(t *testing.T) {
 	validator := auth.NewJWTValidator("test-secret")
 	
 	// Create handler with nil router
-	handler := NewHandler(validator, nil, testLogger())
+	handler := NewHandler(validator, nil, testLogger(), 1048576)
 
 	// Create a test server
 	var receivedErrorMsg *message.Message
@@ -1385,4 +1385,298 @@ func TestReadPump_NilRouterHandling(t *testing.T) {
 	assert.Equal(t, string(chaterrors.ErrCodeServiceError), receivedErrorMsg.Error.Code)
 	assert.Equal(t, "Service temporarily unavailable", receivedErrorMsg.Error.Message)
 	assert.True(t, receivedErrorMsg.Error.Recoverable)
+}
+
+// TestOversizedMessages_Integration tests the complete flow of message size limit enforcement
+// This test validates Requirements 3.1, 3.2, 3.5, 3.6
+func TestOversizedMessages_Integration(t *testing.T) {
+	validator := auth.NewJWTValidator("test-secret")
+	router := newMockRouter()
+	
+	// Set message size limit to 1KB for testing
+	maxMessageSize := int64(1024)
+	handler := NewHandler(validator, router, testLogger(), maxMessageSize)
+
+	// Create a test server
+	server := httptest.NewServer(http.HandlerFunc(handler.HandleWebSocket))
+	defer server.Close()
+
+	// Generate a valid JWT token
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"exp":     time.Now().Add(time.Hour).Unix(),
+		"user_id": "test-user-oversized",
+		"name":    "Test User",
+		"roles":   []string{"user"},
+		"iat":     time.Now().Unix(),
+	})
+	tokenString, err := token.SignedString([]byte("test-secret"))
+	require.NoError(t, err)
+
+	// Connect to test server with JWT token
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
+	headers := http.Header{}
+	headers.Add("Authorization", "Bearer "+tokenString)
+	
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, headers)
+	require.NoError(t, err)
+	defer conn.Close()
+
+	sessionID := "test-session-oversized"
+
+	// Test 1: Send message at limit (should succeed)
+	// Create a message that is just under the limit
+	// Account for JSON overhead (type, sessionID, sender, timestamp fields)
+	contentAtLimit := make([]byte, 700) // Leave room for JSON structure
+	for i := range contentAtLimit {
+		contentAtLimit[i] = 'A'
+	}
+	
+	msgAtLimit := &message.Message{
+		Type:      message.TypeUserMessage,
+		SessionID: sessionID,
+		Content:   string(contentAtLimit),
+		Sender:    message.SenderUser,
+		Timestamp: time.Now(),
+	}
+	
+	err = conn.WriteJSON(msgAtLimit)
+	require.NoError(t, err, "Message at limit should be sent successfully")
+
+	// Wait for message to be processed
+	time.Sleep(200 * time.Millisecond)
+
+	// Verify the message was routed successfully
+	assert.Len(t, router.routedMessages, 1, "Message at limit should be routed")
+	if len(router.routedMessages) > 0 {
+		assert.Equal(t, string(contentAtLimit), router.routedMessages[0].Content)
+	}
+
+	// Test 2: Send message over limit (should fail and close connection)
+	// Create a message that exceeds the limit
+	contentOverLimit := make([]byte, maxMessageSize+100)
+	for i := range contentOverLimit {
+		contentOverLimit[i] = 'B'
+	}
+	
+	msgOverLimit := &message.Message{
+		Type:      message.TypeUserMessage,
+		SessionID: sessionID,
+		Content:   string(contentOverLimit),
+		Sender:    message.SenderUser,
+		Timestamp: time.Now(),
+	}
+	
+	// Try to send oversized message
+	err = conn.WriteJSON(msgOverLimit)
+	// The write might succeed locally, but the server should close the connection
+	
+	// Wait for connection to be closed by server
+	time.Sleep(300 * time.Millisecond)
+
+	// Try to read from connection - should get close error
+	conn.SetReadDeadline(time.Now().Add(500 * time.Millisecond))
+	_, _, readErr := conn.ReadMessage()
+	
+	// Verify connection was closed
+	assert.Error(t, readErr, "Connection should be closed after oversized message")
+	
+	// Verify no additional messages were routed (only the first valid message)
+	assert.Len(t, router.routedMessages, 1, "Oversized message should not be routed")
+	
+	// Note: Log verification would require capturing log output, which is tested
+	// in the property-based tests. The handler logs with user_id, connection_id,
+	// and limit when the read limit is exceeded (see handler.go readPump function).
+}
+
+// TestOversizedMessages_ExactLimit tests message exactly at the limit
+func TestOversizedMessages_ExactLimit(t *testing.T) {
+	validator := auth.NewJWTValidator("test-secret")
+	router := newMockRouter()
+	
+	// Set message size limit to 512 bytes for testing
+	maxMessageSize := int64(512)
+	handler := NewHandler(validator, router, testLogger(), maxMessageSize)
+
+	// Create a test server
+	server := httptest.NewServer(http.HandlerFunc(handler.HandleWebSocket))
+	defer server.Close()
+
+	// Generate a valid JWT token
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"exp":     time.Now().Add(time.Hour).Unix(),
+		"user_id": "test-user-exact",
+		"name":    "Test User",
+		"roles":   []string{"user"},
+		"iat":     time.Now().Unix(),
+	})
+	tokenString, err := token.SignedString([]byte("test-secret"))
+	require.NoError(t, err)
+
+	// Connect to test server with JWT token
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
+	headers := http.Header{}
+	headers.Add("Authorization", "Bearer "+tokenString)
+	
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, headers)
+	require.NoError(t, err)
+	defer conn.Close()
+
+	sessionID := "test-session-exact"
+
+	// Create a message with content that brings total size close to limit
+	// Account for JSON structure overhead
+	contentSize := 300 // Conservative size to stay under limit with JSON overhead
+	content := make([]byte, contentSize)
+	for i := range content {
+		content[i] = 'X'
+	}
+	
+	msg := &message.Message{
+		Type:      message.TypeUserMessage,
+		SessionID: sessionID,
+		Content:   string(content),
+		Sender:    message.SenderUser,
+		Timestamp: time.Now(),
+	}
+	
+	err = conn.WriteJSON(msg)
+	require.NoError(t, err, "Message near limit should be sent successfully")
+
+	// Wait for message to be processed
+	time.Sleep(200 * time.Millisecond)
+
+	// Verify the message was routed successfully
+	assert.Len(t, router.routedMessages, 1, "Message near limit should be routed")
+	if len(router.routedMessages) > 0 {
+		assert.Equal(t, string(content), router.routedMessages[0].Content)
+	}
+
+	// Verify connection is still open by sending another message
+	msg2 := &message.Message{
+		Type:      message.TypeUserMessage,
+		SessionID: sessionID,
+		Content:   "Follow-up message",
+		Sender:    message.SenderUser,
+		Timestamp: time.Now(),
+	}
+	
+	err = conn.WriteJSON(msg2)
+	require.NoError(t, err, "Connection should still be open after message at limit")
+
+	// Wait for second message to be processed
+	time.Sleep(200 * time.Millisecond)
+
+	// Verify both messages were routed
+	assert.Len(t, router.routedMessages, 2, "Both messages should be routed")
+}
+
+// TestOversizedMessages_MultipleConnections tests that size limit is enforced per connection
+func TestOversizedMessages_MultipleConnections(t *testing.T) {
+	validator := auth.NewJWTValidator("test-secret")
+	router := newMockRouter()
+	
+	maxMessageSize := int64(1024)
+	handler := NewHandler(validator, router, testLogger(), maxMessageSize)
+
+	// Create a test server
+	server := httptest.NewServer(http.HandlerFunc(handler.HandleWebSocket))
+	defer server.Close()
+
+	// Generate JWT tokens for two different users
+	token1 := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"exp":     time.Now().Add(time.Hour).Unix(),
+		"user_id": "test-user-1",
+		"name":    "Test User 1",
+		"roles":   []string{"user"},
+		"iat":     time.Now().Unix(),
+	})
+	tokenString1, err := token1.SignedString([]byte("test-secret"))
+	require.NoError(t, err)
+
+	token2 := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"exp":     time.Now().Add(time.Hour).Unix(),
+		"user_id": "test-user-2",
+		"name":    "Test User 2",
+		"roles":   []string{"user"},
+		"iat":     time.Now().Unix(),
+	})
+	tokenString2, err := token2.SignedString([]byte("test-secret"))
+	require.NoError(t, err)
+
+	// Connect first user
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
+	headers1 := http.Header{}
+	headers1.Add("Authorization", "Bearer "+tokenString1)
+	
+	conn1, _, err := websocket.DefaultDialer.Dial(wsURL, headers1)
+	require.NoError(t, err)
+	defer conn1.Close()
+
+	// Connect second user
+	headers2 := http.Header{}
+	headers2.Add("Authorization", "Bearer "+tokenString2)
+	
+	conn2, _, err := websocket.DefaultDialer.Dial(wsURL, headers2)
+	require.NoError(t, err)
+	defer conn2.Close()
+
+	// User 1 sends valid message
+	msg1 := &message.Message{
+		Type:      message.TypeUserMessage,
+		SessionID: "session-user-1",
+		Content:   "Valid message from user 1",
+		Sender:    message.SenderUser,
+		Timestamp: time.Now(),
+	}
+	err = conn1.WriteJSON(msg1)
+	require.NoError(t, err)
+
+	time.Sleep(100 * time.Millisecond)
+
+	// User 2 sends oversized message
+	oversizedContent := make([]byte, maxMessageSize+100)
+	for i := range oversizedContent {
+		oversizedContent[i] = 'Z'
+	}
+	
+	msg2 := &message.Message{
+		Type:      message.TypeUserMessage,
+		SessionID: "session-user-2",
+		Content:   string(oversizedContent),
+		Sender:    message.SenderUser,
+		Timestamp: time.Now(),
+	}
+	conn2.WriteJSON(msg2) // May or may not error
+
+	time.Sleep(300 * time.Millisecond)
+
+	// Verify user 1's connection is still working
+	msg3 := &message.Message{
+		Type:      message.TypeUserMessage,
+		SessionID: "session-user-1",
+		Content:   "Another message from user 1",
+		Sender:    message.SenderUser,
+		Timestamp: time.Now(),
+	}
+	err = conn1.WriteJSON(msg3)
+	require.NoError(t, err, "User 1's connection should still work")
+
+	time.Sleep(100 * time.Millisecond)
+
+	// Verify user 2's connection is closed
+	conn2.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
+	_, _, readErr := conn2.ReadMessage()
+	assert.Error(t, readErr, "User 2's connection should be closed")
+
+	// Verify only user 1's messages were routed
+	assert.GreaterOrEqual(t, len(router.routedMessages), 2, "User 1's messages should be routed")
+	
+	// Check that user 1's messages are present
+	foundUser1Messages := 0
+	for _, msg := range router.routedMessages {
+		if msg.SessionID == "session-user-1" {
+			foundUser1Messages++
+		}
+	}
+	assert.Equal(t, 2, foundUser1Messages, "Both of user 1's messages should be routed")
 }

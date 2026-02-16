@@ -53,21 +53,17 @@ If your private modules are in a different GitHub organization, you need to:
 
 ## GitHub Token Setup
 
-### For GitHub Actions
-The default `GITHUB_TOKEN` works if:
-- Private modules are in the same GitHub organization
-- The repository has access to the private modules
+### Quick Start
+**See [CI_GITHUB_TOKEN_SETUP.md](CI_GITHUB_TOKEN_SETUP.md) for detailed token setup instructions.**
 
-If you need a custom token:
-```yaml
-# In .github/workflows/docker-build.yml
-- name: Build Docker image
-  run: |
-    docker build \
-      --build-arg GITHUB_TOKEN=${{ secrets.GH_PRIVATE_TOKEN }} \
-      -t chatbox-websocket:ci-test \
-      .
-```
+### For GitHub Actions
+The default `GITHUB_TOKEN` may not have access to private repositories. You need to:
+
+1. Create a Personal Access Token (PAT) with `repo` scope
+2. Add it as a repository secret named `GO_MODULES_TOKEN`
+3. The workflow will automatically use it (already configured)
+
+See [CI_GITHUB_TOKEN_SETUP.md](CI_GITHUB_TOKEN_SETUP.md) for step-by-step instructions.
 
 ### For GitLab CI
 1. Create a GitHub Personal Access Token:

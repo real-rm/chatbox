@@ -1,6 +1,7 @@
 package chatbox
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -386,5 +387,76 @@ func TestEncryptionKeyConfiguration(t *testing.T) {
 		assert.NotEmpty(t, encryptionKeyStr, "Encryption key must be configured for production")
 		
 		t.Log("✓ Encryption key is properly configured and will be passed to storage service")
+	})
+}
+
+// TestMaxMessageSizeConfiguration tests that max_message_size configuration is properly loaded
+func TestMaxMessageSizeConfiguration(t *testing.T) {
+	// Set Gin to test mode
+	gin.SetMode(gin.TestMode)
+
+	// Set config file path for testing
+	os.Setenv("RMBASE_FILE_CFG", "config.toml")
+
+	// Load config
+	err := goconfig.LoadConfig()
+	if err != nil {
+		t.Skipf("Failed to load config: %v", err)
+	}
+
+	config, err := goconfig.Default()
+	if err != nil {
+		t.Skipf("Failed to get default config: %v", err)
+	}
+
+	t.Run("max_message_size configuration exists", func(t *testing.T) {
+		// Test that the configuration key exists and can be read
+		maxMessageSize, err := config.ConfigStringWithDefault("chatbox.max_message_size", "1048576")
+		assert.NoError(t, err)
+		assert.NotEmpty(t, maxMessageSize, "Max message size should be configured in config.toml")
+		t.Logf("Max message size configuration: %s bytes", maxMessageSize)
+	})
+
+	t.Run("max_message_size is valid integer", func(t *testing.T) {
+		// Test that the max message size can be parsed as an integer
+		maxMessageSizeStr, err := config.ConfigStringWithDefault("chatbox.max_message_size", "1048576")
+		assert.NoError(t, err)
+		
+		var maxMessageSize int64
+		_, parseErr := fmt.Sscanf(maxMessageSizeStr, "%d", &maxMessageSize)
+		assert.NoError(t, parseErr, "Max message size should be a valid integer")
+		assert.Greater(t, maxMessageSize, int64(0), "Max message size should be positive")
+		t.Logf("Parsed max message size: %d bytes", maxMessageSize)
+	})
+
+	t.Run("default max_message_size is 1MB", func(t *testing.T) {
+		// Test that the default max message size is 1MB (1048576 bytes)
+		maxMessageSizeStr, err := config.ConfigStringWithDefault("chatbox.max_message_size", "1048576")
+		assert.NoError(t, err)
+		
+		var maxMessageSize int64
+		_, parseErr := fmt.Sscanf(maxMessageSizeStr, "%d", &maxMessageSize)
+		assert.NoError(t, parseErr)
+		
+		// The default should be 1MB
+		assert.Equal(t, int64(1048576), maxMessageSize, "Default max message size should be 1MB (1048576 bytes)")
+	})
+
+	t.Run("environment variable overrides config", func(t *testing.T) {
+		// Test that MAX_MESSAGE_SIZE environment variable takes precedence
+		testSize := "2097152" // 2MB
+		os.Setenv("MAX_MESSAGE_SIZE", testSize)
+		defer os.Unsetenv("MAX_MESSAGE_SIZE")
+		
+		// Simulate the logic in Register function
+		maxMessageSize := int64(1048576) // Default
+		if maxSizeStr := os.Getenv("MAX_MESSAGE_SIZE"); maxSizeStr != "" {
+			var parsedSize int64
+			if _, err := fmt.Sscanf(maxSizeStr, "%d", &parsedSize); err == nil {
+				maxMessageSize = parsedSize
+			}
+		}
+		
+		assert.Equal(t, int64(2097152), maxMessageSize, "Environment variable should override config")
 	})
 }

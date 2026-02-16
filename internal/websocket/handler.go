@@ -104,6 +104,7 @@ type Handler struct {
 	connLimiter    *ratelimit.ConnectionLimiter
 	router         MessageRouter // Add router for message processing
 	allowedOrigins map[string]bool // Allowed origins for CORS
+	maxMessageSize int64 // Maximum message size in bytes
 
 	// connections tracks active connections by user ID and connection ID
 	connections map[string]map[string]*Connection
@@ -118,7 +119,7 @@ type MessageRouter interface {
 }
 
 // NewHandler creates a new WebSocket handler
-func NewHandler(validator *auth.JWTValidator, router MessageRouter, logger *golog.Logger) *Handler {
+func NewHandler(validator *auth.JWTValidator, router MessageRouter, logger *golog.Logger, maxMessageSize int64) *Handler {
 	wsLogger := logger.WithGroup("websocket")
 	return &Handler{
 		validator:      validator,
@@ -126,6 +127,7 @@ func NewHandler(validator *auth.JWTValidator, router MessageRouter, logger *golo
 		logger:         wsLogger,
 		connLimiter:    ratelimit.NewConnectionLimiter(10), // Max 10 connections per user
 		allowedOrigins: make(map[string]bool),
+		maxMessageSize: maxMessageSize,
 		connections:    make(map[string]map[string]*Connection),
 	}
 }
@@ -224,6 +226,9 @@ func (h *Handler) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 			"component", "websocket")
 		return
 	}
+
+	// Set read limit to prevent memory exhaustion from oversized messages
+	conn.SetReadLimit(h.maxMessageSize)
 
 	// Create connection with user context
 	connection := h.createConnection(conn, claims)
@@ -463,7 +468,14 @@ func (c *Connection) readPump(h *Handler) {
 	for {
 		_, rawMessage, err := c.conn.ReadMessage()
 		if err != nil {
-			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+			// Check if error is due to message size limit exceeded
+			if errors.Is(err, websocket.ErrReadLimit) {
+				h.logger.Warn("WebSocket message size limit exceeded",
+					"user_id", c.UserID,
+					"connection_id", c.ConnectionID,
+					"limit", h.maxMessageSize,
+					"component", "websocket")
+			} else if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 				h.logger.Error("WebSocket unexpected close",
 					"user_id", c.UserID,
 					"session_id", c.SessionID,

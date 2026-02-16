@@ -90,9 +90,8 @@ func Register(r *gin.Engine, config *goconfig.ConfigAccessor, logger *golog.Logg
 	}
 
 	// Load encryption key for message content at rest
-	// Load encryption key for message content at rest
 	// Priority: Environment variable > Config file
-	// The key should be 32 bytes for AES-256 encryption
+	// The key must be exactly 32 bytes for AES-256 encryption
 	var encryptionKey []byte
 	encryptionKeyStr := os.Getenv("ENCRYPTION_KEY")
 	if encryptionKeyStr == "" {
@@ -103,26 +102,44 @@ func Register(r *gin.Engine, config *goconfig.ConfigAccessor, logger *golog.Logg
 		}
 	}
 	if encryptionKeyStr != "" {
-		// Convert string to bytes - ensure it's exactly 32 bytes for AES-256
+		// Convert string to bytes
 		encryptionKey = []byte(encryptionKeyStr)
-		if len(encryptionKey) != 32 {
-			chatboxLogger.Warn("Encryption key is not 32 bytes, padding or truncating",
-				"actual_length", len(encryptionKey),
-				"required_length", 32)
-			// Pad or truncate to 32 bytes
-			if len(encryptionKey) < 32 {
-				// Pad with zeros
-				padded := make([]byte, 32)
-				copy(padded, encryptionKey)
-				encryptionKey = padded
-			} else {
-				// Truncate to 32 bytes
-				encryptionKey = encryptionKey[:32]
-			}
-		}
 		chatboxLogger.Info("Message encryption enabled", "key_length", len(encryptionKey))
 	} else {
 		chatboxLogger.Warn("No encryption key configured, messages will be stored unencrypted")
+	}
+
+	// Validate encryption key length before any encryption operations
+	if err := validateEncryptionKey(encryptionKey); err != nil {
+		return err
+	}
+
+	// Load maximum message size for WebSocket connections
+	// Priority: Environment variable > Config file
+	// Default: 1MB (1048576 bytes)
+	maxMessageSize := int64(1048576) // Default 1MB
+	if maxSizeStr := os.Getenv("MAX_MESSAGE_SIZE"); maxSizeStr != "" {
+		// Parse from environment variable
+		var parsedSize int64
+		if _, err := fmt.Sscanf(maxSizeStr, "%d", &parsedSize); err == nil {
+			maxMessageSize = parsedSize
+			chatboxLogger.Info("Using MAX_MESSAGE_SIZE from environment", "size_bytes", maxMessageSize)
+		} else {
+			chatboxLogger.Warn("Invalid MAX_MESSAGE_SIZE environment variable, using default", "value", maxSizeStr, "default", maxMessageSize)
+		}
+	} else {
+		// Try to load from config file
+		if configSizeStr, err := config.ConfigStringWithDefault("chatbox.max_message_size", "1048576"); err == nil {
+			var parsedSize int64
+			if _, parseErr := fmt.Sscanf(configSizeStr, "%d", &parsedSize); parseErr == nil {
+				maxMessageSize = parsedSize
+				chatboxLogger.Info("Using max_message_size from config", "size_bytes", maxMessageSize)
+			} else {
+				chatboxLogger.Warn("Invalid max_message_size in config, using default", "value", configSizeStr, "default", maxMessageSize)
+			}
+		} else {
+			chatboxLogger.Info("Using default max_message_size", "size_bytes", maxMessageSize)
+		}
 	}
 
 	// Create storage service with encryption key
@@ -152,13 +169,13 @@ func Register(r *gin.Engine, config *goconfig.ConfigAccessor, logger *golog.Logg
 	}
 
 	// Create message router
-	messageRouter := router.NewMessageRouter(sessionManager, llmService, uploadService, notificationService, chatboxLogger)
+	messageRouter := router.NewMessageRouter(sessionManager, llmService, uploadService, notificationService, storageService, chatboxLogger)
 
 	// Create JWT validator
 	validator := auth.NewJWTValidator(jwtSecret)
 
 	// Create WebSocket handler with router
-	wsHandler := websocket.NewHandler(validator, messageRouter, chatboxLogger)
+	wsHandler := websocket.NewHandler(validator, messageRouter, chatboxLogger, maxMessageSize)
 	
 	// Configure allowed origins for WebSocket connections
 	allowedOriginsStr, err := config.ConfigStringWithDefault("chatbox.allowed_origins", "")
@@ -246,6 +263,26 @@ func Register(r *gin.Engine, config *goconfig.ConfigAccessor, logger *golog.Logg
 
 	return nil
 }
+// validateEncryptionKey checks if the encryption key is exactly 32 bytes
+// Returns error if key is provided but not 32 bytes
+// Returns nil if key is empty (encryption disabled) or exactly 32 bytes
+func validateEncryptionKey(key []byte) error {
+	keyLen := len(key)
+
+	// Empty key is valid (encryption disabled)
+	if keyLen == 0 {
+		return nil
+	}
+
+	// 32 bytes is valid for AES-256
+	if keyLen == 32 {
+		return nil
+	}
+
+	// Any other length is invalid
+	return fmt.Errorf("encryption key must be exactly 32 bytes for AES-256, got %d bytes. Please provide a valid 32-byte key or remove the key to disable encryption", keyLen)
+}
+
 
 // authMiddleware creates a Gin middleware for JWT authentication
 func authMiddleware(validator *auth.JWTValidator, logger *golog.Logger) gin.HandlerFunc {

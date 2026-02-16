@@ -48,7 +48,7 @@ func TestProperty_MessageOrderPreservation(t *testing.T) {
 			logger := createTestLogger()
 			sm := session.NewSessionManager(15*time.Minute, logger)
 			mockLLM := &mockLLMService{}
-			router := NewMessageRouter(sm, mockLLM, nil, nil, logger)
+			router := NewMessageRouter(sm, mockLLM, nil, nil, nil, logger)
 
 			// Create a session
 			sess, err := sm.CreateSession("user-1")
@@ -108,7 +108,7 @@ func TestProperty_ConnectionTracking(t *testing.T) {
 			logger := createTestLogger()
 			sm := session.NewSessionManager(15*time.Minute, logger)
 			mockLLM := &mockLLMService{}
-			router := NewMessageRouter(sm, mockLLM, nil, nil, logger)
+			router := NewMessageRouter(sm, mockLLM, nil, nil, nil, logger)
 
 			// Create and register multiple connections
 			sessionIDs := make([]string, numSessions)
@@ -188,7 +188,7 @@ func TestProperty_MessageRoutingToCorrectHandler(t *testing.T) {
 			logger := createTestLogger()
 			sm := session.NewSessionManager(15*time.Minute, logger)
 			mockLLM := &mockLLMService{}
-			router := NewMessageRouter(sm, mockLLM, nil, nil, logger)
+			router := NewMessageRouter(sm, mockLLM, nil, nil, nil, logger)
 
 			// Create a session
 			sess, err := sm.CreateSession("user-1")
@@ -258,7 +258,7 @@ func TestProperty_ErrorHandlingForInvalidMessages(t *testing.T) {
 			logger := createTestLogger()
 			sm := session.NewSessionManager(15*time.Minute, logger)
 			mockLLM := &mockLLMService{}
-			router := NewMessageRouter(sm, mockLLM, nil, nil, logger)
+			router := NewMessageRouter(sm, mockLLM, nil, nil, nil, logger)
 
 			// Create a session
 			sess, err := sm.CreateSession("user-1")
@@ -325,7 +325,7 @@ func TestProperty_ConcurrentConnectionAccessSafety(t *testing.T) {
 			logger := createTestLogger()
 			sm := session.NewSessionManager(15*time.Minute, logger)
 			mockLLM := &mockLLMService{}
-			router := NewMessageRouter(sm, mockLLM, nil, nil, logger)
+			router := NewMessageRouter(sm, mockLLM, nil, nil, nil, logger)
 
 			// Perform concurrent operations
 			done := make(chan bool, numOperations)
@@ -384,7 +384,7 @@ func TestProperty_BroadcastToSessionParticipants(t *testing.T) {
 			logger := createTestLogger()
 			sm := session.NewSessionManager(15*time.Minute, logger)
 			mockLLM := &mockLLMService{}
-			router := NewMessageRouter(sm, mockLLM, nil, nil, logger)
+			router := NewMessageRouter(sm, mockLLM, nil, nil, nil, logger)
 
 			// Create a session
 			sess, err := sm.CreateSession("user-1")
@@ -455,7 +455,7 @@ func TestProperty_VoiceMessageRouting(t *testing.T) {
 				sendMessageCalled: false,
 			}
 
-			router := NewMessageRouter(sm, mockLLM, nil, nil, logger)
+			router := NewMessageRouter(sm, mockLLM, nil, nil, nil, logger)
 
 			// Create a session with a model ID
 			sess, err := sm.CreateSession("user-1")
@@ -530,7 +530,7 @@ func TestProperty_VoiceResponseFormatting(t *testing.T) {
 			logger := createTestLogger()
 			sm := session.NewSessionManager(15*time.Minute, logger)
 			mockLLM := &mockLLMService{}
-			router := NewMessageRouter(sm, mockLLM, nil, nil, logger)
+			router := NewMessageRouter(sm, mockLLM, nil, nil, nil, logger)
 
 			// Create a session
 			sess, err := sm.CreateSession("user-1")

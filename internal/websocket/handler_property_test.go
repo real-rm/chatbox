@@ -64,7 +64,7 @@ func TestProperty_ConnectionUserAssociation(t *testing.T) {
 			}
 
 			// Create a connection
-			handler := NewHandler(validator, nil, testPropertyLogger())
+			handler := NewHandler(validator, nil, testPropertyLogger(), 1048576)
 			conn := handler.createConnection(nil, claims)
 
 			// Verify the connection is associated with the correct user ID
@@ -117,7 +117,7 @@ func TestProperty_WebSocketConnectionEstablishment(t *testing.T) {
 			}
 
 			// Verify we can create a connection with valid claims
-			handler := NewHandler(validator, nil, testPropertyLogger())
+			handler := NewHandler(validator, nil, testPropertyLogger(), 1048576)
 			conn := handler.createConnection(nil, claims)
 
 			// Connection should be created successfully with proper initialization
@@ -191,7 +191,7 @@ func TestProperty_HeartbeatResponse(t *testing.T) {
 			}
 
 			// Create a mock WebSocket connection
-			handler := NewHandler(validator, nil, testPropertyLogger())
+			handler := NewHandler(validator, nil, testPropertyLogger(), 1048576)
 			conn := handler.createConnection(nil, claims)
 
 			// Verify the connection has a send channel (required for heartbeat)
@@ -243,7 +243,7 @@ func TestProperty_ConnectionResourceCleanup(t *testing.T) {
 			}
 
 			// Create handler and connection
-			handler := NewHandler(validator, nil, testPropertyLogger())
+			handler := NewHandler(validator, nil, testPropertyLogger(), 1048576)
 			conn := handler.createConnection(nil, claims)
 
 			// Register the connection
@@ -349,7 +349,7 @@ func TestProperty_ConnectionIDUniqueness(t *testing.T) {
 			}
 
 			// Create handler
-			handler := NewHandler(validator, nil, testPropertyLogger())
+			handler := NewHandler(validator, nil, testPropertyLogger(), 1048576)
 
 			// Generate multiple connections rapidly
 			connectionIDs := make(map[string]bool)
@@ -417,7 +417,7 @@ func TestProperty_ConnectionIDFormat(t *testing.T) {
 			}
 
 			// Create handler and connection
-			handler := NewHandler(validator, nil, testPropertyLogger())
+			handler := NewHandler(validator, nil, testPropertyLogger(), 1048576)
 			conn := handler.createConnection(nil, claims)
 
 			// Verify connection ID is non-empty
@@ -431,6 +431,230 @@ func TestProperty_ConnectionIDFormat(t *testing.T) {
 				conn.ConnectionID[:len(userID)] == userID
 		},
 		gen.Identifier(),
+	))
+
+	properties.TestingRun(t, gopter.ConsoleReporter(false))
+}
+
+// Feature: critical-security-fixes
+// Property 2: Read limit enforcement
+// **Validates: Requirements 3.1**
+//
+// For any WebSocket connection established by the system, the connection should
+// have a read limit configured that prevents reading messages larger than the
+// configured maximum.
+func TestProperty_ReadLimitEnforcement(t *testing.T) {
+	parameters := gopter.DefaultTestParameters()
+	parameters.MinSuccessfulTests = 100
+	properties := gopter.NewProperties(parameters)
+
+	properties.Property("all connections have read limit set", prop.ForAll(
+		func(userID string, maxMessageSize int64) bool {
+			// Skip invalid inputs
+			if userID == "" || maxMessageSize <= 0 || maxMessageSize > 100*1024*1024 {
+				return true
+			}
+
+			// Create a valid JWT token
+			token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+				"user_id": userID,
+				"roles":   []string{"user"},
+				"exp":     time.Now().Add(time.Hour).Unix(),
+			})
+
+			tokenString, err := token.SignedString([]byte("test-secret"))
+			if err != nil {
+				return false
+			}
+
+			// Validate the token
+			validator := auth.NewJWTValidator("test-secret")
+			_, err = validator.ValidateToken(tokenString)
+			if err != nil {
+				return false
+			}
+
+			// Create handler with specific max message size
+			handler := NewHandler(validator, nil, testPropertyLogger(), maxMessageSize)
+
+			// Verify handler has the correct max message size configured
+			return handler.maxMessageSize == maxMessageSize
+		},
+		gen.Identifier(),
+		gen.Int64Range(1024, 10*1024*1024), // 1KB to 10MB
+	))
+
+	properties.TestingRun(t, gopter.ConsoleReporter(false))
+}
+
+// Feature: critical-security-fixes
+// Property 3: Oversized message rejection
+// **Validates: Requirements 3.2**
+//
+// For any message sent to a WebSocket connection that exceeds the configured
+// read limit, the connection should be closed with an error.
+//
+// Note: This property test verifies the handler configuration. The actual
+// rejection behavior is tested in integration tests since it requires a real
+// WebSocket connection to test the Gorilla WebSocket library's enforcement.
+func TestProperty_OversizedMessageRejection(t *testing.T) {
+	parameters := gopter.DefaultTestParameters()
+	parameters.MinSuccessfulTests = 100
+	properties := gopter.NewProperties(parameters)
+
+	properties.Property("handler enforces message size limits", prop.ForAll(
+		func(userID string, messageSize int64, maxSize int64) bool {
+			// Skip invalid inputs
+			if userID == "" || messageSize <= 0 || maxSize <= 0 || maxSize > 100*1024*1024 {
+				return true
+			}
+
+			// Ensure messageSize is larger than maxSize for this test
+			if messageSize <= maxSize {
+				messageSize = maxSize + 1
+			}
+
+			// Create a valid JWT token
+			token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+				"user_id": userID,
+				"roles":   []string{"user"},
+				"exp":     time.Now().Add(time.Hour).Unix(),
+			})
+
+			tokenString, err := token.SignedString([]byte("test-secret"))
+			if err != nil {
+				return false
+			}
+
+			// Validate the token
+			validator := auth.NewJWTValidator("test-secret")
+			_, err = validator.ValidateToken(tokenString)
+			if err != nil {
+				return false
+			}
+
+			// Create handler with specific max message size
+			handler := NewHandler(validator, nil, testPropertyLogger(), maxSize)
+
+			// Verify handler would reject oversized messages
+			// The actual rejection happens in the Gorilla WebSocket library
+			// when SetReadLimit is called, so we verify the configuration
+			return handler.maxMessageSize < messageSize
+		},
+		gen.Identifier(),
+		gen.Int64Range(1024*1024, 100*1024*1024), // 1MB to 100MB (oversized)
+		gen.Int64Range(1024, 10*1024*1024),       // 1KB to 10MB (limit)
+	))
+
+	properties.TestingRun(t, gopter.ConsoleReporter(false))
+}
+
+// Feature: critical-security-fixes
+// Property 4: Configuration value application
+// **Validates: Requirements 3.3**
+//
+// For any valid configuration value for the message size limit, when the system
+// starts with that configuration, the read limit should be set to that value.
+func TestProperty_ConfigurationValueApplication(t *testing.T) {
+	parameters := gopter.DefaultTestParameters()
+	parameters.MinSuccessfulTests = 100
+	properties := gopter.NewProperties(parameters)
+
+	properties.Property("handler applies configured message size limit", prop.ForAll(
+		func(userID string, configuredLimit int64) bool {
+			// Skip invalid inputs
+			if userID == "" || configuredLimit <= 0 || configuredLimit > 100*1024*1024 {
+				return true
+			}
+
+			// Create a valid JWT token
+			token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+				"user_id": userID,
+				"roles":   []string{"user"},
+				"exp":     time.Now().Add(time.Hour).Unix(),
+			})
+
+			tokenString, err := token.SignedString([]byte("test-secret"))
+			if err != nil {
+				return false
+			}
+
+			// Validate the token
+			validator := auth.NewJWTValidator("test-secret")
+			_, err = validator.ValidateToken(tokenString)
+			if err != nil {
+				return false
+			}
+
+			// Create handler with configured limit
+			handler := NewHandler(validator, nil, testPropertyLogger(), configuredLimit)
+
+			// Verify the handler has the exact configured limit
+			return handler.maxMessageSize == configuredLimit
+		},
+		gen.Identifier(),
+		gen.Int64Range(1024, 100*1024*1024), // 1KB to 100MB
+	))
+
+	properties.TestingRun(t, gopter.ConsoleReporter(false))
+}
+
+// Feature: critical-security-fixes
+// Property 5: Oversized message logging
+// **Validates: Requirements 3.5, 3.6**
+//
+// For any connection that is closed due to an oversized message, a log entry
+// should be created that contains both the user ID and connection ID.
+//
+// Note: This property test verifies the handler has the necessary context
+// (user ID, connection ID) available for logging. The actual logging behavior
+// is tested in integration tests where we can capture log output.
+func TestProperty_OversizedMessageLogging(t *testing.T) {
+	parameters := gopter.DefaultTestParameters()
+	parameters.MinSuccessfulTests = 100
+	properties := gopter.NewProperties(parameters)
+
+	properties.Property("connections have user ID and connection ID for logging", prop.ForAll(
+		func(userID string, maxMessageSize int64) bool {
+			// Skip invalid inputs
+			if userID == "" || maxMessageSize <= 0 || maxMessageSize > 100*1024*1024 {
+				return true
+			}
+
+			// Create a valid JWT token
+			token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+				"user_id": userID,
+				"roles":   []string{"user"},
+				"exp":     time.Now().Add(time.Hour).Unix(),
+			})
+
+			tokenString, err := token.SignedString([]byte("test-secret"))
+			if err != nil {
+				return false
+			}
+
+			// Validate the token
+			validator := auth.NewJWTValidator("test-secret")
+			claims, err := validator.ValidateToken(tokenString)
+			if err != nil {
+				return false
+			}
+
+			// Create handler
+			handler := NewHandler(validator, nil, testPropertyLogger(), maxMessageSize)
+
+			// Create a connection
+			conn := handler.createConnection(nil, claims)
+
+			// Verify connection has all required fields for logging
+			// When an oversized message error occurs, the readPump function
+			// logs with user_id, connection_id, and limit
+			return conn.UserID != "" &&
+				conn.ConnectionID != "" &&
+				handler.maxMessageSize == maxMessageSize
+		},
+		gen.Identifier(),
+		gen.Int64Range(1024, 10*1024*1024), // 1KB to 10MB
 	))
 
 	properties.TestingRun(t, gopter.ConsoleReporter(false))

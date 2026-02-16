@@ -86,6 +86,7 @@ chatbox/
 - [docs/CORS_CONFIGURATION.md](docs/CORS_CONFIGURATION.md) - CORS setup
 - [docs/MONGODB_INDEXES.md](docs/MONGODB_INDEXES.md) - Database indexes
 - [docs/WEBSOCKET_ORIGIN_VALIDATION.md](docs/WEBSOCKET_ORIGIN_VALIDATION.md) - WebSocket security
+- [docs/JWT_TOKEN_SECURITY.md](docs/JWT_TOKEN_SECURITY.md) - JWT authentication security
 - [docs/ADMIN_NAME_DISPLAY.md](docs/ADMIN_NAME_DISPLAY.md) - Admin features
 - [docs/GRACEFUL_SHUTDOWN.md](docs/GRACEFUL_SHUTDOWN.md) - Shutdown handling
 
@@ -248,6 +249,23 @@ All blocking, high-priority, and medium-priority issues have been resolved:
 - ✅ CI/CD: Automated builds and testing
 
 See [PRODUCTION_READINESS_REVIEW.md](PRODUCTION_READINESS_REVIEW.md) for the complete assessment.
+
+## Troubleshooting
+
+### CI Build Fails with Authentication Error
+
+If GitHub Actions fails with:
+```
+fatal: could not read Password for 'https://***@github.com': terminal prompts disabled
+```
+
+This means the CI can't access private Go modules. Follow these steps:
+
+1. Create a Personal Access Token (PAT) with `repo` scope
+2. Add it as a repository secret named `GO_MODULES_TOKEN`
+3. The workflow will automatically use it
+
+See [docs/CI_GITHUB_TOKEN_SETUP.md](docs/CI_GITHUB_TOKEN_SETUP.md) for detailed instructions.
 
 ## Contributing
 

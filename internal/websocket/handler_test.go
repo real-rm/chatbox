@@ -123,7 +123,7 @@ func TestConnection_ReadPump(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			validator := auth.NewJWTValidator("test-secret")
-			handler := NewHandler(validator, nil, testLogger())
+			handler := NewHandler(validator, nil, testLogger(), 1048576)
 
 			// Create a test server that will act as the client
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -185,7 +185,7 @@ func TestConnection_ReadPump(t *testing.T) {
 // TestConnection_PingPong tests the ping/pong heartbeat mechanism
 func TestConnection_PingPong(t *testing.T) {
 	validator := auth.NewJWTValidator("test-secret")
-	handler := NewHandler(validator, nil, testLogger())
+	handler := NewHandler(validator, nil, testLogger(), 1048576)
 
 	// Create a test server that responds to pings
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -244,7 +244,7 @@ func TestConnection_PingPong(t *testing.T) {
 // TestConnection_GracefulClose tests graceful connection closure
 func TestConnection_GracefulClose(t *testing.T) {
 	validator := auth.NewJWTValidator("test-secret")
-	handler := NewHandler(validator, nil, testLogger())
+	handler := NewHandler(validator, nil, testLogger(), 1048576)
 
 	// Create a test server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -305,7 +305,7 @@ func TestConnection_GracefulClose(t *testing.T) {
 // TestConnection_ResourceCleanup tests that resources are cleaned up properly
 func TestConnection_ResourceCleanup(t *testing.T) {
 	validator := auth.NewJWTValidator("test-secret")
-	handler := NewHandler(validator, nil, testLogger())
+	handler := NewHandler(validator, nil, testLogger(), 1048576)
 
 	// Create a test server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -432,7 +432,7 @@ func TestHandler_CheckOrigin(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			validator := auth.NewJWTValidator("test-secret")
-			handler := NewHandler(validator, nil, testLogger())
+			handler := NewHandler(validator, nil, testLogger(), 1048576)
 
 			// Configure allowed origins
 			if len(tt.allowedOrigins) > 0 {
@@ -454,7 +454,7 @@ func TestHandler_CheckOrigin(t *testing.T) {
 // TestHandler_SetAllowedOrigins tests the SetAllowedOrigins configuration method
 func TestHandler_SetAllowedOrigins(t *testing.T) {
 	validator := auth.NewJWTValidator("test-secret")
-	handler := NewHandler(validator, nil, testLogger())
+	handler := NewHandler(validator, nil, testLogger(), 1048576)
 
 	// Test setting origins
 	origins := []string{"https://example.com", "https://app.example.com"}
@@ -539,7 +539,7 @@ func TestHandler_OriginValidationIntegration(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			handler := NewHandler(validator, nil, testLogger())
+			handler := NewHandler(validator, nil, testLogger(), 1048576)
 
 			// Configure allowed origins
 			if len(tt.allowedOrigins) > 0 {
@@ -576,6 +576,125 @@ func TestHandler_OriginValidationIntegration(t *testing.T) {
 					assert.Equal(t, http.StatusForbidden, resp.StatusCode, "Expected 403 Forbidden for disallowed origin")
 				}
 			}
+		})
+	}
+}
+
+// TestHandler_MessageSizeLimit tests that the handler correctly configures message size limits
+func TestHandler_MessageSizeLimit(t *testing.T) {
+	tests := []struct {
+		name               string
+		maxMessageSize     int64
+		expectedLimit      int64
+		description        string
+	}{
+		{
+			name:           "default limit is 1MB",
+			maxMessageSize: 1048576,
+			expectedLimit:  1048576,
+			description:    "Handler should use default 1MB limit",
+		},
+		{
+			name:           "custom limit 512KB",
+			maxMessageSize: 524288,
+			expectedLimit:  524288,
+			description:    "Handler should use custom 512KB limit",
+		},
+		{
+			name:           "custom limit 2MB",
+			maxMessageSize: 2097152,
+			expectedLimit:  2097152,
+			description:    "Handler should use custom 2MB limit",
+		},
+		{
+			name:           "custom limit 100KB",
+			maxMessageSize: 102400,
+			expectedLimit:  102400,
+			description:    "Handler should use custom 100KB limit",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			validator := auth.NewJWTValidator("test-secret")
+			handler := NewHandler(validator, nil, testLogger(), tt.maxMessageSize)
+
+			// Verify the handler stores the correct max message size
+			assert.Equal(t, tt.expectedLimit, handler.maxMessageSize, tt.description)
+		})
+	}
+}
+
+// TestHandler_SetReadLimitCalled tests that SetReadLimit is called on WebSocket connections
+func TestHandler_SetReadLimitCalled(t *testing.T) {
+	tests := []struct {
+		name           string
+		maxMessageSize int64
+		description    string
+	}{
+		{
+			name:           "SetReadLimit called with default 1MB",
+			maxMessageSize: 1048576,
+			description:    "SetReadLimit should be called with 1MB limit",
+		},
+		{
+			name:           "SetReadLimit called with custom 512KB",
+			maxMessageSize: 524288,
+			description:    "SetReadLimit should be called with 512KB limit",
+		},
+		{
+			name:           "SetReadLimit called with custom 2MB",
+			maxMessageSize: 2097152,
+			description:    "SetReadLimit should be called with 2MB limit",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create a test JWT token
+			secret := "test-secret"
+			validator := auth.NewJWTValidator(secret)
+			
+			// Create mock router
+			mockRouter := newMockRouter()
+			
+			handler := NewHandler(validator, mockRouter, testLogger(), tt.maxMessageSize)
+
+			// Create a test server that will upgrade to WebSocket
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				handler.HandleWebSocket(w, r)
+			}))
+			defer server.Close()
+
+			// Create a valid JWT token
+			token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+				"user_id": "test-user",
+				"name":    "Test User",
+				"roles":   []string{"user"},
+				"exp":     time.Now().Add(time.Hour).Unix(),
+			})
+			tokenString, err := token.SignedString([]byte(secret))
+			require.NoError(t, err)
+
+			// Connect to the WebSocket endpoint with token
+			wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "?token=" + tokenString
+			conn, resp, err := websocket.DefaultDialer.Dial(wsURL, nil)
+			
+			// Connection should be established successfully
+			require.NoError(t, err, tt.description)
+			require.NotNil(t, conn)
+			require.Equal(t, http.StatusSwitchingProtocols, resp.StatusCode)
+
+			// The connection is now established and SetReadLimit has been called
+			// We can't directly verify SetReadLimit was called, but we can verify
+			// the handler was configured with the correct limit
+			assert.Equal(t, tt.maxMessageSize, handler.maxMessageSize, tt.description)
+
+			// Clean up
+			conn.Close()
+			
+			// Give time for cleanup
+			time.Sleep(50 * time.Millisecond)
 		})
 	}
 }

@@ -34,7 +34,7 @@ func TestHandler_MultipleConnectionsPerUser(t *testing.T) {
 
 	testSecret := "test-secret"
 	validator := auth.NewJWTValidator(testSecret)
-	handler := NewHandler(validator, nil, testLogger())
+	handler := NewHandler(validator, nil, testLogger(), 1048576)
 
 	// Create a test server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -134,7 +134,7 @@ func TestHandler_ConnectionIDUniqueness(t *testing.T) {
 // TestHandler_MultiConnectionMessageIsolation tests that messages sent to one connection don't affect others
 func TestHandler_MultiConnectionMessageIsolation(t *testing.T) {
 	validator := auth.NewJWTValidator("test-secret")
-	handler := NewHandler(validator, nil, testLogger())
+	handler := NewHandler(validator, nil, testLogger(), 1048576)
 
 	userID := "test-user"
 	
@@ -189,7 +189,7 @@ func TestHandler_MultiConnectionMessageIsolation(t *testing.T) {
 // TestHandler_RateLimitPerUser tests that rate limiting applies per user, not per connection
 func TestHandler_RateLimitPerUser(t *testing.T) {
 	validator := auth.NewJWTValidator("test-secret")
-	handler := NewHandler(validator, nil, testLogger())
+	handler := NewHandler(validator, nil, testLogger(), 1048576)
 
 	userID := "test-user"
 	
@@ -233,7 +233,7 @@ func TestHandler_RateLimitPerUser(t *testing.T) {
 // TestHandler_ShutdownWithMultipleConnections tests graceful shutdown with multiple connections per user
 func TestHandler_ShutdownWithMultipleConnections(t *testing.T) {
 	validator := auth.NewJWTValidator("test-secret")
-	handler := NewHandler(validator, nil, testLogger())
+	handler := NewHandler(validator, nil, testLogger(), 1048576)
 
 	// Create multiple users with multiple connections each
 	numUsers := 3
@@ -284,7 +284,7 @@ func TestHandler_ConnectionLimitGracefulHandling(t *testing.T) {
 
 	testSecret := "test-secret"
 	validator := auth.NewJWTValidator(testSecret)
-	handler := NewHandler(validator, nil, testLogger())
+	handler := NewHandler(validator, nil, testLogger(), 1048576)
 
 	// Create a test server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -374,7 +374,7 @@ func TestHandler_ConnectionLimitPerUser(t *testing.T) {
 
 	testSecret := "test-secret"
 	validator := auth.NewJWTValidator(testSecret)
-	handler := NewHandler(validator, nil, testLogger())
+	handler := NewHandler(validator, nil, testLogger(), 1048576)
 
 	// Create a test server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -448,7 +448,7 @@ func TestHandler_NotifyConnectionLimit(t *testing.T) {
 
 	testSecret := "test-secret"
 	validator := auth.NewJWTValidator(testSecret)
-	handler := NewHandler(validator, nil, testLogger())
+	handler := NewHandler(validator, nil, testLogger(), 1048576)
 
 	// Create a test server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -533,7 +533,7 @@ func TestHandler_NotifyConnectionLimit(t *testing.T) {
 // TestHandler_NotifyConnectionLimit_NoExistingConnections tests notification when no connections exist
 func TestHandler_NotifyConnectionLimit_NoExistingConnections(t *testing.T) {
 	validator := auth.NewJWTValidator("test-secret")
-	handler := NewHandler(validator, nil, testLogger())
+	handler := NewHandler(validator, nil, testLogger(), 1048576)
 
 	// Call notifyConnectionLimit with a user that has no connections
 	// This should not panic or cause errors
@@ -551,7 +551,7 @@ func TestHandler_NotifyConnectionLimit_NoExistingConnections(t *testing.T) {
 // TestHandler_NotifyConnectionLimit_MessageFormat tests the notification message format
 func TestHandler_NotifyConnectionLimit_MessageFormat(t *testing.T) {
 	validator := auth.NewJWTValidator("test-secret")
-	handler := NewHandler(validator, nil, testLogger())
+	handler := NewHandler(validator, nil, testLogger(), 1048576)
 
 	userID := "test-user"
 	

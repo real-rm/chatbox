@@ -374,8 +374,105 @@ The service can be configured using environment variables or config.toml file:
 | `RECONNECT_TIMEOUT` | Session reconnect timeout | `15m` |
 | `MAX_CONNECTIONS` | Max concurrent connections | `10000` |
 | `RATE_LIMIT` | Requests per second limit | `100` |
+| `MAX_MESSAGE_SIZE` | Maximum WebSocket message size in bytes | `1048576` (1MB) |
+| `ENCRYPTION_KEY` | 32-byte AES-256 encryption key (base64 encoded) | Optional |
 
 See `deployments/kubernetes/configmap.yaml` for full list.
+
+#### WebSocket Message Size Limit
+
+The `MAX_MESSAGE_SIZE` environment variable (or `chatbox.max_message_size` config key) controls the maximum size of WebSocket messages that clients can send. This prevents denial-of-service attacks where malicious clients attempt to exhaust server memory by sending arbitrarily large messages.
+
+**Configuration**:
+- **Environment Variable**: `MAX_MESSAGE_SIZE`
+- **Config File Key**: `chatbox.max_message_size`
+- **Default Value**: `1048576` bytes (1 MB)
+- **Valid Range**: Any positive integer (bytes)
+
+**Example Configuration**:
+
+```yaml
+# In configmap.yaml
+MAX_MESSAGE_SIZE: "2097152"  # 2 MB
+
+# Or in config.toml
+[chatbox]
+max_message_size = 2097152  # 2 MB
+```
+
+**Behavior**:
+- When a client attempts to send a message larger than the configured limit, the WebSocket connection is automatically closed
+- The server logs the event with the user ID, connection ID, and the configured limit
+- Clients should implement proper error handling for connection closures
+
+**Recommendations**:
+- For typical chat applications: 1-2 MB is sufficient
+- For applications with file uploads: Consider 5-10 MB
+- Monitor logs for legitimate users hitting the limit and adjust accordingly
+
+#### Encryption Key Validation
+
+The `ENCRYPTION_KEY` environment variable configures AES-256 encryption for message content stored in the database. **Critical security requirement**: The encryption key must be exactly 32 bytes (256 bits) when decoded from base64.
+
+**Configuration**:
+- **Environment Variable**: `ENCRYPTION_KEY`
+- **Required Length**: Exactly 32 bytes (after base64 decoding)
+- **Algorithm**: AES-256-GCM
+- **Optional**: If not provided, messages are stored unencrypted (warning logged)
+
+**Generating a Valid Encryption Key**:
+
+```bash
+# Generate a secure 32-byte key (base64 encoded)
+openssl rand -base64 32
+
+# Example output:
+# 7x8y9z0a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6=
+```
+
+**Validation Behavior**:
+- **Valid (32 bytes)**: Application starts normally, encryption enabled
+- **Empty**: Application starts with warning, encryption disabled
+- **Invalid length**: Application fails to start with clear error message
+
+**Error Message Example**:
+```
+FATAL: Encryption key must be exactly 32 bytes for AES-256, got 16 bytes. 
+Please provide a valid 32-byte key or remove the key to disable encryption.
+```
+
+**Security Best Practices**:
+1. **Never use padding or truncation** - The application will reject keys that are not exactly 32 bytes
+2. **Generate cryptographically secure keys** - Use `openssl rand` or equivalent
+3. **Store securely** - Use Kubernetes secrets, AWS Secrets Manager, or HashiCorp Vault
+4. **Rotate regularly** - See [KEY_MANAGEMENT.md](../KEY_MANAGEMENT.md) for rotation procedures
+5. **Never commit to version control** - Always use secret management systems
+
+**Example Configuration**:
+
+```yaml
+# In secret.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: chat-secrets
+type: Opaque
+data:
+  ENCRYPTION_KEY: N3g4eTl6MGExYjJjM2Q0ZTVmNmc3aDhpOWowazFsMm0zbjRvNXA2cTdyOHM5dDB1MXYydzN4NHk1ejY=
+```
+
+**Testing Encryption Key**:
+
+```bash
+# Verify key length (should output "32")
+echo "YOUR_BASE64_KEY" | base64 -d | wc -c
+
+# Test with invalid key (should fail to start)
+ENCRYPTION_KEY="short_key" ./chatbox-server
+
+# Test with valid key (should start successfully)
+ENCRYPTION_KEY=$(openssl rand -base64 32) ./chatbox-server
+```
 
 ### CORS and Origin Validation
 

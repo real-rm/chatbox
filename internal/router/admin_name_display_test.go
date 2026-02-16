@@ -15,7 +15,7 @@ import (
 func setupTestRouterForAdminTests(t *testing.T) *MessageRouter {
 	logger := createTestLogger()
 	sm := session.NewSessionManager(15*time.Minute, logger)
-	return NewMessageRouter(sm, nil, nil, nil, logger)
+	return NewMessageRouter(sm, nil, nil, nil, nil, logger)
 }
 
 // TestAdminNameDisplay verifies that admin name is properly extracted from JWT

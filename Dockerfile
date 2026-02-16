@@ -10,13 +10,16 @@ WORKDIR /build
 
 # Configure Git to use HTTPS with token for private repos
 # GITHUB_TOKEN should be passed as a build argument
+# For CI: Use a Personal Access Token with 'repo' scope as GO_MODULES_TOKEN secret
+# For local builds: docker build --build-arg GITHUB_TOKEN=<your-pat> .
 ARG GITHUB_TOKEN
+ENV GOPRIVATE=github.com/real-rm/*
+
+# Configure git credentials for Go module downloads
 RUN if [ -n "$GITHUB_TOKEN" ]; then \
         git config --global url."https://${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"; \
+        git config --global credential.helper store; \
     fi
-
-# Set GOPRIVATE to indicate private modules
-ENV GOPRIVATE=github.com/real-rm/*
 
 # Copy go mod files
 COPY go.mod go.sum ./

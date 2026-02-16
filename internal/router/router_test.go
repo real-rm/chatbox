@@ -18,10 +18,26 @@ func mockConnection(userID string) *websocket.Connection {
 	return websocket.NewConnection(userID, []string{"user"})
 }
 
+// mockStorageService is a mock implementation of StorageService for testing
+type mockStorageService struct {
+	createSessionCalled bool
+	createSessionError  error
+	createdSessions     []*session.Session
+}
+
+func (m *mockStorageService) CreateSession(sess *session.Session) error {
+	m.createSessionCalled = true
+	if m.createSessionError != nil {
+		return m.createSessionError
+	}
+	m.createdSessions = append(m.createdSessions, sess)
+	return nil
+}
+
 func TestNewMessageRouter(t *testing.T) {
 	logger := createTestLogger()
 	sm := session.NewSessionManager(15*time.Minute, logger)
-	router := NewMessageRouter(sm, nil, nil, nil, logger)
+	router := NewMessageRouter(sm, nil, nil, nil, nil, logger)
 
 	assert.NotNil(t, router)
 	assert.NotNil(t, router.connections)
@@ -32,7 +48,7 @@ func TestNewMessageRouter(t *testing.T) {
 func TestRegisterConnection(t *testing.T) {
 	logger := createTestLogger()
 	sm := session.NewSessionManager(15*time.Minute, logger)
-	router := NewMessageRouter(sm, nil, nil, nil, logger)
+	router := NewMessageRouter(sm, nil, nil, nil, nil, logger)
 
 	tests := []struct {
 		name      string
@@ -85,7 +101,7 @@ func TestRegisterConnection(t *testing.T) {
 func TestUnregisterConnection(t *testing.T) {
 	logger := createTestLogger()
 	sm := session.NewSessionManager(15*time.Minute, logger)
-	router := NewMessageRouter(sm, nil, nil, nil, logger)
+	router := NewMessageRouter(sm, nil, nil, nil, nil, logger)
 
 	sessionID := "session-123"
 	conn := mockConnection("user-1")
@@ -111,7 +127,7 @@ func TestRouteMessage_UserMessage(t *testing.T) {
 	logger := createTestLogger()
 	sm := session.NewSessionManager(15*time.Minute, logger)
 	mockLLM := &mockLLMService{}
-	router := NewMessageRouter(sm, mockLLM, nil, nil, logger)
+	router := NewMessageRouter(sm, mockLLM, nil, nil, nil, logger)
 
 	// Create a session
 	sess, err := sm.CreateSession("user-1")
@@ -144,7 +160,7 @@ func TestRouteMessage_UserMessage(t *testing.T) {
 func TestRouteMessage_InvalidMessageType(t *testing.T) {
 	logger := createTestLogger()
 	sm := session.NewSessionManager(15*time.Minute, logger)
-	router := NewMessageRouter(sm, nil, nil, nil, logger)
+	router := NewMessageRouter(sm, nil, nil, nil, nil, logger)
 
 	conn := mockConnection("user-1")
 	msg := &message.Message{
@@ -167,7 +183,7 @@ func TestRouteMessage_InvalidMessageType(t *testing.T) {
 func TestRouteMessage_NilInputs(t *testing.T) {
 	logger := createTestLogger()
 	sm := session.NewSessionManager(15*time.Minute, logger)
-	router := NewMessageRouter(sm, nil, nil, nil, logger)
+	router := NewMessageRouter(sm, nil, nil, nil, nil, logger)
 
 	conn := mockConnection("user-1")
 	msg := &message.Message{
@@ -193,7 +209,8 @@ func TestHandleUserMessage(t *testing.T) {
 	logger := createTestLogger()
 	sm := session.NewSessionManager(15*time.Minute, logger)
 	mockLLM := &mockLLMService{}
-	router := NewMessageRouter(sm, mockLLM, nil, nil, logger)
+	mockStorage := &mockStorageService{}
+	router := NewMessageRouter(sm, mockLLM, nil, nil, mockStorage, logger)
 
 	// Create a session
 	sess, err := sm.CreateSession("user-1")
@@ -235,7 +252,7 @@ func TestHandleUserMessage(t *testing.T) {
 			errCode: chaterrors.ErrCodeMissingField,
 		},
 		{
-			name: "non-existent session",
+			name: "non-existent session - auto-creates",
 			msg: &message.Message{
 				Type:      message.TypeUserMessage,
 				SessionID: "non-existent",
@@ -243,8 +260,8 @@ func TestHandleUserMessage(t *testing.T) {
 				Sender:    message.SenderUser,
 				Timestamp: time.Now(),
 			},
-			wantErr: true,
-			errCode: chaterrors.ErrCodeMissingField,
+			wantErr: true, // Will fail because user-1 already has an active session
+			errCode: chaterrors.ErrCodeDatabaseError,
 		},
 		{
 			name:    "nil message",
@@ -274,7 +291,7 @@ func TestHandleUserMessage(t *testing.T) {
 func TestHandleUserMessage_NilConnection(t *testing.T) {
 	logger := createTestLogger()
 	sm := session.NewSessionManager(15*time.Minute, logger)
-	router := NewMessageRouter(sm, nil, nil, nil, logger)
+	router := NewMessageRouter(sm, nil, nil, nil, nil, logger)
 
 	msg := &message.Message{
 		Type:      message.TypeUserMessage,
@@ -292,7 +309,7 @@ func TestHandleUserMessage_NilConnection(t *testing.T) {
 func TestBroadcastToSession(t *testing.T) {
 	logger := createTestLogger()
 	sm := session.NewSessionManager(15*time.Minute, logger)
-	router := NewMessageRouter(sm, nil, nil, nil, logger)
+	router := NewMessageRouter(sm, nil, nil, nil, nil, logger)
 
 	// Create a session
 	sess, err := sm.CreateSession("user-1")
@@ -381,7 +398,7 @@ func TestBroadcastToSession(t *testing.T) {
 func TestGetConnection(t *testing.T) {
 	logger := createTestLogger()
 	sm := session.NewSessionManager(15*time.Minute, logger)
-	router := NewMessageRouter(sm, nil, nil, nil, logger)
+	router := NewMessageRouter(sm, nil, nil, nil, nil, logger)
 
 	sessionID := "session-123"
 	conn := mockConnection("user-1")
@@ -406,7 +423,7 @@ func TestMessageOrderPreservation(t *testing.T) {
 	logger := createTestLogger()
 	sm := session.NewSessionManager(15*time.Minute, logger)
 	mockLLM := &mockLLMService{}
-	router := NewMessageRouter(sm, mockLLM, nil, nil, logger)
+	router := NewMessageRouter(sm, mockLLM, nil, nil, nil, logger)
 
 	// Create a session
 	sess, err := sm.CreateSession("user-1")
@@ -440,7 +457,7 @@ func TestMessageOrderPreservation(t *testing.T) {
 func TestConcurrentConnectionAccess(t *testing.T) {
 	logger := createTestLogger()
 	sm := session.NewSessionManager(15*time.Minute, logger)
-	router := NewMessageRouter(sm, nil, nil, nil, logger)
+	router := NewMessageRouter(sm, nil, nil, nil, nil, logger)
 
 	// Create multiple sessions and connections
 	numConnections := 10
@@ -472,7 +489,7 @@ func TestConcurrentConnectionAccess(t *testing.T) {
 func TestHandleModelSelection(t *testing.T) {
 	logger := createTestLogger()
 	sm := session.NewSessionManager(15*time.Minute, logger)
-	router := NewMessageRouter(sm, nil, nil, nil, logger)
+	router := NewMessageRouter(sm, nil, nil, nil, nil, logger)
 
 	// Create a session
 	sess, err := sm.CreateSession("user-123")
@@ -505,7 +522,7 @@ func TestHandleModelSelection(t *testing.T) {
 func TestHandleModelSelection_EmptySessionID(t *testing.T) {
 	logger := createTestLogger()
 	sm := session.NewSessionManager(15*time.Minute, logger)
-	router := NewMessageRouter(sm, nil, nil, nil, logger)
+	router := NewMessageRouter(sm, nil, nil, nil, nil, logger)
 
 	conn := mockConnection("user-123")
 
@@ -529,7 +546,7 @@ func TestHandleModelSelection_EmptySessionID(t *testing.T) {
 func TestHandleModelSelection_EmptyModelID(t *testing.T) {
 	logger := createTestLogger()
 	sm := session.NewSessionManager(15*time.Minute, logger)
-	router := NewMessageRouter(sm, nil, nil, nil, logger)
+	router := NewMessageRouter(sm, nil, nil, nil, nil, logger)
 
 	// Create a session
 	sess, err := sm.CreateSession("user-123")
@@ -557,7 +574,7 @@ func TestHandleModelSelection_EmptyModelID(t *testing.T) {
 func TestHandleModelSelection_NonExistentSession(t *testing.T) {
 	logger := createTestLogger()
 	sm := session.NewSessionManager(15*time.Minute, logger)
-	router := NewMessageRouter(sm, nil, nil, nil, logger)
+	router := NewMessageRouter(sm, nil, nil, nil, nil, logger)
 
 	conn := mockConnection("user-123")
 
@@ -581,7 +598,7 @@ func TestHandleModelSelection_NonExistentSession(t *testing.T) {
 func TestHandleModelSelection_UpdateModel(t *testing.T) {
 	logger := createTestLogger()
 	sm := session.NewSessionManager(15*time.Minute, logger)
-	router := NewMessageRouter(sm, nil, nil, nil, logger)
+	router := NewMessageRouter(sm, nil, nil, nil, nil, logger)
 
 	// Create a session
 	sess, err := sm.CreateSession("user-123")
@@ -630,7 +647,7 @@ func TestHandleModelSelection_UpdateModel(t *testing.T) {
 func TestHandleModelSelection_NilConnection(t *testing.T) {
 	logger := createTestLogger()
 	sm := session.NewSessionManager(15*time.Minute, logger)
-	router := NewMessageRouter(sm, nil, nil, nil, logger)
+	router := NewMessageRouter(sm, nil, nil, nil, nil, logger)
 
 	// Create a session
 	sess, err := sm.CreateSession("user-123")
@@ -652,7 +669,7 @@ func TestHandleModelSelection_NilConnection(t *testing.T) {
 func TestHandleModelSelection_NilMessage(t *testing.T) {
 	logger := createTestLogger()
 	sm := session.NewSessionManager(15*time.Minute, logger)
-	router := NewMessageRouter(sm, nil, nil, nil, logger)
+	router := NewMessageRouter(sm, nil, nil, nil, nil, logger)
 
 	conn := mockConnection("user-123")
 
@@ -664,7 +681,7 @@ func TestHandleModelSelection_NilMessage(t *testing.T) {
 func TestModelSelection_Persistence(t *testing.T) {
 	logger := createTestLogger()
 	sm := session.NewSessionManager(15*time.Minute, logger)
-	router := NewMessageRouter(sm, nil, nil, nil, logger)
+	router := NewMessageRouter(sm, nil, nil, nil, nil, logger)
 
 	// Create a session
 	sess, err := sm.CreateSession("user-123")

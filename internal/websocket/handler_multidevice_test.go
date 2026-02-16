@@ -23,7 +23,7 @@ import (
 func TestMultiDevice_MessageBroadcastToAllConnections(t *testing.T) {
 	testSecret := "test-secret"
 	validator := auth.NewJWTValidator(testSecret)
-	handler := NewHandler(validator, nil, testLogger())
+	handler := NewHandler(validator, nil, testLogger(), 1048576)
 
 	// Create a test server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -112,7 +112,7 @@ func TestMultiDevice_IndependentSessions(t *testing.T) {
 		sessions: make(map[string]*Connection),
 	}
 	
-	handler := NewHandler(validator, mockRouter, testLogger())
+	handler := NewHandler(validator, mockRouter, testLogger(), 1048576)
 
 	// Create a test server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -185,7 +185,7 @@ func TestMultiDevice_IndependentSessions(t *testing.T) {
 func TestMultiDevice_ConnectionFailureIsolation(t *testing.T) {
 	testSecret := "test-secret"
 	validator := auth.NewJWTValidator(testSecret)
-	handler := NewHandler(validator, nil, testLogger())
+	handler := NewHandler(validator, nil, testLogger(), 1048576)
 
 	// Create a test server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -262,7 +262,7 @@ func TestMultiDevice_ConcurrentMessageSending(t *testing.T) {
 		receivedMsgs:   make([]message.Message, 0),
 	}
 	
-	handler := NewHandler(validator, mockRouter, testLogger())
+	handler := NewHandler(validator, mockRouter, testLogger(), 1048576)
 
 	// Create a test server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -335,7 +335,7 @@ func TestMultiDevice_ConcurrentMessageSending(t *testing.T) {
 func TestMultiDevice_ReconnectionScenario(t *testing.T) {
 	testSecret := "test-secret"
 	validator := auth.NewJWTValidator(testSecret)
-	handler := NewHandler(validator, nil, testLogger())
+	handler := NewHandler(validator, nil, testLogger(), 1048576)
 
 	// Create a test server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -413,7 +413,7 @@ func TestMultiDevice_ReconnectionScenario(t *testing.T) {
 func TestMultiDevice_MaxConnectionsEnforcement(t *testing.T) {
 	testSecret := "test-secret"
 	validator := auth.NewJWTValidator(testSecret)
-	handler := NewHandler(validator, nil, testLogger())
+	handler := NewHandler(validator, nil, testLogger(), 1048576)
 
 	// Create a test server
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

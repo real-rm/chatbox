@@ -50,7 +50,7 @@ func TestProperty_BidirectionalMessageRoutingDuringTakeover(t *testing.T) {
 
 			logger := getTestLogger()
 			sm := session.NewSessionManager(defaultTimeout, logger)
-			mr := NewMessageRouter(sm, nil, nil, nil, logger)
+			mr := NewMessageRouter(sm, nil, nil, nil, nil, logger)
 
 			// Create user session
 			sess, err := sm.CreateSession(userID)
@@ -112,7 +112,7 @@ func TestProperty_SessionTakeoverEventLogging(t *testing.T) {
 
 			logger := getTestLogger()
 			sm := session.NewSessionManager(defaultTimeout, logger)
-			mr := NewMessageRouter(sm, nil, nil, nil, logger)
+			mr := NewMessageRouter(sm, nil, nil, nil, nil, logger)
 
 			// Create user session
 			sess, err := sm.CreateSession(userID)

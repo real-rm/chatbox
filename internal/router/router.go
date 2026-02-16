@@ -46,12 +46,18 @@ type NotificationService interface {
 	SendHelpRequestAlert(userID, sessionID string) error
 }
 
+// StorageService interface for storage operations (to avoid circular dependency and enable testing)
+type StorageService interface {
+	CreateSession(sess *session.Session) error
+}
+
 // MessageRouter routes messages between clients, LLM backends, and admin users
 type MessageRouter struct {
 	llmService          LLMService
 	uploadService       *upload.UploadService
 	notificationService NotificationService
 	sessionManager      *session.SessionManager
+	storageService      StorageService // NEW: for persisting sessions
 	messageLimiter      *ratelimit.MessageLimiter
 	connections         map[string]*websocket.Connection // sessionID -> Connection
 	adminConns          map[string]*websocket.Connection // adminID -> Connection
@@ -60,13 +66,14 @@ type MessageRouter struct {
 }
 
 // NewMessageRouter creates a new message router
-func NewMessageRouter(sessionManager *session.SessionManager, llmService LLMService, uploadService *upload.UploadService, notificationService NotificationService, logger *golog.Logger) *MessageRouter {
+func NewMessageRouter(sessionManager *session.SessionManager, llmService LLMService, uploadService *upload.UploadService, notificationService NotificationService, storageService StorageService, logger *golog.Logger) *MessageRouter {
 	routerLogger := logger.WithGroup("router")
 	return &MessageRouter{
 		sessionManager:      sessionManager,
 		llmService:          llmService,
 		uploadService:       uploadService,
 		notificationService: notificationService,
+		storageService:      storageService,
 		messageLimiter:      ratelimit.NewMessageLimiter(1*time.Minute, 100), // 100 messages per minute
 		connections:         make(map[string]*websocket.Connection),
 		adminConns:          make(map[string]*websocket.Connection),
@@ -165,13 +172,9 @@ func (mr *MessageRouter) HandleUserMessage(conn *websocket.Connection, msg *mess
 		return chaterrors.ErrMissingField("session_id")
 	}
 
-	sess, err := mr.sessionManager.GetSession(msg.SessionID)
+	sess, err := mr.getOrCreateSession(conn, msg.SessionID)
 	if err != nil {
-		return chaterrors.NewValidationError(
-			chaterrors.ErrCodeMissingField,
-			"Session not found",
-			err,
-		)
+		return err
 	}
 
 	mr.logger.Debug("Routing user message to LLM",
@@ -335,6 +338,41 @@ func (mr *MessageRouter) handleHelpRequest(conn *websocket.Connection, msg *mess
 
 	return mr.sendToConnection(msg.SessionID, response)
 }
+// getOrCreateSession retrieves an existing session or creates a new one if not found
+func (mr *MessageRouter) getOrCreateSession(conn *websocket.Connection, sessionID string) (*session.Session, error) {
+	// Try to get existing session
+	sess, err := mr.sessionManager.GetSession(sessionID)
+	if err == nil {
+		return sess, nil // Session exists
+	}
+
+	// Session not found - create new one
+	if errors.Is(err, session.ErrSessionNotFound) {
+		return mr.createNewSession(conn, sessionID)
+	}
+
+	// Other error
+	return nil, err
+}
+
+// createNewSession creates a new session for the user and persists it to the database
+func (mr *MessageRouter) createNewSession(conn *websocket.Connection, sessionID string) (*session.Session, error) {
+	// Create session in memory
+	sess, err := mr.sessionManager.CreateSession(conn.UserID)
+	if err != nil {
+		return nil, chaterrors.ErrDatabaseError(err)
+	}
+
+	// Persist to database
+	if err := mr.storageService.CreateSession(sess); err != nil {
+		// Rollback in-memory session
+		mr.sessionManager.EndSession(sess.ID)
+		return nil, chaterrors.ErrDatabaseError(err)
+	}
+
+	return sess, nil
+}
+
 
 // handleModelSelection processes model selection messages
 func (mr *MessageRouter) handleModelSelection(conn *websocket.Connection, msg *message.Message) error {

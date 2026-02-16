@@ -23,7 +23,12 @@ The CI configuration verifies that:
 - Verifies image creation and basic functionality
 
 **Configuration Required**:
-The workflow uses `secrets.GITHUB_TOKEN` which is automatically provided by GitHub Actions. This token has read access to repositories in the same organization.
+The workflow uses a token fallback chain for accessing private modules:
+1. `secrets.GO_MODULES_TOKEN` - Custom token (if configured)
+2. `secrets.WORKFLOW_TOKEN_GITHUB` - Workflow-specific token (if configured)
+3. `secrets.GITHUB_TOKEN` - Default GitHub Actions token (automatically provided)
+
+The default `GITHUB_TOKEN` has read access to repositories in the same organization.
 
 **For Private Modules in Different Organizations**:
 If your private modules are in a different GitHub organization, you need to:
@@ -57,10 +62,15 @@ If your private modules are in a different GitHub organization, you need to:
 **See [CI_GITHUB_TOKEN_SETUP.md](CI_GITHUB_TOKEN_SETUP.md) for detailed token setup instructions.**
 
 ### For GitHub Actions
-The default `GITHUB_TOKEN` may not have access to private repositories. You need to:
+The workflow uses a token fallback chain. You can configure tokens in this priority order:
 
+1. **GO_MODULES_TOKEN** (highest priority) - Custom token for private modules
+2. **WORKFLOW_TOKEN_GITHUB** - Workflow-specific token
+3. **GITHUB_TOKEN** (default) - Automatically provided by GitHub Actions
+
+To add a custom token:
 1. Create a Personal Access Token (PAT) with `repo` scope
-2. Add it as a repository secret named `GO_MODULES_TOKEN`
+2. Add it as a repository secret named `GO_MODULES_TOKEN` or `WORKFLOW_TOKEN_GITHUB`
 3. The workflow will automatically use it (already configured)
 
 See [CI_GITHUB_TOKEN_SETUP.md](CI_GITHUB_TOKEN_SETUP.md) for step-by-step instructions.

@@ -10,6 +10,10 @@ import (
 	"github.com/real-rm/golog"
 )
 
+// MaxResponseTimes is the maximum number of response times to keep in memory
+// This implements a rolling window to prevent unbounded memory growth
+const MaxResponseTimes = 100
+
 var (
 	// ErrSessionNotFound is returned when a session is not found
 	ErrSessionNotFound = errors.New("session not found")
@@ -81,6 +85,12 @@ type SessionManager struct {
 	mu               sync.RWMutex
 	reconnectTimeout time.Duration
 	logger           *golog.Logger
+	
+	// Cleanup goroutine management
+	cleanupInterval time.Duration
+	sessionTTL      time.Duration
+	stopCleanup     chan struct{}
+	cleanupWg       sync.WaitGroup
 }
 
 // NewSessionManager creates a new session manager
@@ -91,6 +101,9 @@ func NewSessionManager(reconnectTimeout time.Duration, logger *golog.Logger) *Se
 		userSessions:     make(map[string]string),
 		reconnectTimeout: reconnectTimeout,
 		logger:           sessionLogger,
+		cleanupInterval:  5 * time.Minute,  // Default: cleanup every 5 minutes
+		sessionTTL:       15 * time.Minute, // Default: remove sessions 15 minutes after EndTime
+		stopCleanup:      make(chan struct{}),
 	}
 }
 
@@ -232,6 +245,71 @@ func (sm *SessionManager) EndSession(sessionID string) error {
 
 	sm.logger.Info("Session ended", "session_id", sessionID, "user_id", session.UserID, "duration", time.Since(session.StartTime))
 	return nil
+}
+
+// StartCleanup starts the background cleanup goroutine
+// This should be called after creating the SessionManager
+func (sm *SessionManager) StartCleanup() {
+	sm.cleanupWg.Add(1)
+	go func() {
+		defer sm.cleanupWg.Done()
+		ticker := time.NewTicker(sm.cleanupInterval)
+		defer ticker.Stop()
+		
+		for {
+			select {
+			case <-ticker.C:
+				sm.cleanupExpiredSessions()
+			case <-sm.stopCleanup:
+				return
+			}
+		}
+	}()
+}
+// cleanupExpiredSessions removes inactive sessions that have exceeded the TTL
+// This method should only be called by the cleanup goroutine
+func (sm *SessionManager) cleanupExpiredSessions() {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+
+	now := time.Now()
+	removed := 0
+
+	for sessionID, session := range sm.sessions {
+		if !session.IsActive && session.EndTime != nil {
+			if now.Sub(*session.EndTime) > sm.sessionTTL {
+				delete(sm.sessions, sessionID)
+				removed++
+			}
+		}
+	}
+
+	if removed > 0 {
+		sm.logger.Info("Cleaned up expired sessions", "count", removed)
+	}
+}
+// StopCleanup stops the background cleanup goroutine
+// This should be called during graceful shutdown
+func (sm *SessionManager) StopCleanup() {
+	close(sm.stopCleanup)
+	sm.cleanupWg.Wait()
+}
+
+// GetMemoryStats returns the current memory statistics for sessions
+// Returns active, inactive, and total session counts
+func (sm *SessionManager) GetMemoryStats() (active, inactive, total int) {
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+
+	for _, session := range sm.sessions {
+		total++
+		if session.IsActive {
+			active++
+		} else {
+			inactive++
+		}
+	}
+	return
 }
 
 // SetSessionNameFromMessage sets the session name based on the first message
@@ -422,6 +500,7 @@ func (sm *SessionManager) UpdateTokenUsage(sessionID string, tokens int) error {
 
 // RecordResponseTime records a response time for the session
 // Returns error if session not found or duration is negative
+// Implements a rolling window to prevent unbounded memory growth
 func (sm *SessionManager) RecordResponseTime(sessionID string, duration time.Duration) error {
 	if sessionID == "" {
 		return ErrInvalidSessionID
@@ -442,7 +521,14 @@ func (sm *SessionManager) RecordResponseTime(sessionID string, duration time.Dur
 	session.mu.Lock()
 	defer session.mu.Unlock()
 
-	session.ResponseTimes = append(session.ResponseTimes, duration)
+	// Implement rolling window with fixed maximum size
+	if len(session.ResponseTimes) >= MaxResponseTimes {
+		// Remove oldest entry (shift left)
+		copy(session.ResponseTimes, session.ResponseTimes[1:])
+		session.ResponseTimes[MaxResponseTimes-1] = duration
+	} else {
+		session.ResponseTimes = append(session.ResponseTimes, duration)
+	}
 
 	return nil
 }
@@ -718,4 +804,26 @@ func (sm *SessionManager) GetAssistingAdmin(sessionID string) (string, string, e
 	defer session.mu.RUnlock()
 
 	return session.AssistingAdminID, session.AssistingAdminName, nil
+}
+
+// RLock acquires a read lock on the session
+// This is used by external packages that need to safely read session fields
+func (s *Session) RLock() {
+	s.mu.RLock()
+}
+
+// RUnlock releases a read lock on the session
+func (s *Session) RUnlock() {
+	s.mu.RUnlock()
+}
+
+// Lock acquires a write lock on the session
+// This is used by external packages that need to safely modify session fields
+func (s *Session) Lock() {
+	s.mu.Lock()
+}
+
+// Unlock releases a write lock on the session
+func (s *Session) Unlock() {
+	s.mu.Unlock()
 }

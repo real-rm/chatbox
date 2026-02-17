@@ -126,7 +126,7 @@ func TestValidate_ValidConfig(t *testing.T) {
 			ReconnectTimeout: 15 * time.Minute,
 			MaxConnections:   10000,
 			RateLimit:        100,
-			JWTSecret:        "test-secret",
+			JWTSecret:        "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6", // 36 chars, strong secret
 		},
 		Database: DatabaseConfig{
 			URI:        "mongodb://localhost:27017",

@@ -5,8 +5,15 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
+
+// Common weak secrets to reject
+var weakSecrets = []string{
+	"secret", "test", "test123", "password", "admin",
+	"changeme", "default", "example", "demo", "12345",
+}
 
 // Config holds all application configuration
 type Config struct {
@@ -25,6 +32,9 @@ type ServerConfig struct {
 	MaxConnections   int
 	RateLimit        int
 	JWTSecret        string
+	LLMStreamTimeout time.Duration
+	AdminRateLimit   int           // Admin endpoint rate limit (requests per minute)
+	AdminRateWindow  time.Duration // Admin rate limit window
 }
 
 // LLMConfig holds LLM provider configurations
@@ -48,6 +58,9 @@ type DatabaseConfig struct {
 	Database       string
 	Collection     string
 	ConnectTimeout time.Duration
+	RetryAttempts  int           // Maximum number of retry attempts for transient errors
+	RetryDelay     time.Duration // Initial delay between retry attempts
+	RetryMaxDelay  time.Duration // Maximum delay between retry attempts
 }
 
 // StorageConfig holds S3 storage configuration
@@ -98,12 +111,18 @@ func Load() (*Config, error) {
 			MaxConnections:   getEnvAsInt("MAX_CONNECTIONS", 10000),
 			RateLimit:        getEnvAsInt("RATE_LIMIT", 100),
 			JWTSecret:        getEnv("JWT_SECRET", ""),
+			LLMStreamTimeout: getEnvAsDuration("LLM_STREAM_TIMEOUT", 120*time.Second),
+			AdminRateLimit:   getEnvAsInt("ADMIN_RATE_LIMIT", 20),                      // Default: 20 requests per minute
+			AdminRateWindow:  getEnvAsDuration("ADMIN_RATE_WINDOW", 1*time.Minute),     // Default: 1 minute window
 		},
 		Database: DatabaseConfig{
 			URI:            getEnv("MONGO_URI", "mongodb://localhost:27017"),
 			Database:       getEnv("MONGO_DATABASE", "chat"),
 			Collection:     getEnv("MONGO_COLLECTION", "sessions"),
 			ConnectTimeout: getEnvAsDuration("MONGO_CONNECT_TIMEOUT", 10*time.Second),
+			RetryAttempts:  getEnvAsInt("MONGO_RETRY_ATTEMPTS", 3),
+			RetryDelay:     getEnvAsDuration("MONGO_RETRY_DELAY", 100*time.Millisecond),
+			RetryMaxDelay:  getEnvAsDuration("MONGO_RETRY_MAX_DELAY", 2*time.Second),
 		},
 		Storage: StorageConfig{
 			Endpoint:        getEnv("S3_ENDPOINT", ""),
@@ -149,6 +168,26 @@ func (c *Config) Validate() error {
 	}
 	if c.Server.JWTSecret == "" {
 		errs = append(errs, errors.New("JWT secret is required"))
+	} else {
+		// Check minimum length (32 characters for strong security)
+		if len(c.Server.JWTSecret) < 32 {
+			errs = append(errs, fmt.Errorf(
+				"JWT secret must be at least 32 characters (got %d). "+
+					"Generate a strong secret with: openssl rand -base64 32",
+				len(c.Server.JWTSecret)))
+		}
+
+		// Check for common weak secrets
+		lowerSecret := strings.ToLower(c.Server.JWTSecret)
+		for _, weak := range weakSecrets {
+			if strings.Contains(lowerSecret, weak) {
+				errs = append(errs, fmt.Errorf(
+					"JWT secret appears to be weak (contains '%s'). "+
+						"Use a cryptographically random secret generated with: openssl rand -base64 32",
+					weak))
+				break
+			}
+		}
 	}
 	if c.Server.ReconnectTimeout <= 0 {
 		errs = append(errs, errors.New("reconnect timeout must be positive"))

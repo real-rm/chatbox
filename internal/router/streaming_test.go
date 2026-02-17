@@ -79,7 +79,7 @@ func TestStreamingResponseForwarding(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mockLLM := &streamingMockLLMService{chunks: tt.chunks}
-			router := NewMessageRouter(sm, mockLLM, nil, nil, nil, logger)
+			router := NewMessageRouter(sm, mockLLM, nil, nil, nil, 120*time.Second, logger)
 
 			// Create and register connection
 			conn := websocket.NewConnection("user-1", []string{"user"})
@@ -173,7 +173,7 @@ func TestStreamingErrorHandling(t *testing.T) {
 	mockLLM := &streamingMockLLMService{
 		err: assert.AnError,
 	}
-	router := NewMessageRouter(sm, mockLLM, nil, nil, nil, logger)
+	router := NewMessageRouter(sm, mockLLM, nil, nil, nil, 120*time.Second, logger)
 
 	// Create and register connection
 	conn := websocket.NewConnection("user-1", []string{"user"})
@@ -262,7 +262,7 @@ func TestLLMErrorScenarios(t *testing.T) {
 			mockLLM := &streamingMockLLMService{
 				err: tt.llmError,
 			}
-			router := NewMessageRouter(sm, mockLLM, nil, nil, nil, logger)
+			router := NewMessageRouter(sm, mockLLM, nil, nil, nil, 120*time.Second, logger)
 
 			// Create and register connection
 			conn := websocket.NewConnection(userID, []string{"user"})
@@ -325,7 +325,7 @@ func TestStreamingChunkError(t *testing.T) {
 	mockLLM := &streamingMockLLMService{
 		chunks: []string{"Hello", " world"},
 	}
-	router := NewMessageRouter(sm, mockLLM, nil, nil, nil, logger)
+	router := NewMessageRouter(sm, mockLLM, nil, nil, nil, 120*time.Second, logger)
 
 	// Create and register connection
 	conn := websocket.NewConnection("user-1", []string{"user"})
@@ -397,7 +397,7 @@ func TestLLMErrorDoesNotLeakInternalDetails(t *testing.T) {
 	mockLLM := &streamingMockLLMService{
 		err: fmt.Errorf("internal error: database connection failed at 192.168.1.100:5432 with credentials user=admin"),
 	}
-	router := NewMessageRouter(sm, mockLLM, nil, nil, nil, logger)
+	router := NewMessageRouter(sm, mockLLM, nil, nil, nil, 120*time.Second, logger)
 
 	// Create and register connection
 	conn := websocket.NewConnection("user-1", []string{"user"})

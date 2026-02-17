@@ -63,20 +63,26 @@ type MessageRouter struct {
 	adminConns          map[string]*websocket.Connection // adminID -> Connection
 	mu                  sync.RWMutex
 	logger              *golog.Logger
+	llmStreamTimeout    time.Duration // NEW: for LLM streaming timeout
 }
 
 // NewMessageRouter creates a new message router
-func NewMessageRouter(sessionManager *session.SessionManager, llmService LLMService, uploadService *upload.UploadService, notificationService NotificationService, storageService StorageService, logger *golog.Logger) *MessageRouter {
+func NewMessageRouter(sessionManager *session.SessionManager, llmService LLMService, uploadService *upload.UploadService, notificationService NotificationService, storageService StorageService, llmStreamTimeout time.Duration, logger *golog.Logger) *MessageRouter {
 	routerLogger := logger.WithGroup("router")
+	
+	messageLimiter := ratelimit.NewMessageLimiter(1*time.Minute, 100) // 100 messages per minute
+	messageLimiter.StartCleanup()
+	
 	return &MessageRouter{
 		sessionManager:      sessionManager,
 		llmService:          llmService,
 		uploadService:       uploadService,
 		notificationService: notificationService,
 		storageService:      storageService,
-		messageLimiter:      ratelimit.NewMessageLimiter(1*time.Minute, 100), // 100 messages per minute
+		messageLimiter:      messageLimiter,
 		connections:         make(map[string]*websocket.Connection),
 		adminConns:          make(map[string]*websocket.Connection),
+		llmStreamTimeout:    llmStreamTimeout,
 		logger:              routerLogger,
 	}
 }
@@ -208,12 +214,42 @@ func (mr *MessageRouter) HandleUserMessage(conn *websocket.Connection, msg *mess
 	}
 
 	// Forward to LLM service with streaming
-	ctx := context.Background()
+	// Use configured timeout for LLM streaming
+	timeout := mr.llmStreamTimeout
+	if timeout == 0 {
+		timeout = 120 * time.Second // Default 2 minutes
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
 	startTime := time.Now()
 	
 	// Use streaming for real-time response
 	chunkChan, err := mr.llmService.StreamMessage(ctx, modelID, llmMessages)
 	if err != nil {
+		// Check if error is due to timeout
+		if ctx.Err() == context.DeadlineExceeded {
+			mr.logger.Error("LLM streaming timeout",
+				"session_id", msg.SessionID,
+				"model_id", modelID,
+				"timeout", timeout,
+				"elapsed", time.Since(startTime))
+			
+			// Create timeout-specific error
+			timeoutErr := chaterrors.ErrLLMTimeout(timeout)
+			
+			// Send timeout error response to client
+			errorMsg := &message.Message{
+				Type:      message.TypeError,
+				SessionID: msg.SessionID,
+				Sender:    message.SenderAI,
+				Error:     timeoutErr.ToErrorInfo(),
+				Timestamp: time.Now(),
+			}
+			return mr.sendToConnection(msg.SessionID, errorMsg)
+		}
+		
 		mr.logger.Error("LLM service error",
 			"session_id", msg.SessionID,
 			"model_id", modelID,
@@ -238,6 +274,27 @@ func (mr *MessageRouter) HandleUserMessage(conn *websocket.Connection, msg *mess
 	var tokenCount int
 	
 	for chunk := range chunkChan {
+		// Check if context has timed out during streaming
+		if ctx.Err() == context.DeadlineExceeded {
+			mr.logger.Error("LLM streaming timeout during chunk processing",
+				"session_id", msg.SessionID,
+				"model_id", modelID,
+				"timeout", timeout,
+				"elapsed", time.Since(startTime))
+			
+			// Send timeout error to client
+			timeoutErr := chaterrors.ErrLLMTimeout(timeout)
+			errorMsg := &message.Message{
+				Type:      message.TypeError,
+				SessionID: msg.SessionID,
+				Sender:    message.SenderAI,
+				Error:     timeoutErr.ToErrorInfo(),
+				Timestamp: time.Now(),
+			}
+			mr.sendToConnection(msg.SessionID, errorMsg)
+			return ctx.Err()
+		}
+		
 		if chunk.Content != "" {
 			fullContent.WriteString(chunk.Content)
 			
@@ -1131,4 +1188,12 @@ func (mr *MessageRouter) SendErrorMessage(sessionID string, code chaterrors.Erro
 	}
 
 	return mr.sendToConnection(sessionID, errorMsg)
+}
+
+// Shutdown gracefully shuts down the message router and its cleanup goroutines
+func (mr *MessageRouter) Shutdown() {
+	mr.logger.Info("Shutting down message router")
+	if mr.messageLimiter != nil {
+		mr.messageLimiter.StopCleanup()
+	}
 }

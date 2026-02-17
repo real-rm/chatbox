@@ -26,7 +26,7 @@ func TestIntegration_SessionCreationFlow(t *testing.T) {
 		sm := session.NewSessionManager(15*time.Minute, logger)
 		mockStorage := &mockStorageService{}
 		mockLLM := &mockLLMService{}
-		router := NewMessageRouter(sm, mockLLM, nil, nil, mockStorage, logger)
+		router := NewMessageRouter(sm, mockLLM, nil, nil, mockStorage, 120*time.Second, logger)
 
 		// Connect as new user
 		conn := mockConnection("user-new-123")
@@ -74,7 +74,7 @@ func TestIntegration_SessionCreationFlow(t *testing.T) {
 		sm := session.NewSessionManager(15*time.Minute, logger)
 		mockStorage := &mockStorageService{}
 		mockLLM := &mockLLMService{}
-		router := NewMessageRouter(sm, mockLLM, nil, nil, mockStorage, logger)
+		router := NewMessageRouter(sm, mockLLM, nil, nil, mockStorage, 120*time.Second, logger)
 
 		// Create initial session for user
 		conn1 := mockConnection("user-reconnect-456")
@@ -120,7 +120,7 @@ func TestIntegration_SessionCreationFlow(t *testing.T) {
 		sm := session.NewSessionManager(15*time.Minute, logger)
 		mockStorage := &mockStorageService{}
 		mockLLM := &mockLLMService{}
-		router := NewMessageRouter(sm, mockLLM, nil, nil, mockStorage, logger)
+		router := NewMessageRouter(sm, mockLLM, nil, nil, mockStorage, 120*time.Second, logger)
 
 		userID := "user-concurrent-789"
 		numConcurrent := 10
@@ -180,7 +180,7 @@ func TestIntegration_SessionCreationFlow(t *testing.T) {
 			createSessionError: errors.New("database connection failed"),
 		}
 		mockLLM := &mockLLMService{}
-		router := NewMessageRouter(sm, mockLLM, nil, nil, mockStorage, logger)
+		router := NewMessageRouter(sm, mockLLM, nil, nil, mockStorage, 120*time.Second, logger)
 
 		// Attempt to create session
 		conn := mockConnection("user-db-fail-999")
@@ -217,7 +217,7 @@ func TestIntegration_SessionCreationWithMessages(t *testing.T) {
 		sm := session.NewSessionManager(15*time.Minute, logger)
 		mockStorage := &mockStorageService{}
 		mockLLM := &mockLLMService{}
-		router := NewMessageRouter(sm, mockLLM, nil, nil, mockStorage, logger)
+		router := NewMessageRouter(sm, mockLLM, nil, nil, mockStorage, 120*time.Second, logger)
 
 		// Create connection
 		conn := mockConnection("user-msg-123")
@@ -263,7 +263,7 @@ func TestIntegration_SessionCreationWithMessages(t *testing.T) {
 		sm := session.NewSessionManager(15*time.Minute, logger)
 		mockStorage := &mockStorageService{}
 		mockLLM := &mockLLMService{}
-		router := NewMessageRouter(sm, mockLLM, nil, nil, mockStorage, logger)
+		router := NewMessageRouter(sm, mockLLM, nil, nil, mockStorage, 120*time.Second, logger)
 
 		// Create connection
 		conn := mockConnection("user-msg-456")
@@ -328,7 +328,7 @@ func TestIntegration_SessionCreationErrorRecovery(t *testing.T) {
 			createSessionError: errors.New("temporary database error"),
 		}
 		mockLLM := &mockLLMService{}
-		router := NewMessageRouter(sm, mockLLM, nil, nil, mockStorage, logger)
+		router := NewMessageRouter(sm, mockLLM, nil, nil, mockStorage, 120*time.Second, logger)
 
 		conn := mockConnection("user-recovery-123")
 
@@ -364,7 +364,7 @@ func TestIntegration_SessionCreationWithDifferentUsers(t *testing.T) {
 		sm := session.NewSessionManager(15*time.Minute, logger)
 		mockStorage := &mockStorageService{}
 		mockLLM := &mockLLMService{}
-		router := NewMessageRouter(sm, mockLLM, nil, nil, mockStorage, logger)
+		router := NewMessageRouter(sm, mockLLM, nil, nil, mockStorage, 120*time.Second, logger)
 
 		// Create sessions for multiple users
 		users := []string{"user-1", "user-2", "user-3", "user-4", "user-5"}

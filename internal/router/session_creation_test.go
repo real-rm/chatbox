@@ -16,7 +16,7 @@ func TestGetOrCreateSession_AutomaticCreation(t *testing.T) {
 	logger := createTestLogger()
 	sm := session.NewSessionManager(15*time.Minute, logger)
 	mockStorage := &mockStorageService{}
-	router := NewMessageRouter(sm, nil, nil, nil, mockStorage, logger)
+	router := NewMessageRouter(sm, nil, nil, nil, mockStorage, 120*time.Second, logger)
 
 	conn := mockConnection("user-123")
 	sessionID := "new-session-id"
@@ -42,7 +42,7 @@ func TestGetOrCreateSession_ExistingSessionReuse(t *testing.T) {
 	logger := createTestLogger()
 	sm := session.NewSessionManager(15*time.Minute, logger)
 	mockStorage := &mockStorageService{}
-	router := NewMessageRouter(sm, nil, nil, nil, mockStorage, logger)
+	router := NewMessageRouter(sm, nil, nil, nil, mockStorage, 120*time.Second, logger)
 
 	// Create an existing session
 	existingSess, err := sm.CreateSession("user-123")
@@ -70,7 +70,7 @@ func TestGetOrCreateSession_SessionCreationWithProvidedID(t *testing.T) {
 	logger := createTestLogger()
 	sm := session.NewSessionManager(15*time.Minute, logger)
 	mockStorage := &mockStorageService{}
-	router := NewMessageRouter(sm, nil, nil, nil, mockStorage, logger)
+	router := NewMessageRouter(sm, nil, nil, nil, mockStorage, 120*time.Second, logger)
 
 	conn := mockConnection("user-456")
 	providedSessionID := "provided-session-id"
@@ -95,7 +95,7 @@ func TestCreateNewSession_DualStorage(t *testing.T) {
 	logger := createTestLogger()
 	sm := session.NewSessionManager(15*time.Minute, logger)
 	mockStorage := &mockStorageService{}
-	router := NewMessageRouter(sm, nil, nil, nil, mockStorage, logger)
+	router := NewMessageRouter(sm, nil, nil, nil, mockStorage, 120*time.Second, logger)
 
 	conn := mockConnection("user-789")
 	sessionID := "test-session-id"
@@ -131,7 +131,7 @@ func TestCreateNewSession_UserIDAssociation(t *testing.T) {
 	logger := createTestLogger()
 	sm := session.NewSessionManager(15*time.Minute, logger)
 	mockStorage := &mockStorageService{}
-	router := NewMessageRouter(sm, nil, nil, nil, mockStorage, logger)
+	router := NewMessageRouter(sm, nil, nil, nil, mockStorage, 120*time.Second, logger)
 
 	tests := []struct {
 		name   string
@@ -184,7 +184,7 @@ func TestCreateNewSession_DatabaseFailure(t *testing.T) {
 	mockStorage := &mockStorageService{
 		createSessionError: errors.New("database connection failed"),
 	}
-	router := NewMessageRouter(sm, nil, nil, nil, mockStorage, logger)
+	router := NewMessageRouter(sm, nil, nil, nil, mockStorage, 120*time.Second, logger)
 
 	conn := mockConnection("user-999")
 	sessionID := "test-session"
@@ -211,7 +211,7 @@ func TestCreateNewSession_RollbackOnPartialFailure(t *testing.T) {
 	mockStorage := &mockStorageService{
 		createSessionError: errors.New("database write failed"),
 	}
-	router := NewMessageRouter(sm, nil, nil, nil, mockStorage, logger)
+	router := NewMessageRouter(sm, nil, nil, nil, mockStorage, 120*time.Second, logger)
 
 	conn := mockConnection("user-rollback")
 	sessionID := "rollback-session"
@@ -239,7 +239,7 @@ func TestGetOrCreateSession_ConcurrentCreation(t *testing.T) {
 	logger := createTestLogger()
 	sm := session.NewSessionManager(15*time.Minute, logger)
 	mockStorage := &mockStorageService{}
-	router := NewMessageRouter(sm, nil, nil, nil, mockStorage, logger)
+	router := NewMessageRouter(sm, nil, nil, nil, mockStorage, 120*time.Second, logger)
 
 	conn := mockConnection("user-concurrent")
 	sessionID := "concurrent-session"
@@ -272,7 +272,7 @@ func TestGetOrCreateSession_EmptyUserID(t *testing.T) {
 	logger := createTestLogger()
 	sm := session.NewSessionManager(15*time.Minute, logger)
 	mockStorage := &mockStorageService{}
-	router := NewMessageRouter(sm, nil, nil, nil, mockStorage, logger)
+	router := NewMessageRouter(sm, nil, nil, nil, mockStorage, 120*time.Second, logger)
 
 	conn := mockConnection("")
 	sessionID := "test-session"
@@ -294,7 +294,7 @@ func TestGetOrCreateSession_NilConnection(t *testing.T) {
 	logger := createTestLogger()
 	sm := session.NewSessionManager(15*time.Minute, logger)
 	mockStorage := &mockStorageService{}
-	router := NewMessageRouter(sm, nil, nil, nil, mockStorage, logger)
+	router := NewMessageRouter(sm, nil, nil, nil, mockStorage, 120*time.Second, logger)
 
 	sessionID := "test-session"
 
@@ -326,7 +326,7 @@ func TestCreateNewSession_SessionMetadata(t *testing.T) {
 	logger := createTestLogger()
 	sm := session.NewSessionManager(15*time.Minute, logger)
 	mockStorage := &mockStorageService{}
-	router := NewMessageRouter(sm, nil, nil, nil, mockStorage, logger)
+	router := NewMessageRouter(sm, nil, nil, nil, mockStorage, 120*time.Second, logger)
 
 	conn := mockConnection("user-metadata")
 	sessionID := "metadata-session"
@@ -357,7 +357,7 @@ func TestGetOrCreateSession_MultipleUsers(t *testing.T) {
 	logger := createTestLogger()
 	sm := session.NewSessionManager(15*time.Minute, logger)
 	mockStorage := &mockStorageService{}
-	router := NewMessageRouter(sm, nil, nil, nil, mockStorage, logger)
+	router := NewMessageRouter(sm, nil, nil, nil, mockStorage, 120*time.Second, logger)
 
 	// Create sessions for multiple users
 	users := []string{"user-1", "user-2", "user-3"}

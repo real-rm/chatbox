@@ -1,0 +1,1977 @@
+# github.com/real-rm/chatbox/internal/testutil.test
+ld: warning: '/private/var/folders/zk/w7j55fl57bb3204z49k448300000gn/T/go-link-2865499241/000013.o' has malformed LC_DYSYMTAB, expected 98 undefined symbols to start at index 1626, found 95 undefined symbols starting at index 1626
+# github.com/real-rm/chatbox/internal/metrics.test
+ld: warning: '/private/var/folders/zk/w7j55fl57bb3204z49k448300000gn/T/go-link-3254751674/000013.o' has malformed LC_DYSYMTAB, expected 98 undefined symbols to start at index 1626, found 95 undefined symbols starting at index 1626
+# github.com/real-rm/chatbox/internal/llm.test
+ld: warning: '/private/var/folders/zk/w7j55fl57bb3204z49k448300000gn/T/go-link-302092085/000013.o' has malformed LC_DYSYMTAB, expected 98 undefined symbols to start at index 1626, found 95 undefined symbols starting at index 1626
+# github.com/real-rm/chatbox/internal/logging.test
+ld: warning: '/private/var/folders/zk/w7j55fl57bb3204z49k448300000gn/T/go-link-367071343/000013.o' has malformed LC_DYSYMTAB, expected 98 undefined symbols to start at index 1626, found 95 undefined symbols starting at index 1626
+# github.com/real-rm/chatbox/internal/storage.test
+ld: warning: '/private/var/folders/zk/w7j55fl57bb3204z49k448300000gn/T/go-link-2861279527/000013.o' has malformed LC_DYSYMTAB, expected 98 undefined symbols to start at index 1626, found 95 undefined symbols starting at index 1626
+# github.com/real-rm/chatbox/internal/router.test
+ld: warning: '/private/var/folders/zk/w7j55fl57bb3204z49k448300000gn/T/go-link-2698039713/000013.o' has malformed LC_DYSYMTAB, expected 98 undefined symbols to start at index 1626, found 95 undefined symbols starting at index 1626
+# github.com/real-rm/chatbox.test
+ld: warning: '/private/var/folders/zk/w7j55fl57bb3204z49k448300000gn/T/go-link-4140769014/000013.o' has malformed LC_DYSYMTAB, expected 98 undefined symbols to start at index 1626, found 95 undefined symbols starting at index 1626
+# github.com/real-rm/chatbox/internal/websocket.test
+ld: warning: '/private/var/folders/zk/w7j55fl57bb3204z49k448300000gn/T/go-link-106250034/000013.o' has malformed LC_DYSYMTAB, expected 98 undefined symbols to start at index 1626, found 95 undefined symbols starting at index 1626
+ok  	github.com/real-rm/chatbox	46.407s
+ok  	github.com/real-rm/chatbox/cmd/server	3.764s
+--- FAIL: TestProductionIssue06_PlaceholderSecrets (0.00s)
+    secret_validation_test.go:69: SECURITY RISK: Found 17 placeholder secrets in secret.yaml:
+    secret_validation_test.go:71:   - S3_ACCESS_KEY_ID: your-s3-access-key-id
+    secret_validation_test.go:71:   - LLM_PROVIDER_3_API_KEY: your-dify-api-key
+    secret_validation_test.go:71:   - ENCRYPTION_KEY: CHANGE-ME-32-BYTE-KEY-FOR-AES256
+    secret_validation_test.go:71:   - S3_SECRET_ACCESS_KEY: your-s3-secret-access-key
+    secret_validation_test.go:71:   - SMTP_USER: smtp-username
+    secret_validation_test.go:71:   - SMS_ACCOUNT_SID: ACXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+    secret_validation_test.go:71:   - SMS_AUTH_TOKEN: your-twilio-auth-token
+    secret_validation_test.go:71:   - SES_SECRET_ACCESS_KEY: your-ses-secret-access-key
+    secret_validation_test.go:71:   - JWT_SECRET: your-jwt-secret-key-change-in-production-use-strong-random-string
+    secret_validation_test.go:71:   - SMTP_PASS: smtp-password
+    secret_validation_test.go:71:   - LLM_PROVIDER_1_API_KEY: sk-your-openai-api-key
+    secret_validation_test.go:71:   - LLM_PROVIDER_2_API_KEY: sk-ant-your-anthropic-api-key
+    secret_validation_test.go:71:   - SES_ACCESS_KEY_ID: AKIAXXXXXXXXXXXXXXXX
+    secret_validation_test.go:71:   - SMS_API_KEY: your-sms-api-key
+    secret_validation_test.go:71:   - MONGO_USERNAME: chatbox-user
+    secret_validation_test.go:71:   - MONGO_PASSWORD: your-mongo-password
+    secret_validation_test.go:71:   - ADMIN_API_KEY: your-admin-api-key-for-monitoring
+    secret_validation_test.go:73: 
+        Recommendations:
+    secret_validation_test.go:74: 1. Generate strong random secrets for production deployment
+    secret_validation_test.go:75: 2. Use secret management tools (e.g., Sealed Secrets, External Secrets Operator)
+    secret_validation_test.go:76: 3. Never commit real secrets to version control
+    secret_validation_test.go:77: 4. Implement secret rotation procedures
+    secret_validation_test.go:78: 5. Use environment-specific secret values
+    secret_validation_test.go:79: 
+        For quick setup instructions, see: docs/SECRET_SETUP_QUICKSTART.md
+FAIL
+FAIL	github.com/real-rm/chatbox/deployments/kubernetes	0.663s
+ok  	github.com/real-rm/chatbox/internal/auth	5.244s
+ok  	github.com/real-rm/chatbox/internal/config	3.341s
+ok  	github.com/real-rm/chatbox/internal/errors	6.899s
+ok  	github.com/real-rm/chatbox/internal/httperrors	6.351s
+! valid messages are routed to LLM provider: Falsified after 0 passed
+   tests.
+ARG_0: 0
+ARG_0_ORIGINAL (1 shrinks): 669
+ARG_1: u
+ARG_1_ORIGINAL (2 shrinks): otu
+--- FAIL: TestProperty_ValidMessageRoutingToLLM (0.00s)
+    llm_property_test.go:165: Failed to register provider: model test-model-2 not found in configuration
+    llm_property_test.go:165: Failed to register provider: model test-model-1 not found in configuration
+    llm_property_test.go:165: Failed to register provider: model test-model-1 not found in configuration
+    llm_property_test.go:165: Failed to register provider: model test-model-1 not found in configuration
+    properties.go:57: failed with initial seed: 1771258806757143000
+! LLM responses are delivered correctly: Falsified after 0 passed tests.
+ARG_0: 0
+ARG_0_ORIGINAL (1 shrinks): 221
+ARG_1: a
+ARG_1_ORIGINAL (1 shrinks): ja
+ARG_2: 0
+ARG_2_ORIGINAL (1 shrinks): 26384
+--- FAIL: TestProperty_LLMResponseDelivery (0.00s)
+    llm_property_test.go:282: Failed to register provider: model test-model-2 not found in configuration
+    llm_property_test.go:282: Failed to register provider: model test-model-1 not found in configuration
+    llm_property_test.go:282: Failed to register provider: model test-model-1 not found in configuration
+    llm_property_test.go:282: Failed to register provider: model test-model-1 not found in configuration
+    properties.go:57: failed with initial seed: 1771258806758067000
+! response time is tracked for all LLM requests: Falsified after 0 passed
+   tests.
+ARG_0: 0
+ARG_0_ORIGINAL (1 shrinks): 616
+ARG_1: 10
+ARG_1_ORIGINAL (6 shrinks): 185
+--- FAIL: TestProperty_ResponseTimeTracking (0.00s)
+    llm_property_test.go:407: Failed to register provider: model test-model-1 not found in configuration
+    llm_property_test.go:407: Failed to register provider: model test-model-1 not found in configuration
+    llm_property_test.go:407: Failed to register provider: model test-model-1 not found in configuration
+    llm_property_test.go:407: Failed to register provider: model test-model-1 not found in configuration
+    llm_property_test.go:407: Failed to register provider: model test-model-1 not found in configuration
+    llm_property_test.go:407: Failed to register provider: model test-model-1 not found in configuration
+    llm_property_test.go:407: Failed to register provider: model test-model-1 not found in configuration
+    llm_property_test.go:407: Failed to register provider: model test-model-1 not found in configuration
+    properties.go:57: failed with initial seed: 1771258806758813000
+! LLM requests include session context and user message: Falsified after 0
+   passed tests.
+ARG_0: 0
+ARG_0_ORIGINAL (1 shrinks): 481
+ARG_1: 1
+ARG_1_ORIGINAL (3 shrinks): 7
+--- FAIL: TestProperty_LLMRequestContextInclusion (0.00s)
+    llm_property_test.go:526: Failed to register provider: model test-model-2 not found in configuration
+    llm_property_test.go:526: Failed to register provider: model test-model-1 not found in configuration
+    llm_property_test.go:526: Failed to register provider: model test-model-1 not found in configuration
+    llm_property_test.go:526: Failed to register provider: model test-model-1 not found in configuration
+    llm_property_test.go:526: Failed to register provider: model test-model-1 not found in configuration
+    properties.go:57: failed with initial seed: 1771258806759555000
+! streaming responses are forwarded in real-time: Falsified after 0 passed
+   tests.
+ARG_0: 0
+ARG_0_ORIGINAL (1 shrinks): 118
+ARG_1: 1
+ARG_1_ORIGINAL (3 shrinks): 8
+--- FAIL: TestProperty_StreamingResponseForwarding (0.00s)
+    llm_property_test.go:672: Failed to register provider: model test-model-3 not found in configuration
+    llm_property_test.go:672: Failed to register provider: model test-model-1 not found in configuration
+    llm_property_test.go:672: Failed to register provider: model test-model-1 not found in configuration
+    llm_property_test.go:672: Failed to register provider: model test-model-1 not found in configuration
+    llm_property_test.go:672: Failed to register provider: model test-model-1 not found in configuration
+    properties.go:57: failed with initial seed: 1771258806760166000
+! LLM backend failures trigger retry with exponential backoff: Falsified
+   after 0 passed tests.
+ARG_0: 0
+ARG_0_ORIGINAL (1 shrinks): 132
+ARG_1: 1
+--- FAIL: TestProperty_LLMBackendRetryLogic (0.00s)
+    llm_property_test.go:815: Failed to register provider: model test-model-1 not found in configuration
+    llm_property_test.go:815: Failed to register provider: model test-model-1 not found in configuration
+    properties.go:57: failed with initial seed: 1771258806760774000
+! selected model is used for all subsequent requests: Falsified after 1
+   passed tests.
+ARG_0: 0
+ARG_0_ORIGINAL (1 shrinks): 797
+ARG_1: 1
+ARG_1_ORIGINAL (11 shrinks): 851
+ARG_2: 1
+ARG_2_ORIGINAL (2 shrinks): 3
+--- FAIL: TestProperty_ModelSelectionPersistence (0.00s)
+    llm_property_test.go:945: Failed to register provider 1: model test-model-2 not found in configuration
+    llm_property_test.go:945: Failed to register provider 1: model test-model-1 not found in configuration
+    llm_property_test.go:945: Failed to register provider 1: model test-model-1 not found in configuration
+    llm_property_test.go:945: Failed to register provider 1: model test-model-1 not found in configuration
+    llm_property_test.go:945: Failed to register provider 1: model test-model-1 not found in configuration
+    llm_property_test.go:945: Failed to register provider 1: model test-model-1 not found in configuration
+    llm_property_test.go:945: Failed to register provider 1: model test-model-1 not found in configuration
+    llm_property_test.go:945: Failed to register provider 1: model test-model-1 not found in configuration
+    llm_property_test.go:945: Failed to register provider 1: model test-model-1 not found in configuration
+    llm_property_test.go:945: Failed to register provider 1: model test-model-1 not found in configuration
+    llm_property_test.go:945: Failed to register provider 1: model test-model-1 not found in configuration
+    llm_property_test.go:945: Failed to register provider 1: model test-model-1 not found in configuration
+    llm_property_test.go:945: Failed to register provider 1: model test-model-1 not found in configuration
+    llm_property_test.go:945: Failed to register provider 1: model test-model-1 not found in configuration
+    llm_property_test.go:945: Failed to register provider 1: model test-model-1 not found in configuration
+    properties.go:57: failed with initial seed: 1771258806761325000
+! token usage is tracked and accumulated correctly: Falsified after 0
+   passed tests.
+ARG_0: 0
+ARG_0_ORIGINAL (1 shrinks): 271
+ARG_1: 1
+ARG_1_ORIGINAL (3 shrinks): 6
+ARG_2: 1
+ARG_2_ORIGINAL (8 shrinks): 236
+--- FAIL: TestProperty_TokenUsageTrackingAndStorage (0.00s)
+    llm_property_test.go:1087: Failed to register provider: model test-model-4 not found in configuration
+    llm_property_test.go:1087: Failed to register provider: model test-model-1 not found in configuration
+    llm_property_test.go:1087: Failed to register provider: model test-model-1 not found in configuration
+    llm_property_test.go:1087: Failed to register provider: model test-model-1 not found in configuration
+    llm_property_test.go:1087: Failed to register provider: model test-model-1 not found in configuration
+    llm_property_test.go:1087: Failed to register provider: model test-model-1 not found in configuration
+    llm_property_test.go:1087: Failed to register provider: model test-model-1 not found in configuration
+    llm_property_test.go:1087: Failed to register provider: model test-model-1 not found in configuration
+    llm_property_test.go:1087: Failed to register provider: model test-model-1 not found in configuration
+    llm_property_test.go:1087: Failed to register provider: model test-model-1 not found in configuration
+    llm_property_test.go:1087: Failed to register provider: model test-model-1 not found in configuration
+    llm_property_test.go:1087: Failed to register provider: model test-model-1 not found in configuration
+    llm_property_test.go:1087: Failed to register provider: model test-model-1 not found in configuration
+    properties.go:57: failed with initial seed: 1771258806763140000
+FAIL
+FAIL	github.com/real-rm/chatbox/internal/llm	11.462s
+ok  	github.com/real-rm/chatbox/internal/logging	9.850s
+ok  	github.com/real-rm/chatbox/internal/message	2.269s
+ok  	github.com/real-rm/chatbox/internal/metrics	8.055s
+ok  	github.com/real-rm/chatbox/internal/notification	14.475s
+ok  	github.com/real-rm/chatbox/internal/ratelimit	69.478s
+ok  	github.com/real-rm/chatbox/internal/router	18.529s
++ marking help requested updates session state: OK, passed 100 tests.
+Elapsed time: 12.746041ms
++ admin takeover marks session with admin info: OK, passed 100 tests.
+Elapsed time: 30.5375ms
++ admin assistance persists after admin leaves: OK, passed 100 tests.
+Elapsed time: 26.552417ms
++ only one admin can assist a session at a time: OK, passed 100 tests.
+Elapsed time: 41.42225ms
++ expired sessions are removed after TTL: OK, passed 100 tests.
+Elapsed time: 31.39047975s
++ multiple expired sessions are removed after TTL: OK, passed 100 tests.
+Elapsed time: 10.091725667s
++ sessions with nil EndTime are not removed: OK, passed 100 tests.
+Elapsed time: 10.100431s
++ sessions are not removed before TTL expires: OK, passed 100 tests.
+Elapsed time: 10.103321542s
++ active sessions are never removed by cleanup: OK, passed 100 tests.
+Elapsed time: 25.211362875s
++ multiple active sessions preserved across cleanup cycles: OK, passed 100
+   tests.
+Elapsed time: 10.084306166s
++ cleanup removes inactive but preserves active sessions: OK, passed 100
+   tests.
+Elapsed time: 10.094690166s
+--- FAIL: TestProductionIssue12_ResponseTimesGrowth (0.02s)
+    session_production_test.go:203: 
+        	Error Trace:	/Users/fx/work/chatbox/internal/session/session_production_test.go:203
+        	Error:      	Not equal: 
+        	            	expected: 10000
+        	            	actual  : 100
+        	Test:       	TestProductionIssue12_ResponseTimesGrowth
+        	Messages:   	All 10000 response times should be stored
+    session_production_test.go:209: Recorded 100 response times
+    session_production_test.go:210: Approximate memory usage: 800 bytes (0.78 KB)
+    session_production_test.go:213: FINDING: ResponseTimes slice grows unbounded
+    session_production_test.go:214: IMPACT: Long-running sessions accumulate large arrays
+    session_production_test.go:215: RECOMMENDATION: Cap array size or use rolling window
++ session restored within timeout, new session after timeout: OK, passed
+   20 tests.
++ user can have multiple session records over time: OK, passed 20 tests.
++ user cannot have multiple concurrent active sessions: OK, passed 20
+   tests.
++ session name is generated from first message: OK, passed 20 tests.
+FAIL
+FAIL	github.com/real-rm/chatbox/internal/session	127.093s
++ metrics calculation returns valid data structure: OK, passed 50 tests.
+Elapsed time: 601.083µs
++ session metadata structure is valid: OK, passed 100 tests.
+Elapsed time: 15.105334ms
+==================
+WARNING: DATA RACE
+Write at 0x00c00022b030 by goroutine 158:
+  github.com/real-rm/chatbox/internal/storage.TestProductionIssue10_SerializationDataRace.func2()
+      /Users/fx/work/chatbox/internal/storage/storage_production_test.go:100 +0x1a4
+  github.com/real-rm/chatbox/internal/storage.TestProductionIssue10_SerializationDataRace.gowrap2()
+      /Users/fx/work/chatbox/internal/storage/storage_production_test.go:103 +0x40
+
+Previous read at 0x00c00022b030 by goroutine 161:
+  github.com/real-rm/chatbox/internal/storage.TestProductionIssue10_SerializationDataRace.func2()
+      /Users/fx/work/chatbox/internal/storage/storage_production_test.go:100 +0x118
+  github.com/real-rm/chatbox/internal/storage.TestProductionIssue10_SerializationDataRace.gowrap2()
+      /Users/fx/work/chatbox/internal/storage/storage_production_test.go:103 +0x40
+
+Goroutine 158 (running) created at:
+  github.com/real-rm/chatbox/internal/storage.TestProductionIssue10_SerializationDataRace()
+      /Users/fx/work/chatbox/internal/storage/storage_production_test.go:96 +0x478
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.(*T).Run.gowrap1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x3c
+
+Goroutine 161 (running) created at:
+  github.com/real-rm/chatbox/internal/storage.TestProductionIssue10_SerializationDataRace()
+      /Users/fx/work/chatbox/internal/storage/storage_production_test.go:96 +0x478
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.(*T).Run.gowrap1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x3c
+==================
+==================
+WARNING: DATA RACE
+Write at 0x00c00022b030 by goroutine 155:
+  github.com/real-rm/chatbox/internal/storage.TestProductionIssue10_SerializationDataRace.func2()
+      /Users/fx/work/chatbox/internal/storage/storage_production_test.go:100 +0x1a4
+  github.com/real-rm/chatbox/internal/storage.TestProductionIssue10_SerializationDataRace.gowrap2()
+      /Users/fx/work/chatbox/internal/storage/storage_production_test.go:103 +0x40
+
+Previous read at 0x00c00022b030 by goroutine 143:
+  github.com/real-rm/chatbox/internal/storage.(*StorageService).sessionToDocument()
+      /Users/fx/work/chatbox/internal/storage/storage.go:361 +0x3c
+  github.com/real-rm/chatbox/internal/storage.TestProductionIssue10_SerializationDataRace.func1()
+      /Users/fx/work/chatbox/internal/storage/storage_production_test.go:89 +0x74
+
+Goroutine 155 (running) created at:
+  github.com/real-rm/chatbox/internal/storage.TestProductionIssue10_SerializationDataRace()
+      /Users/fx/work/chatbox/internal/storage/storage_production_test.go:96 +0x478
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.(*T).Run.gowrap1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x3c
+
+Goroutine 143 (finished) created at:
+  github.com/real-rm/chatbox/internal/storage.TestProductionIssue10_SerializationDataRace()
+      /Users/fx/work/chatbox/internal/storage/storage_production_test.go:87 +0x368
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.(*T).Run.gowrap1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x3c
+==================
+==================
+WARNING: DATA RACE
+Write at 0x00c00022b0a8 by goroutine 156:
+  github.com/real-rm/chatbox/internal/storage.TestProductionIssue10_SerializationDataRace.func2()
+      /Users/fx/work/chatbox/internal/storage/storage_production_test.go:99 +0x78
+  github.com/real-rm/chatbox/internal/storage.TestProductionIssue10_SerializationDataRace.gowrap2()
+      /Users/fx/work/chatbox/internal/storage/storage_production_test.go:103 +0x40
+
+Previous write at 0x00c00022b0a8 by goroutine 161:
+  github.com/real-rm/chatbox/internal/storage.TestProductionIssue10_SerializationDataRace.func2()
+      /Users/fx/work/chatbox/internal/storage/storage_production_test.go:99 +0x78
+  github.com/real-rm/chatbox/internal/storage.TestProductionIssue10_SerializationDataRace.gowrap2()
+      /Users/fx/work/chatbox/internal/storage/storage_production_test.go:103 +0x40
+
+Goroutine 156 (running) created at:
+  github.com/real-rm/chatbox/internal/storage.TestProductionIssue10_SerializationDataRace()
+      /Users/fx/work/chatbox/internal/storage/storage_production_test.go:96 +0x478
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.(*T).Run.gowrap1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x3c
+
+Goroutine 161 (running) created at:
+  github.com/real-rm/chatbox/internal/storage.TestProductionIssue10_SerializationDataRace()
+      /Users/fx/work/chatbox/internal/storage/storage_production_test.go:96 +0x478
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.(*T).Run.gowrap1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x3c
+==================
+==================
+WARNING: DATA RACE
+Write at 0x00c00022b0a8 by goroutine 150:
+  github.com/real-rm/chatbox/internal/storage.TestProductionIssue10_SerializationDataRace.func2()
+      /Users/fx/work/chatbox/internal/storage/storage_production_test.go:99 +0x78
+  github.com/real-rm/chatbox/internal/storage.TestProductionIssue10_SerializationDataRace.gowrap2()
+      /Users/fx/work/chatbox/internal/storage/storage_production_test.go:103 +0x40
+
+Previous read at 0x00c00022b0a8 by goroutine 143:
+  github.com/real-rm/chatbox/internal/storage.(*StorageService).sessionToDocument()
+      /Users/fx/work/chatbox/internal/storage/storage.go:411 +0x778
+  github.com/real-rm/chatbox/internal/storage.TestProductionIssue10_SerializationDataRace.func1()
+      /Users/fx/work/chatbox/internal/storage/storage_production_test.go:89 +0x74
+
+Goroutine 150 (running) created at:
+  github.com/real-rm/chatbox/internal/storage.TestProductionIssue10_SerializationDataRace()
+      /Users/fx/work/chatbox/internal/storage/storage_production_test.go:96 +0x478
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.(*T).Run.gowrap1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x3c
+
+Goroutine 143 (finished) created at:
+  github.com/real-rm/chatbox/internal/storage.TestProductionIssue10_SerializationDataRace()
+      /Users/fx/work/chatbox/internal/storage/storage_production_test.go:87 +0x368
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.(*T).Run.gowrap1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x3c
+==================
+==================
+WARNING: DATA RACE
+Read at 0x00c000038018 by goroutine 153:
+  runtime.growslice()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/runtime/slice.go:177 +0x0
+  github.com/real-rm/chatbox/internal/storage.TestProductionIssue10_SerializationDataRace.func2()
+      /Users/fx/work/chatbox/internal/storage/storage_production_test.go:100 +0x148
+  github.com/real-rm/chatbox/internal/storage.TestProductionIssue10_SerializationDataRace.gowrap2()
+      /Users/fx/work/chatbox/internal/storage/storage_production_test.go:103 +0x40
+
+Previous write at 0x00c000038018 by goroutine 150:
+  github.com/real-rm/chatbox/internal/storage.TestProductionIssue10_SerializationDataRace.func2()
+      /Users/fx/work/chatbox/internal/storage/storage_production_test.go:100 +0x164
+  github.com/real-rm/chatbox/internal/storage.TestProductionIssue10_SerializationDataRace.gowrap2()
+      /Users/fx/work/chatbox/internal/storage/storage_production_test.go:103 +0x40
+
+Goroutine 153 (running) created at:
+  github.com/real-rm/chatbox/internal/storage.TestProductionIssue10_SerializationDataRace()
+      /Users/fx/work/chatbox/internal/storage/storage_production_test.go:96 +0x478
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.(*T).Run.gowrap1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x3c
+
+Goroutine 150 (finished) created at:
+  github.com/real-rm/chatbox/internal/storage.TestProductionIssue10_SerializationDataRace()
+      /Users/fx/work/chatbox/internal/storage/storage_production_test.go:96 +0x478
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.(*T).Run.gowrap1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x3c
+==================
+==================
+WARNING: DATA RACE
+Write at 0x00c00022b030 by goroutine 153:
+  github.com/real-rm/chatbox/internal/storage.TestProductionIssue10_SerializationDataRace.func2()
+      /Users/fx/work/chatbox/internal/storage/storage_production_test.go:100 +0x1a4
+  github.com/real-rm/chatbox/internal/storage.TestProductionIssue10_SerializationDataRace.gowrap2()
+      /Users/fx/work/chatbox/internal/storage/storage_production_test.go:103 +0x40
+
+Previous write at 0x00c00022b030 by goroutine 157:
+  github.com/real-rm/chatbox/internal/storage.TestProductionIssue10_SerializationDataRace.func2()
+      /Users/fx/work/chatbox/internal/storage/storage_production_test.go:100 +0x1a4
+  github.com/real-rm/chatbox/internal/storage.TestProductionIssue10_SerializationDataRace.gowrap2()
+      /Users/fx/work/chatbox/internal/storage/storage_production_test.go:103 +0x40
+
+Goroutine 153 (running) created at:
+  github.com/real-rm/chatbox/internal/storage.TestProductionIssue10_SerializationDataRace()
+      /Users/fx/work/chatbox/internal/storage/storage_production_test.go:96 +0x478
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.(*T).Run.gowrap1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x3c
+
+Goroutine 157 (running) created at:
+  github.com/real-rm/chatbox/internal/storage.TestProductionIssue10_SerializationDataRace()
+      /Users/fx/work/chatbox/internal/storage/storage_production_test.go:96 +0x478
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.(*T).Run.gowrap1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x3c
+==================
+==================
+WARNING: DATA RACE
+Write at 0x00c0003880f0 by goroutine 163:
+  github.com/real-rm/chatbox/internal/storage.TestProductionIssue10_SerializationDataRace.func2()
+      /Users/fx/work/chatbox/internal/storage/storage_production_test.go:100 +0x164
+  github.com/real-rm/chatbox/internal/storage.TestProductionIssue10_SerializationDataRace.gowrap2()
+      /Users/fx/work/chatbox/internal/storage/storage_production_test.go:103 +0x40
+
+Previous write at 0x00c0003880f0 by goroutine 147:
+  github.com/real-rm/chatbox/internal/storage.TestProductionIssue10_SerializationDataRace.func2()
+      /Users/fx/work/chatbox/internal/storage/storage_production_test.go:100 +0x164
+  github.com/real-rm/chatbox/internal/storage.TestProductionIssue10_SerializationDataRace.gowrap2()
+      /Users/fx/work/chatbox/internal/storage/storage_production_test.go:103 +0x40
+
+Goroutine 163 (running) created at:
+  github.com/real-rm/chatbox/internal/storage.TestProductionIssue10_SerializationDataRace()
+      /Users/fx/work/chatbox/internal/storage/storage_production_test.go:96 +0x478
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.(*T).Run.gowrap1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x3c
+
+Goroutine 147 (running) created at:
+  github.com/real-rm/chatbox/internal/storage.TestProductionIssue10_SerializationDataRace()
+      /Users/fx/work/chatbox/internal/storage/storage_production_test.go:96 +0x478
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.(*T).Run.gowrap1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x3c
+==================
+--- FAIL: TestProductionIssue10_SerializationDataRace (0.00s)
+    storage_production_test.go:108: FINDING: sessionToDocument accesses fields without locking
+    storage_production_test.go:109: IMPACT: Potential data race when serializing during modifications
+    storage_production_test.go:110: RECOMMENDATION: Document that caller must ensure thread-safety
+    storage_production_test.go:111: RECOMMENDATION: Or add locking within sessionToDocument
+    testing.go:1617: race detected during execution of test
+FAIL
+FAIL	github.com/real-rm/chatbox/internal/storage	36.379s
+ok  	github.com/real-rm/chatbox/internal/testutil	(cached)
+ok  	github.com/real-rm/chatbox/internal/upload	9.551s
+==================
+WARNING: DATA RACE
+Read at 0x00c00001279f by goroutine 53:
+  github.com/real-rm/chatbox/internal/websocket.TestReadPump_InvalidJSON()
+      /Users/fx/work/chatbox/internal/websocket/handler_integration_test.go:280 +0x664
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.(*T).Run.gowrap1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x3c
+
+Previous write at 0x00c00001279f by goroutine 56:
+  github.com/real-rm/chatbox/internal/websocket.TestReadPump_InvalidJSON.func1()
+      /Users/fx/work/chatbox/internal/websocket/handler_integration_test.go:236 +0x290
+  net/http.HandlerFunc.ServeHTTP()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/net/http/server.go:2322 +0x48
+  net/http.serverHandler.ServeHTTP()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/net/http/server.go:3340 +0x270
+  net/http.(*conn).serve()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/net/http/server.go:2109 +0x9b0
+  net/http.(*Server).Serve.gowrap3()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/net/http/server.go:3493 +0x48
+
+Goroutine 53 (running) created at:
+  testing.(*T).Run()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x6e0
+  testing.runTests.func1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2477 +0x74
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.runTests()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2475 +0x734
+  testing.(*M).Run()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2337 +0xaf4
+  main.main()
+      _testmain.go:169 +0x100
+
+Goroutine 56 (finished) created at:
+  net/http.(*Server).Serve()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/net/http/server.go:3493 +0x5dc
+  net/http/httptest.(*Server).goServe.func1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/net/http/httptest/server.go:311 +0x98
+==================
+--- FAIL: TestReadPump_InvalidJSON (0.10s)
+    testing.go:1617: race detected during execution of test
+2026-02-16T23:20:07.508+07:00 level=ERROR module=websocket msg=Failed to route message, user_id="test-user", session_id="test-session-error", connection_id="test-conn-error", message_type="user_message", error=LLM_UNAVAILABLE: AI service is temporarily unavailable, file="handler.go:632"
+==================
+WARNING: DATA RACE
+Read at 0x00c0001aa218 by goroutine 61:
+  github.com/real-rm/chatbox/internal/websocket.TestReadPump_RoutingErrorHandling()
+      /Users/fx/work/chatbox/internal/websocket/handler_integration_test.go:376 +0x7cc
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.(*T).Run.gowrap1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x3c
+
+Previous write at 0x00c0001aa218 by goroutine 67:
+  github.com/real-rm/chatbox/internal/websocket.TestReadPump_RoutingErrorHandling.func3()
+      /Users/fx/work/chatbox/internal/websocket/handler_integration_test.go:358 +0x220
+
+Goroutine 61 (running) created at:
+  testing.(*T).Run()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x6e0
+  testing.runTests.func1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2477 +0x74
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.runTests()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2475 +0x734
+  testing.(*M).Run()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2337 +0xaf4
+  main.main()
+      _testmain.go:169 +0x100
+
+Goroutine 67 (finished) created at:
+  github.com/real-rm/chatbox/internal/websocket.TestReadPump_RoutingErrorHandling()
+      /Users/fx/work/chatbox/internal/websocket/handler_integration_test.go:347 +0x700
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.(*T).Run.gowrap1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x3c
+==================
+==================
+WARNING: DATA RACE
+Read at 0x00c00026e0a0 by goroutine 61:
+  github.com/real-rm/chatbox/internal/websocket.TestReadPump_RoutingErrorHandling()
+      /Users/fx/work/chatbox/internal/websocket/handler_integration_test.go:377 +0x814
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.(*T).Run.gowrap1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x3c
+
+Previous write at 0x00c00026e0a0 by goroutine 67:
+  github.com/real-rm/chatbox/internal/websocket.TestReadPump_RoutingErrorHandling.func3()
+      /Users/fx/work/chatbox/internal/websocket/handler_integration_test.go:355 +0xcc
+
+Goroutine 61 (running) created at:
+  testing.(*T).Run()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x6e0
+  testing.runTests.func1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2477 +0x74
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.runTests()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2475 +0x734
+  testing.(*M).Run()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2337 +0xaf4
+  main.main()
+      _testmain.go:169 +0x100
+
+Goroutine 67 (finished) created at:
+  github.com/real-rm/chatbox/internal/websocket.TestReadPump_RoutingErrorHandling()
+      /Users/fx/work/chatbox/internal/websocket/handler_integration_test.go:347 +0x700
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.(*T).Run.gowrap1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x3c
+==================
+==================
+WARNING: DATA RACE
+Read at 0x00c00026e130 by goroutine 61:
+  github.com/real-rm/chatbox/internal/websocket.TestReadPump_RoutingErrorHandling()
+      /Users/fx/work/chatbox/internal/websocket/handler_integration_test.go:378 +0x874
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.(*T).Run.gowrap1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x3c
+
+Previous write at 0x00c00026e130 by goroutine 67:
+  github.com/real-rm/chatbox/internal/websocket.TestReadPump_RoutingErrorHandling.func3()
+      /Users/fx/work/chatbox/internal/websocket/handler_integration_test.go:355 +0xcc
+
+Goroutine 61 (running) created at:
+  testing.(*T).Run()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x6e0
+  testing.runTests.func1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2477 +0x74
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.runTests()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2475 +0x734
+  testing.(*M).Run()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2337 +0xaf4
+  main.main()
+      _testmain.go:169 +0x100
+
+Goroutine 67 (finished) created at:
+  github.com/real-rm/chatbox/internal/websocket.TestReadPump_RoutingErrorHandling()
+      /Users/fx/work/chatbox/internal/websocket/handler_integration_test.go:347 +0x700
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.(*T).Run.gowrap1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x3c
+==================
+==================
+WARNING: DATA RACE
+Read at 0x00c00023de60 by goroutine 61:
+  github.com/real-rm/chatbox/internal/websocket.TestReadPump_RoutingErrorHandling()
+      /Users/fx/work/chatbox/internal/websocket/handler_integration_test.go:379 +0x8d4
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.(*T).Run.gowrap1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x3c
+
+Previous write at 0x00c00023de60 by goroutine 67:
+  reflect.Value.SetString()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/reflect/value.go:2291 +0x80
+  encoding/json.(*decodeState).literalStore()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:962 +0xd7c
+  encoding/json.(*decodeState).value()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:394 +0x19c
+  encoding/json.(*decodeState).object()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:767 +0xf24
+  encoding/json.(*decodeState).value()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:380 +0x78
+  encoding/json.(*decodeState).object()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:767 +0xf24
+  encoding/json.(*decodeState).value()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:380 +0x78
+  encoding/json.(*decodeState).unmarshal()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:183 +0x238
+  encoding/json.Unmarshal()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:113 +0x1c8
+  github.com/real-rm/chatbox/internal/message.(*Message).UnmarshalJSON()
+      /Users/fx/work/chatbox/internal/message/message.go:81 +0xfc
+  encoding/json.(*decodeState).object()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:610 +0x8bc
+  encoding/json.(*decodeState).value()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:380 +0x78
+  encoding/json.(*decodeState).unmarshal()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:183 +0x238
+  encoding/json.Unmarshal()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:113 +0x1c8
+  github.com/real-rm/chatbox/internal/websocket.TestReadPump_RoutingErrorHandling.func3()
+      /Users/fx/work/chatbox/internal/websocket/handler_integration_test.go:356 +0x120
+
+Goroutine 61 (running) created at:
+  testing.(*T).Run()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x6e0
+  testing.runTests.func1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2477 +0x74
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.runTests()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2475 +0x734
+  testing.(*M).Run()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2337 +0xaf4
+  main.main()
+      _testmain.go:169 +0x100
+
+Goroutine 67 (finished) created at:
+  github.com/real-rm/chatbox/internal/websocket.TestReadPump_RoutingErrorHandling()
+      /Users/fx/work/chatbox/internal/websocket/handler_integration_test.go:347 +0x700
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.(*T).Run.gowrap1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x3c
+==================
+==================
+WARNING: DATA RACE
+Read at 0x00c00023de80 by goroutine 61:
+  github.com/real-rm/chatbox/internal/websocket.TestReadPump_RoutingErrorHandling()
+      /Users/fx/work/chatbox/internal/websocket/handler_integration_test.go:380 +0x94c
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.(*T).Run.gowrap1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x3c
+
+Previous write at 0x00c00023de80 by goroutine 67:
+  reflect.Value.SetBool()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/reflect/value.go:2148 +0x68
+  encoding/json.(*decodeState).literalStore()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:925 +0x1a38
+  encoding/json.(*decodeState).value()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:394 +0x19c
+  encoding/json.(*decodeState).object()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:767 +0xf24
+  encoding/json.(*decodeState).value()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:380 +0x78
+  encoding/json.(*decodeState).object()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:767 +0xf24
+  encoding/json.(*decodeState).value()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:380 +0x78
+  encoding/json.(*decodeState).unmarshal()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:183 +0x238
+  encoding/json.Unmarshal()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:113 +0x1c8
+  github.com/real-rm/chatbox/internal/message.(*Message).UnmarshalJSON()
+      /Users/fx/work/chatbox/internal/message/message.go:81 +0xfc
+  encoding/json.(*decodeState).object()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:610 +0x8bc
+  encoding/json.(*decodeState).value()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:380 +0x78
+  encoding/json.(*decodeState).unmarshal()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:183 +0x238
+  encoding/json.Unmarshal()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:113 +0x1c8
+  github.com/real-rm/chatbox/internal/websocket.TestReadPump_RoutingErrorHandling.func3()
+      /Users/fx/work/chatbox/internal/websocket/handler_integration_test.go:356 +0x120
+
+Goroutine 61 (running) created at:
+  testing.(*T).Run()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x6e0
+  testing.runTests.func1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2477 +0x74
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.runTests()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2475 +0x734
+  testing.(*M).Run()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2337 +0xaf4
+  main.main()
+      _testmain.go:169 +0x100
+
+Goroutine 67 (finished) created at:
+  github.com/real-rm/chatbox/internal/websocket.TestReadPump_RoutingErrorHandling()
+      /Users/fx/work/chatbox/internal/websocket/handler_integration_test.go:347 +0x700
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.(*T).Run.gowrap1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x3c
+==================
+--- FAIL: TestReadPump_RoutingErrorHandling (0.20s)
+    testing.go:1617: race detected during execution of test
+2026-02-16T23:20:07.710+07:00 level=ERROR module=websocket msg=Failed to register connection with router, user_id="test-user", session_id="test-session-reg-error", connection_id="test-conn-reg-error", error=DATABASE_ERROR: Database operation failed, file="handler.go:593"
+==================
+WARNING: DATA RACE
+Read at 0x00c00007c0c8 by goroutine 69:
+  github.com/real-rm/chatbox/internal/websocket.TestReadPump_RegistrationErrorHandling()
+      /Users/fx/work/chatbox/internal/websocket/handler_integration_test.go:494 +0x784
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.(*T).Run.gowrap1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x3c
+
+Previous write at 0x00c00007c0c8 by goroutine 75:
+  github.com/real-rm/chatbox/internal/websocket.TestReadPump_RegistrationErrorHandling.func3()
+      /Users/fx/work/chatbox/internal/websocket/handler_integration_test.go:476 +0x220
+
+Goroutine 69 (running) created at:
+  testing.(*T).Run()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x6e0
+  testing.runTests.func1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2477 +0x74
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.runTests()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2475 +0x734
+  testing.(*M).Run()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2337 +0xaf4
+  main.main()
+      _testmain.go:169 +0x100
+
+Goroutine 75 (finished) created at:
+  github.com/real-rm/chatbox/internal/websocket.TestReadPump_RegistrationErrorHandling()
+      /Users/fx/work/chatbox/internal/websocket/handler_integration_test.go:465 +0x6b8
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.(*T).Run.gowrap1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x3c
+==================
+==================
+WARNING: DATA RACE
+Read at 0x00c00039ec80 by goroutine 69:
+  github.com/real-rm/chatbox/internal/websocket.TestReadPump_RegistrationErrorHandling()
+      /Users/fx/work/chatbox/internal/websocket/handler_integration_test.go:495 +0x7cc
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.(*T).Run.gowrap1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x3c
+
+Previous write at 0x00c00039ec80 by goroutine 75:
+  github.com/real-rm/chatbox/internal/websocket.TestReadPump_RegistrationErrorHandling.func3()
+      /Users/fx/work/chatbox/internal/websocket/handler_integration_test.go:473 +0xcc
+
+Goroutine 69 (running) created at:
+  testing.(*T).Run()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x6e0
+  testing.runTests.func1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2477 +0x74
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.runTests()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2475 +0x734
+  testing.(*M).Run()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2337 +0xaf4
+  main.main()
+      _testmain.go:169 +0x100
+
+Goroutine 75 (finished) created at:
+  github.com/real-rm/chatbox/internal/websocket.TestReadPump_RegistrationErrorHandling()
+      /Users/fx/work/chatbox/internal/websocket/handler_integration_test.go:465 +0x6b8
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.(*T).Run.gowrap1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x3c
+==================
+==================
+WARNING: DATA RACE
+Read at 0x00c00039ed10 by goroutine 69:
+  github.com/real-rm/chatbox/internal/websocket.TestReadPump_RegistrationErrorHandling()
+      /Users/fx/work/chatbox/internal/websocket/handler_integration_test.go:496 +0x82c
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.(*T).Run.gowrap1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x3c
+
+Previous write at 0x00c00039ed10 by goroutine 75:
+  github.com/real-rm/chatbox/internal/websocket.TestReadPump_RegistrationErrorHandling.func3()
+      /Users/fx/work/chatbox/internal/websocket/handler_integration_test.go:473 +0xcc
+
+Goroutine 69 (running) created at:
+  testing.(*T).Run()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x6e0
+  testing.runTests.func1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2477 +0x74
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.runTests()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2475 +0x734
+  testing.(*M).Run()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2337 +0xaf4
+  main.main()
+      _testmain.go:169 +0x100
+
+Goroutine 75 (finished) created at:
+  github.com/real-rm/chatbox/internal/websocket.TestReadPump_RegistrationErrorHandling()
+      /Users/fx/work/chatbox/internal/websocket/handler_integration_test.go:465 +0x6b8
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.(*T).Run.gowrap1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x3c
+==================
+==================
+WARNING: DATA RACE
+Read at 0x00c0000b7260 by goroutine 69:
+  github.com/real-rm/chatbox/internal/websocket.TestReadPump_RegistrationErrorHandling()
+      /Users/fx/work/chatbox/internal/websocket/handler_integration_test.go:497 +0x88c
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.(*T).Run.gowrap1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x3c
+
+Previous write at 0x00c0000b7260 by goroutine 75:
+  reflect.Value.SetString()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/reflect/value.go:2291 +0x80
+  encoding/json.(*decodeState).literalStore()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:962 +0xd7c
+  encoding/json.(*decodeState).value()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:394 +0x19c
+  encoding/json.(*decodeState).object()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:767 +0xf24
+  encoding/json.(*decodeState).value()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:380 +0x78
+  encoding/json.(*decodeState).object()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:767 +0xf24
+  encoding/json.(*decodeState).value()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:380 +0x78
+  encoding/json.(*decodeState).unmarshal()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:183 +0x238
+  encoding/json.Unmarshal()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:113 +0x1c8
+  github.com/real-rm/chatbox/internal/message.(*Message).UnmarshalJSON()
+      /Users/fx/work/chatbox/internal/message/message.go:81 +0xfc
+  encoding/json.(*decodeState).object()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:610 +0x8bc
+  encoding/json.(*decodeState).value()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:380 +0x78
+  encoding/json.(*decodeState).unmarshal()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:183 +0x238
+  encoding/json.Unmarshal()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:113 +0x1c8
+  github.com/real-rm/chatbox/internal/websocket.TestReadPump_RegistrationErrorHandling.func3()
+      /Users/fx/work/chatbox/internal/websocket/handler_integration_test.go:474 +0x120
+
+Goroutine 69 (running) created at:
+  testing.(*T).Run()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x6e0
+  testing.runTests.func1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2477 +0x74
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.runTests()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2475 +0x734
+  testing.(*M).Run()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2337 +0xaf4
+  main.main()
+      _testmain.go:169 +0x100
+
+Goroutine 75 (finished) created at:
+  github.com/real-rm/chatbox/internal/websocket.TestReadPump_RegistrationErrorHandling()
+      /Users/fx/work/chatbox/internal/websocket/handler_integration_test.go:465 +0x6b8
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.(*T).Run.gowrap1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x3c
+==================
+==================
+WARNING: DATA RACE
+Read at 0x00c0000b7270 by goroutine 69:
+  github.com/real-rm/chatbox/internal/websocket.TestReadPump_RegistrationErrorHandling()
+      /Users/fx/work/chatbox/internal/websocket/handler_integration_test.go:498 +0x904
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.(*T).Run.gowrap1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x3c
+
+Previous write at 0x00c0000b7270 by goroutine 75:
+  reflect.Value.SetString()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/reflect/value.go:2291 +0x80
+  encoding/json.(*decodeState).literalStore()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:962 +0xd7c
+  encoding/json.(*decodeState).value()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:394 +0x19c
+  encoding/json.(*decodeState).object()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:767 +0xf24
+  encoding/json.(*decodeState).value()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:380 +0x78
+  encoding/json.(*decodeState).object()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:767 +0xf24
+  encoding/json.(*decodeState).value()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:380 +0x78
+  encoding/json.(*decodeState).unmarshal()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:183 +0x238
+  encoding/json.Unmarshal()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:113 +0x1c8
+  github.com/real-rm/chatbox/internal/message.(*Message).UnmarshalJSON()
+      /Users/fx/work/chatbox/internal/message/message.go:81 +0xfc
+  encoding/json.(*decodeState).object()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:610 +0x8bc
+  encoding/json.(*decodeState).value()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:380 +0x78
+  encoding/json.(*decodeState).unmarshal()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:183 +0x238
+  encoding/json.Unmarshal()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:113 +0x1c8
+  github.com/real-rm/chatbox/internal/websocket.TestReadPump_RegistrationErrorHandling.func3()
+      /Users/fx/work/chatbox/internal/websocket/handler_integration_test.go:474 +0x120
+
+Goroutine 69 (running) created at:
+  testing.(*T).Run()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x6e0
+  testing.runTests.func1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2477 +0x74
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.runTests()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2475 +0x734
+  testing.(*M).Run()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2337 +0xaf4
+  main.main()
+      _testmain.go:169 +0x100
+
+Goroutine 75 (finished) created at:
+  github.com/real-rm/chatbox/internal/websocket.TestReadPump_RegistrationErrorHandling()
+      /Users/fx/work/chatbox/internal/websocket/handler_integration_test.go:465 +0x6b8
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.(*T).Run.gowrap1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x3c
+==================
+==================
+WARNING: DATA RACE
+Read at 0x00c0000b7280 by goroutine 69:
+  github.com/real-rm/chatbox/internal/websocket.TestReadPump_RegistrationErrorHandling()
+      /Users/fx/work/chatbox/internal/websocket/handler_integration_test.go:499 +0x97c
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.(*T).Run.gowrap1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x3c
+
+Previous write at 0x00c0000b7280 by goroutine 75:
+  reflect.Value.SetBool()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/reflect/value.go:2148 +0x68
+  encoding/json.(*decodeState).literalStore()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:925 +0x1a38
+  encoding/json.(*decodeState).value()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:394 +0x19c
+  encoding/json.(*decodeState).object()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:767 +0xf24
+  encoding/json.(*decodeState).value()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:380 +0x78
+  encoding/json.(*decodeState).object()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:767 +0xf24
+  encoding/json.(*decodeState).value()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:380 +0x78
+  encoding/json.(*decodeState).unmarshal()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:183 +0x238
+  encoding/json.Unmarshal()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:113 +0x1c8
+  github.com/real-rm/chatbox/internal/message.(*Message).UnmarshalJSON()
+      /Users/fx/work/chatbox/internal/message/message.go:81 +0xfc
+  encoding/json.(*decodeState).object()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:610 +0x8bc
+  encoding/json.(*decodeState).value()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:380 +0x78
+  encoding/json.(*decodeState).unmarshal()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:183 +0x238
+  encoding/json.Unmarshal()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:113 +0x1c8
+  github.com/real-rm/chatbox/internal/websocket.TestReadPump_RegistrationErrorHandling.func3()
+      /Users/fx/work/chatbox/internal/websocket/handler_integration_test.go:474 +0x120
+
+Goroutine 69 (running) created at:
+  testing.(*T).Run()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x6e0
+  testing.runTests.func1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2477 +0x74
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.runTests()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2475 +0x734
+  testing.(*M).Run()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2337 +0xaf4
+  main.main()
+      _testmain.go:169 +0x100
+
+Goroutine 75 (finished) created at:
+  github.com/real-rm/chatbox/internal/websocket.TestReadPump_RegistrationErrorHandling()
+      /Users/fx/work/chatbox/internal/websocket/handler_integration_test.go:465 +0x6b8
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.(*T).Run.gowrap1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x3c
+==================
+--- FAIL: TestReadPump_RegistrationErrorHandling (0.20s)
+    testing.go:1617: race detected during execution of test
+==================
+WARNING: DATA RACE
+Read at 0x00c000416080 by goroutine 166:
+  github.com/real-rm/chatbox/internal/websocket.TestReadPump_NilRouterHandling()
+      /Users/fx/work/chatbox/internal/websocket/handler_integration_test.go:1382 +0x5fc
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.(*T).Run.gowrap1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x3c
+
+Previous write at 0x00c000416080 by goroutine 172:
+  github.com/real-rm/chatbox/internal/websocket.TestReadPump_NilRouterHandling.func3()
+      /Users/fx/work/chatbox/internal/websocket/handler_integration_test.go:1364 +0x220
+
+Goroutine 166 (running) created at:
+  testing.(*T).Run()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x6e0
+  testing.runTests.func1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2477 +0x74
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.runTests()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2475 +0x734
+  testing.(*M).Run()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2337 +0xaf4
+  main.main()
+      _testmain.go:169 +0x100
+
+Goroutine 172 (finished) created at:
+  github.com/real-rm/chatbox/internal/websocket.TestReadPump_NilRouterHandling()
+      /Users/fx/work/chatbox/internal/websocket/handler_integration_test.go:1353 +0x530
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.(*T).Run.gowrap1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x3c
+==================
+==================
+WARNING: DATA RACE
+Read at 0x00c00027a1e0 by goroutine 166:
+  github.com/real-rm/chatbox/internal/websocket.TestReadPump_NilRouterHandling()
+      /Users/fx/work/chatbox/internal/websocket/handler_integration_test.go:1383 +0x644
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.(*T).Run.gowrap1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x3c
+
+Previous write at 0x00c00027a1e0 by goroutine 172:
+  github.com/real-rm/chatbox/internal/websocket.TestReadPump_NilRouterHandling.func3()
+      /Users/fx/work/chatbox/internal/websocket/handler_integration_test.go:1361 +0xcc
+
+Goroutine 166 (running) created at:
+  testing.(*T).Run()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x6e0
+  testing.runTests.func1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2477 +0x74
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.runTests()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2475 +0x734
+  testing.(*M).Run()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2337 +0xaf4
+  main.main()
+      _testmain.go:169 +0x100
+
+Goroutine 172 (finished) created at:
+  github.com/real-rm/chatbox/internal/websocket.TestReadPump_NilRouterHandling()
+      /Users/fx/work/chatbox/internal/websocket/handler_integration_test.go:1353 +0x530
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.(*T).Run.gowrap1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x3c
+==================
+==================
+WARNING: DATA RACE
+Read at 0x00c00027a270 by goroutine 166:
+  github.com/real-rm/chatbox/internal/websocket.TestReadPump_NilRouterHandling()
+      /Users/fx/work/chatbox/internal/websocket/handler_integration_test.go:1384 +0x6a4
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.(*T).Run.gowrap1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x3c
+
+Previous write at 0x00c00027a270 by goroutine 172:
+  github.com/real-rm/chatbox/internal/websocket.TestReadPump_NilRouterHandling.func3()
+      /Users/fx/work/chatbox/internal/websocket/handler_integration_test.go:1361 +0xcc
+
+Goroutine 166 (running) created at:
+  testing.(*T).Run()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x6e0
+  testing.runTests.func1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2477 +0x74
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.runTests()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2475 +0x734
+  testing.(*M).Run()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2337 +0xaf4
+  main.main()
+      _testmain.go:169 +0x100
+
+Goroutine 172 (finished) created at:
+  github.com/real-rm/chatbox/internal/websocket.TestReadPump_NilRouterHandling()
+      /Users/fx/work/chatbox/internal/websocket/handler_integration_test.go:1353 +0x530
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.(*T).Run.gowrap1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x3c
+==================
+==================
+WARNING: DATA RACE
+Read at 0x00c000415440 by goroutine 166:
+  github.com/real-rm/chatbox/internal/websocket.TestReadPump_NilRouterHandling()
+      /Users/fx/work/chatbox/internal/websocket/handler_integration_test.go:1385 +0x704
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.(*T).Run.gowrap1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x3c
+
+Previous write at 0x00c000415440 by goroutine 172:
+  reflect.Value.SetString()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/reflect/value.go:2291 +0x80
+  encoding/json.(*decodeState).literalStore()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:962 +0xd7c
+  encoding/json.(*decodeState).value()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:394 +0x19c
+  encoding/json.(*decodeState).object()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:767 +0xf24
+  encoding/json.(*decodeState).value()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:380 +0x78
+  encoding/json.(*decodeState).object()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:767 +0xf24
+  encoding/json.(*decodeState).value()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:380 +0x78
+  encoding/json.(*decodeState).unmarshal()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:183 +0x238
+  encoding/json.Unmarshal()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:113 +0x1c8
+  github.com/real-rm/chatbox/internal/message.(*Message).UnmarshalJSON()
+      /Users/fx/work/chatbox/internal/message/message.go:81 +0xfc
+  encoding/json.(*decodeState).object()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:610 +0x8bc
+  encoding/json.(*decodeState).value()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:380 +0x78
+  encoding/json.(*decodeState).unmarshal()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:183 +0x238
+  encoding/json.Unmarshal()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:113 +0x1c8
+  github.com/real-rm/chatbox/internal/websocket.TestReadPump_NilRouterHandling.func3()
+      /Users/fx/work/chatbox/internal/websocket/handler_integration_test.go:1362 +0x120
+
+Goroutine 166 (running) created at:
+  testing.(*T).Run()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x6e0
+  testing.runTests.func1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2477 +0x74
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.runTests()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2475 +0x734
+  testing.(*M).Run()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2337 +0xaf4
+  main.main()
+      _testmain.go:169 +0x100
+
+Goroutine 172 (finished) created at:
+  github.com/real-rm/chatbox/internal/websocket.TestReadPump_NilRouterHandling()
+      /Users/fx/work/chatbox/internal/websocket/handler_integration_test.go:1353 +0x530
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.(*T).Run.gowrap1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x3c
+==================
+==================
+WARNING: DATA RACE
+Read at 0x00c000415450 by goroutine 166:
+  github.com/real-rm/chatbox/internal/websocket.TestReadPump_NilRouterHandling()
+      /Users/fx/work/chatbox/internal/websocket/handler_integration_test.go:1386 +0x77c
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.(*T).Run.gowrap1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x3c
+
+Previous write at 0x00c000415450 by goroutine 172:
+  reflect.Value.SetString()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/reflect/value.go:2291 +0x80
+  encoding/json.(*decodeState).literalStore()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:962 +0xd7c
+  encoding/json.(*decodeState).value()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:394 +0x19c
+  encoding/json.(*decodeState).object()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:767 +0xf24
+  encoding/json.(*decodeState).value()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:380 +0x78
+  encoding/json.(*decodeState).object()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:767 +0xf24
+  encoding/json.(*decodeState).value()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:380 +0x78
+  encoding/json.(*decodeState).unmarshal()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:183 +0x238
+  encoding/json.Unmarshal()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:113 +0x1c8
+  github.com/real-rm/chatbox/internal/message.(*Message).UnmarshalJSON()
+      /Users/fx/work/chatbox/internal/message/message.go:81 +0xfc
+  encoding/json.(*decodeState).object()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:610 +0x8bc
+  encoding/json.(*decodeState).value()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:380 +0x78
+  encoding/json.(*decodeState).unmarshal()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:183 +0x238
+  encoding/json.Unmarshal()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:113 +0x1c8
+  github.com/real-rm/chatbox/internal/websocket.TestReadPump_NilRouterHandling.func3()
+      /Users/fx/work/chatbox/internal/websocket/handler_integration_test.go:1362 +0x120
+
+Goroutine 166 (running) created at:
+  testing.(*T).Run()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x6e0
+  testing.runTests.func1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2477 +0x74
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.runTests()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2475 +0x734
+  testing.(*M).Run()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2337 +0xaf4
+  main.main()
+      _testmain.go:169 +0x100
+
+Goroutine 172 (finished) created at:
+  github.com/real-rm/chatbox/internal/websocket.TestReadPump_NilRouterHandling()
+      /Users/fx/work/chatbox/internal/websocket/handler_integration_test.go:1353 +0x530
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.(*T).Run.gowrap1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x3c
+==================
+==================
+WARNING: DATA RACE
+Read at 0x00c000415460 by goroutine 166:
+  github.com/real-rm/chatbox/internal/websocket.TestReadPump_NilRouterHandling()
+      /Users/fx/work/chatbox/internal/websocket/handler_integration_test.go:1387 +0x7f4
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.(*T).Run.gowrap1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x3c
+
+Previous write at 0x00c000415460 by goroutine 172:
+  reflect.Value.SetBool()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/reflect/value.go:2148 +0x68
+  encoding/json.(*decodeState).literalStore()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:925 +0x1a38
+  encoding/json.(*decodeState).value()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:394 +0x19c
+  encoding/json.(*decodeState).object()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:767 +0xf24
+  encoding/json.(*decodeState).value()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:380 +0x78
+  encoding/json.(*decodeState).object()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:767 +0xf24
+  encoding/json.(*decodeState).value()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:380 +0x78
+  encoding/json.(*decodeState).unmarshal()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:183 +0x238
+  encoding/json.Unmarshal()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:113 +0x1c8
+  github.com/real-rm/chatbox/internal/message.(*Message).UnmarshalJSON()
+      /Users/fx/work/chatbox/internal/message/message.go:81 +0xfc
+  encoding/json.(*decodeState).object()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:610 +0x8bc
+  encoding/json.(*decodeState).value()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:380 +0x78
+  encoding/json.(*decodeState).unmarshal()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:183 +0x238
+  encoding/json.Unmarshal()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/encoding/json/decode.go:113 +0x1c8
+  github.com/real-rm/chatbox/internal/websocket.TestReadPump_NilRouterHandling.func3()
+      /Users/fx/work/chatbox/internal/websocket/handler_integration_test.go:1362 +0x120
+
+Goroutine 166 (running) created at:
+  testing.(*T).Run()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x6e0
+  testing.runTests.func1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2477 +0x74
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.runTests()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2475 +0x734
+  testing.(*M).Run()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2337 +0xaf4
+  main.main()
+      _testmain.go:169 +0x100
+
+Goroutine 172 (finished) created at:
+  github.com/real-rm/chatbox/internal/websocket.TestReadPump_NilRouterHandling()
+      /Users/fx/work/chatbox/internal/websocket/handler_integration_test.go:1353 +0x530
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.(*T).Run.gowrap1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x3c
+==================
+--- FAIL: TestReadPump_NilRouterHandling (0.20s)
+    testing.go:1617: race detected during execution of test
+==================
+WARNING: DATA RACE
+Read at 0x00c0000227e0 by goroutine 173:
+  github.com/real-rm/chatbox/internal/websocket.TestOversizedMessages_Integration()
+      /Users/fx/work/chatbox/internal/websocket/handler_integration_test.go:1449 +0xc58
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.(*T).Run.gowrap1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x3c
+
+Previous write at 0x00c0000227e0 by goroutine 178:
+  github.com/real-rm/chatbox/internal/websocket.(*mockRouter).RouteMessage()
+      /Users/fx/work/chatbox/internal/websocket/handler_integration_test.go:36 +0xc4
+  github.com/real-rm/chatbox/internal/websocket.(*Connection).readPump()
+      /Users/fx/work/chatbox/internal/websocket/handler.go:630 +0x120c
+  github.com/real-rm/chatbox/internal/websocket.(*Handler).HandleWebSocket.gowrap1()
+      /Users/fx/work/chatbox/internal/websocket/handler.go:250 +0x3c
+
+Goroutine 173 (running) created at:
+  testing.(*T).Run()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x6e0
+  testing.runTests.func1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2477 +0x74
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.runTests()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2475 +0x734
+  testing.(*M).Run()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2337 +0xaf4
+  main.main()
+      _testmain.go:169 +0x100
+
+Goroutine 178 (running) created at:
+  github.com/real-rm/chatbox/internal/websocket.(*Handler).HandleWebSocket()
+      /Users/fx/work/chatbox/internal/websocket/handler.go:250 +0x5f0
+  github.com/real-rm/chatbox/internal/websocket.(*Handler).HandleWebSocket-fm()
+      <autogenerated>:1 +0x4c
+  net/http.HandlerFunc.ServeHTTP()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/net/http/server.go:2322 +0x48
+  net/http.serverHandler.ServeHTTP()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/net/http/server.go:3340 +0x270
+  net/http.(*conn).serve()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/net/http/server.go:2109 +0x9b0
+  net/http.(*Server).Serve.gowrap3()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/net/http/server.go:3493 +0x48
+==================
+==================
+WARNING: DATA RACE
+Read at 0x00c0000b4078 by goroutine 173:
+  github.com/real-rm/chatbox/internal/websocket.TestOversizedMessages_Integration()
+      /Users/fx/work/chatbox/internal/websocket/handler_integration_test.go:1451 +0xd0c
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.(*T).Run.gowrap1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x3c
+
+Previous write at 0x00c0000b4078 by goroutine 178:
+  github.com/real-rm/chatbox/internal/websocket.(*mockRouter).RouteMessage()
+      /Users/fx/work/chatbox/internal/websocket/handler_integration_test.go:36 +0x84
+  github.com/real-rm/chatbox/internal/websocket.(*Connection).readPump()
+      /Users/fx/work/chatbox/internal/websocket/handler.go:630 +0x120c
+  github.com/real-rm/chatbox/internal/websocket.(*Handler).HandleWebSocket.gowrap1()
+      /Users/fx/work/chatbox/internal/websocket/handler.go:250 +0x3c
+
+Goroutine 173 (running) created at:
+  testing.(*T).Run()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x6e0
+  testing.runTests.func1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2477 +0x74
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.runTests()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2475 +0x734
+  testing.(*M).Run()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2337 +0xaf4
+  main.main()
+      _testmain.go:169 +0x100
+
+Goroutine 178 (running) created at:
+  github.com/real-rm/chatbox/internal/websocket.(*Handler).HandleWebSocket()
+      /Users/fx/work/chatbox/internal/websocket/handler.go:250 +0x5f0
+  github.com/real-rm/chatbox/internal/websocket.(*Handler).HandleWebSocket-fm()
+      <autogenerated>:1 +0x4c
+  net/http.HandlerFunc.ServeHTTP()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/net/http/server.go:2322 +0x48
+  net/http.serverHandler.ServeHTTP()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/net/http/server.go:3340 +0x270
+  net/http.(*conn).serve()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/net/http/server.go:2109 +0x9b0
+  net/http.(*Server).Serve.gowrap3()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/net/http/server.go:3493 +0x48
+==================
+==================
+WARNING: DATA RACE
+Read at 0x00c00011e5c0 by goroutine 173:
+  github.com/real-rm/chatbox/internal/websocket.TestOversizedMessages_Integration()
+      /Users/fx/work/chatbox/internal/websocket/handler_integration_test.go:1451 +0xd24
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.(*T).Run.gowrap1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x3c
+
+Previous write at 0x00c00011e5c0 by goroutine 178:
+  github.com/real-rm/chatbox/internal/websocket.(*Connection).readPump()
+      /Users/fx/work/chatbox/internal/websocket/handler.go:536 +0x260
+  github.com/real-rm/chatbox/internal/websocket.(*Handler).HandleWebSocket.gowrap1()
+      /Users/fx/work/chatbox/internal/websocket/handler.go:250 +0x3c
+
+Goroutine 173 (running) created at:
+  testing.(*T).Run()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x6e0
+  testing.runTests.func1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2477 +0x74
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.runTests()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2475 +0x734
+  testing.(*M).Run()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2337 +0xaf4
+  main.main()
+      _testmain.go:169 +0x100
+
+Goroutine 178 (running) created at:
+  github.com/real-rm/chatbox/internal/websocket.(*Handler).HandleWebSocket()
+      /Users/fx/work/chatbox/internal/websocket/handler.go:250 +0x5f0
+  github.com/real-rm/chatbox/internal/websocket.(*Handler).HandleWebSocket-fm()
+      <autogenerated>:1 +0x4c
+  net/http.HandlerFunc.ServeHTTP()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/net/http/server.go:2322 +0x48
+  net/http.serverHandler.ServeHTTP()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/net/http/server.go:3340 +0x270
+  net/http.(*conn).serve()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/net/http/server.go:2109 +0x9b0
+  net/http.(*Server).Serve.gowrap3()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/net/http/server.go:3493 +0x48
+==================
+--- FAIL: TestOversizedMessages_Integration (0.50s)
+    testing.go:1617: race detected during execution of test
+==================
+WARNING: DATA RACE
+Read at 0x00c000022960 by goroutine 180:
+  github.com/real-rm/chatbox/internal/websocket.TestOversizedMessages_ExactLimit()
+      /Users/fx/work/chatbox/internal/websocket/handler_integration_test.go:1549 +0xc54
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.(*T).Run.gowrap1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x3c
+
+Previous write at 0x00c000022960 by goroutine 185:
+  github.com/real-rm/chatbox/internal/websocket.(*mockRouter).RouteMessage()
+      /Users/fx/work/chatbox/internal/websocket/handler_integration_test.go:36 +0xc4
+  github.com/real-rm/chatbox/internal/websocket.(*Connection).readPump()
+      /Users/fx/work/chatbox/internal/websocket/handler.go:630 +0x120c
+  github.com/real-rm/chatbox/internal/websocket.(*Handler).HandleWebSocket.gowrap1()
+      /Users/fx/work/chatbox/internal/websocket/handler.go:250 +0x3c
+
+Goroutine 180 (running) created at:
+  testing.(*T).Run()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x6e0
+  testing.runTests.func1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2477 +0x74
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.runTests()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2475 +0x734
+  testing.(*M).Run()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2337 +0xaf4
+  main.main()
+      _testmain.go:169 +0x100
+
+Goroutine 185 (running) created at:
+  github.com/real-rm/chatbox/internal/websocket.(*Handler).HandleWebSocket()
+      /Users/fx/work/chatbox/internal/websocket/handler.go:250 +0x5f0
+  github.com/real-rm/chatbox/internal/websocket.(*Handler).HandleWebSocket-fm()
+      <autogenerated>:1 +0x4c
+  net/http.HandlerFunc.ServeHTTP()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/net/http/server.go:2322 +0x48
+  net/http.serverHandler.ServeHTTP()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/net/http/server.go:3340 +0x270
+  net/http.(*conn).serve()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/net/http/server.go:2109 +0x9b0
+  net/http.(*Server).Serve.gowrap3()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/net/http/server.go:3493 +0x48
+==================
+==================
+WARNING: DATA RACE
+Read at 0x00c0001aa2a8 by goroutine 180:
+  github.com/real-rm/chatbox/internal/websocket.TestOversizedMessages_ExactLimit()
+      /Users/fx/work/chatbox/internal/websocket/handler_integration_test.go:1551 +0xd08
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.(*T).Run.gowrap1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x3c
+
+Previous write at 0x00c0001aa2a8 by goroutine 185:
+  github.com/real-rm/chatbox/internal/websocket.(*mockRouter).RouteMessage()
+      /Users/fx/work/chatbox/internal/websocket/handler_integration_test.go:36 +0x84
+  github.com/real-rm/chatbox/internal/websocket.(*Connection).readPump()
+      /Users/fx/work/chatbox/internal/websocket/handler.go:630 +0x120c
+  github.com/real-rm/chatbox/internal/websocket.(*Handler).HandleWebSocket.gowrap1()
+      /Users/fx/work/chatbox/internal/websocket/handler.go:250 +0x3c
+
+Goroutine 180 (running) created at:
+  testing.(*T).Run()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x6e0
+  testing.runTests.func1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2477 +0x74
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.runTests()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2475 +0x734
+  testing.(*M).Run()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2337 +0xaf4
+  main.main()
+      _testmain.go:169 +0x100
+
+Goroutine 185 (running) created at:
+  github.com/real-rm/chatbox/internal/websocket.(*Handler).HandleWebSocket()
+      /Users/fx/work/chatbox/internal/websocket/handler.go:250 +0x5f0
+  github.com/real-rm/chatbox/internal/websocket.(*Handler).HandleWebSocket-fm()
+      <autogenerated>:1 +0x4c
+  net/http.HandlerFunc.ServeHTTP()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/net/http/server.go:2322 +0x48
+  net/http.serverHandler.ServeHTTP()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/net/http/server.go:3340 +0x270
+  net/http.(*conn).serve()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/net/http/server.go:2109 +0x9b0
+  net/http.(*Server).Serve.gowrap3()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/net/http/server.go:3493 +0x48
+==================
+==================
+WARNING: DATA RACE
+Read at 0x00c0003e0200 by goroutine 180:
+  github.com/real-rm/chatbox/internal/websocket.TestOversizedMessages_ExactLimit()
+      /Users/fx/work/chatbox/internal/websocket/handler_integration_test.go:1551 +0xd20
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.(*T).Run.gowrap1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x3c
+
+Previous write at 0x00c0003e0200 by goroutine 185:
+  github.com/real-rm/chatbox/internal/websocket.(*Connection).readPump()
+      /Users/fx/work/chatbox/internal/websocket/handler.go:536 +0x260
+  github.com/real-rm/chatbox/internal/websocket.(*Handler).HandleWebSocket.gowrap1()
+      /Users/fx/work/chatbox/internal/websocket/handler.go:250 +0x3c
+
+Goroutine 180 (running) created at:
+  testing.(*T).Run()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x6e0
+  testing.runTests.func1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2477 +0x74
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.runTests()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2475 +0x734
+  testing.(*M).Run()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2337 +0xaf4
+  main.main()
+      _testmain.go:169 +0x100
+
+Goroutine 185 (running) created at:
+  github.com/real-rm/chatbox/internal/websocket.(*Handler).HandleWebSocket()
+      /Users/fx/work/chatbox/internal/websocket/handler.go:250 +0x5f0
+  github.com/real-rm/chatbox/internal/websocket.(*Handler).HandleWebSocket-fm()
+      <autogenerated>:1 +0x4c
+  net/http.HandlerFunc.ServeHTTP()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/net/http/server.go:2322 +0x48
+  net/http.serverHandler.ServeHTTP()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/net/http/server.go:3340 +0x270
+  net/http.(*conn).serve()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/net/http/server.go:2109 +0x9b0
+  net/http.(*Server).Serve.gowrap3()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/net/http/server.go:3493 +0x48
+==================
+==================
+WARNING: DATA RACE
+Read at 0x00c000022960 by goroutine 180:
+  github.com/real-rm/chatbox/internal/websocket.TestOversizedMessages_ExactLimit()
+      /Users/fx/work/chatbox/internal/websocket/handler_integration_test.go:1570 +0xf5c
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.(*T).Run.gowrap1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x3c
+
+Previous write at 0x00c000022960 by goroutine 185:
+  github.com/real-rm/chatbox/internal/websocket.(*mockRouter).RouteMessage()
+      /Users/fx/work/chatbox/internal/websocket/handler_integration_test.go:36 +0xc4
+  github.com/real-rm/chatbox/internal/websocket.(*Connection).readPump()
+      /Users/fx/work/chatbox/internal/websocket/handler.go:630 +0x120c
+  github.com/real-rm/chatbox/internal/websocket.(*Handler).HandleWebSocket.gowrap1()
+      /Users/fx/work/chatbox/internal/websocket/handler.go:250 +0x3c
+
+Goroutine 180 (running) created at:
+  testing.(*T).Run()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x6e0
+  testing.runTests.func1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2477 +0x74
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.runTests()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2475 +0x734
+  testing.(*M).Run()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2337 +0xaf4
+  main.main()
+      _testmain.go:169 +0x100
+
+Goroutine 185 (running) created at:
+  github.com/real-rm/chatbox/internal/websocket.(*Handler).HandleWebSocket()
+      /Users/fx/work/chatbox/internal/websocket/handler.go:250 +0x5f0
+  github.com/real-rm/chatbox/internal/websocket.(*Handler).HandleWebSocket-fm()
+      <autogenerated>:1 +0x4c
+  net/http.HandlerFunc.ServeHTTP()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/net/http/server.go:2322 +0x48
+  net/http.serverHandler.ServeHTTP()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/net/http/server.go:3340 +0x270
+  net/http.(*conn).serve()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/net/http/server.go:2109 +0x9b0
+  net/http.(*Server).Serve.gowrap3()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/net/http/server.go:3493 +0x48
+==================
+--- FAIL: TestOversizedMessages_ExactLimit (0.40s)
+    testing.go:1617: race detected during execution of test
+==================
+WARNING: DATA RACE
+Read at 0x00c0001bd360 by goroutine 187:
+  github.com/real-rm/chatbox/internal/websocket.TestOversizedMessages_MultipleConnections()
+      /Users/fx/work/chatbox/internal/websocket/handler_integration_test.go:1672 +0x17b4
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.(*T).Run.gowrap1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x3c
+
+Previous write at 0x00c0001bd360 by goroutine 192:
+  github.com/real-rm/chatbox/internal/websocket.(*mockRouter).RouteMessage()
+      /Users/fx/work/chatbox/internal/websocket/handler_integration_test.go:36 +0xc4
+  github.com/real-rm/chatbox/internal/websocket.(*Connection).readPump()
+      /Users/fx/work/chatbox/internal/websocket/handler.go:630 +0x120c
+  github.com/real-rm/chatbox/internal/websocket.(*Handler).HandleWebSocket.gowrap1()
+      /Users/fx/work/chatbox/internal/websocket/handler.go:250 +0x3c
+
+Goroutine 187 (running) created at:
+  testing.(*T).Run()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x6e0
+  testing.runTests.func1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2477 +0x74
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.runTests()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2475 +0x734
+  testing.(*M).Run()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2337 +0xaf4
+  main.main()
+      _testmain.go:169 +0x100
+
+Goroutine 192 (running) created at:
+  github.com/real-rm/chatbox/internal/websocket.(*Handler).HandleWebSocket()
+      /Users/fx/work/chatbox/internal/websocket/handler.go:250 +0x5f0
+  github.com/real-rm/chatbox/internal/websocket.(*Handler).HandleWebSocket-fm()
+      <autogenerated>:1 +0x4c
+  net/http.HandlerFunc.ServeHTTP()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/net/http/server.go:2322 +0x48
+  net/http.serverHandler.ServeHTTP()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/net/http/server.go:3340 +0x270
+  net/http.(*conn).serve()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/net/http/server.go:2109 +0x9b0
+  net/http.(*Server).Serve.gowrap3()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/net/http/server.go:3493 +0x48
+==================
+==================
+WARNING: DATA RACE
+Read at 0x00c0003e0510 by goroutine 187:
+  github.com/real-rm/chatbox/internal/websocket.TestOversizedMessages_MultipleConnections()
+      /Users/fx/work/chatbox/internal/websocket/handler_integration_test.go:1677 +0x188c
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.(*T).Run.gowrap1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x3c
+
+Previous write at 0x00c0003e0510 by goroutine 192:
+  github.com/real-rm/chatbox/internal/websocket.(*Connection).readPump()
+      /Users/fx/work/chatbox/internal/websocket/handler.go:536 +0x260
+  github.com/real-rm/chatbox/internal/websocket.(*Handler).HandleWebSocket.gowrap1()
+      /Users/fx/work/chatbox/internal/websocket/handler.go:250 +0x3c
+
+Goroutine 187 (running) created at:
+  testing.(*T).Run()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x6e0
+  testing.runTests.func1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2477 +0x74
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.runTests()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2475 +0x734
+  testing.(*M).Run()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2337 +0xaf4
+  main.main()
+      _testmain.go:169 +0x100
+
+Goroutine 192 (running) created at:
+  github.com/real-rm/chatbox/internal/websocket.(*Handler).HandleWebSocket()
+      /Users/fx/work/chatbox/internal/websocket/handler.go:250 +0x5f0
+  github.com/real-rm/chatbox/internal/websocket.(*Handler).HandleWebSocket-fm()
+      <autogenerated>:1 +0x4c
+  net/http.HandlerFunc.ServeHTTP()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/net/http/server.go:2322 +0x48
+  net/http.serverHandler.ServeHTTP()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/net/http/server.go:3340 +0x270
+  net/http.(*conn).serve()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/net/http/server.go:2109 +0x9b0
+  net/http.(*Server).Serve.gowrap3()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/net/http/server.go:3493 +0x48
+==================
+==================
+WARNING: DATA RACE
+Read at 0x00c000038828 by goroutine 187:
+  github.com/real-rm/chatbox/internal/websocket.TestOversizedMessages_MultipleConnections()
+      /Users/fx/work/chatbox/internal/websocket/handler_integration_test.go:1676 +0x186c
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.(*T).Run.gowrap1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x3c
+
+Previous write at 0x00c000038828 by goroutine 192:
+  github.com/real-rm/chatbox/internal/websocket.(*mockRouter).RouteMessage()
+      /Users/fx/work/chatbox/internal/websocket/handler_integration_test.go:36 +0x84
+  github.com/real-rm/chatbox/internal/websocket.(*Connection).readPump()
+      /Users/fx/work/chatbox/internal/websocket/handler.go:630 +0x120c
+  github.com/real-rm/chatbox/internal/websocket.(*Handler).HandleWebSocket.gowrap1()
+      /Users/fx/work/chatbox/internal/websocket/handler.go:250 +0x3c
+
+Goroutine 187 (running) created at:
+  testing.(*T).Run()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x6e0
+  testing.runTests.func1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2477 +0x74
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.runTests()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2475 +0x734
+  testing.(*M).Run()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2337 +0xaf4
+  main.main()
+      _testmain.go:169 +0x100
+
+Goroutine 192 (running) created at:
+  github.com/real-rm/chatbox/internal/websocket.(*Handler).HandleWebSocket()
+      /Users/fx/work/chatbox/internal/websocket/handler.go:250 +0x5f0
+  github.com/real-rm/chatbox/internal/websocket.(*Handler).HandleWebSocket-fm()
+      <autogenerated>:1 +0x4c
+  net/http.HandlerFunc.ServeHTTP()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/net/http/server.go:2322 +0x48
+  net/http.serverHandler.ServeHTTP()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/net/http/server.go:3340 +0x270
+  net/http.(*conn).serve()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/net/http/server.go:2109 +0x9b0
+  net/http.(*Server).Serve.gowrap3()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/net/http/server.go:3493 +0x48
+==================
+--- FAIL: TestOversizedMessages_MultipleConnections (0.51s)
+    testing.go:1617: race detected during execution of test
+==================
+WARNING: DATA RACE
+Write at 0x00c00023d890 by goroutine 225:
+  runtime.mapassign_faststr()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/internal/runtime/maps/runtime_faststr_swiss.go:263 +0x4cc
+  github.com/real-rm/chatbox/internal/websocket.(*Handler).unregisterConnection()
+      /Users/fx/work/chatbox/internal/websocket/handler.go:315 +0x138
+  github.com/real-rm/chatbox/internal/websocket.(*Connection).readPump.func1()
+      /Users/fx/work/chatbox/internal/websocket/handler.go:490 +0x1fc
+  runtime.deferreturn()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/runtime/panic.go:589 +0x5c
+  github.com/real-rm/chatbox/internal/websocket.(*Handler).HandleWebSocket.gowrap1()
+      /Users/fx/work/chatbox/internal/websocket/handler.go:250 +0x3c
+
+Previous read at 0x00c00023d890 by goroutine 274:
+  runtime.mapIterStart()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/runtime/map_swiss.go:160 +0x9c
+  github.com/real-rm/chatbox/internal/websocket.(*Handler).notifyConnectionLimit()
+      /Users/fx/work/chatbox/internal/websocket/handler.go:365 +0x370
+  github.com/real-rm/chatbox/internal/websocket.(*Handler).HandleWebSocket()
+      /Users/fx/work/chatbox/internal/websocket/handler.go:217 +0x748
+  github.com/real-rm/chatbox/internal/websocket.TestHandler_ConnectionLimitGracefulHandling.func2()
+      /Users/fx/work/chatbox/internal/websocket/handler_multiconn_test.go:291 +0x44
+  net/http.HandlerFunc.ServeHTTP()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/net/http/server.go:2322 +0x48
+  net/http.serverHandler.ServeHTTP()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/net/http/server.go:3340 +0x270
+  net/http.(*conn).serve()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/net/http/server.go:2109 +0x9b0
+  net/http.(*Server).Serve.gowrap3()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/net/http/server.go:3493 +0x48
+
+Goroutine 225 (running) created at:
+  github.com/real-rm/chatbox/internal/websocket.(*Handler).HandleWebSocket()
+      /Users/fx/work/chatbox/internal/websocket/handler.go:250 +0x5f0
+  github.com/real-rm/chatbox/internal/websocket.TestHandler_ConnectionLimitGracefulHandling.func2()
+      /Users/fx/work/chatbox/internal/websocket/handler_multiconn_test.go:291 +0x44
+  net/http.HandlerFunc.ServeHTTP()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/net/http/server.go:2322 +0x48
+  net/http.serverHandler.ServeHTTP()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/net/http/server.go:3340 +0x270
+  net/http.(*conn).serve()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/net/http/server.go:2109 +0x9b0
+  net/http.(*Server).Serve.gowrap3()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/net/http/server.go:3493 +0x48
+
+Goroutine 274 (finished) created at:
+  net/http.(*Server).Serve()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/net/http/server.go:3493 +0x5dc
+  net/http/httptest.(*Server).goServe.func1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/net/http/httptest/server.go:311 +0x98
+==================
+--- FAIL: TestHandler_ConnectionLimitGracefulHandling (0.77s)
+    testing.go:1617: race detected during execution of test
+==================
+WARNING: DATA RACE
+Write at 0x00c0003fcf90 by goroutine 342:
+  runtime.mapassign_faststr()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/internal/runtime/maps/runtime_faststr_swiss.go:263 +0x4cc
+  github.com/real-rm/chatbox/internal/websocket.(*Handler).unregisterConnection()
+      /Users/fx/work/chatbox/internal/websocket/handler.go:315 +0x138
+  github.com/real-rm/chatbox/internal/websocket.(*Connection).readPump.func1()
+      /Users/fx/work/chatbox/internal/websocket/handler.go:490 +0x1fc
+  runtime.deferreturn()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/runtime/panic.go:589 +0x5c
+  github.com/real-rm/chatbox/internal/websocket.(*Handler).HandleWebSocket.gowrap1()
+      /Users/fx/work/chatbox/internal/websocket/handler.go:250 +0x3c
+
+Previous read at 0x00c0003fcf90 by goroutine 282:
+  github.com/real-rm/chatbox/internal/websocket.TestHandler_ConnectionLimitPerUser()
+      /Users/fx/work/chatbox/internal/websocket/handler_multiconn_test.go:423 +0x66c
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.(*T).Run.gowrap1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x3c
+
+Goroutine 342 (running) created at:
+  github.com/real-rm/chatbox/internal/websocket.(*Handler).HandleWebSocket()
+      /Users/fx/work/chatbox/internal/websocket/handler.go:250 +0x5f0
+  github.com/real-rm/chatbox/internal/websocket.TestHandler_ConnectionLimitPerUser.func2()
+      /Users/fx/work/chatbox/internal/websocket/handler_multiconn_test.go:381 +0x44
+  net/http.HandlerFunc.ServeHTTP()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/net/http/server.go:2322 +0x48
+  net/http.serverHandler.ServeHTTP()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/net/http/server.go:3340 +0x270
+  net/http.(*conn).serve()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/net/http/server.go:2109 +0x9b0
+  net/http.(*Server).Serve.gowrap3()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/net/http/server.go:3493 +0x48
+
+Goroutine 282 (finished) created at:
+  testing.(*T).Run()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x6e0
+  testing.runTests.func1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2477 +0x74
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.runTests()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2475 +0x734
+  testing.(*M).Run()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2337 +0xaf4
+  main.main()
+      _testmain.go:169 +0x100
+==================
+==================
+WARNING: DATA RACE
+Write at 0x00c00047f200 by goroutine 485:
+  runtime.mapassign_faststr()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/internal/runtime/maps/runtime_faststr_swiss.go:263 +0x4cc
+  github.com/real-rm/chatbox/internal/websocket.(*Handler).unregisterConnection()
+      /Users/fx/work/chatbox/internal/websocket/handler.go:315 +0x138
+  github.com/real-rm/chatbox/internal/websocket.(*Connection).readPump.func1()
+      /Users/fx/work/chatbox/internal/websocket/handler.go:490 +0x1fc
+  runtime.deferreturn()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/runtime/panic.go:589 +0x5c
+  github.com/real-rm/chatbox/internal/websocket.(*Handler).HandleWebSocket.gowrap1()
+      /Users/fx/work/chatbox/internal/websocket/handler.go:250 +0x3c
+
+Previous read at 0x00c00047f200 by goroutine 475:
+  github.com/real-rm/chatbox/internal/websocket.TestMultiDevice_ReconnectionScenario()
+      /Users/fx/work/chatbox/internal/websocket/handler_multidevice_test.go:364 +0x364
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.(*T).Run.gowrap1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x3c
+
+Goroutine 485 (running) created at:
+  github.com/real-rm/chatbox/internal/websocket.(*Handler).HandleWebSocket()
+      /Users/fx/work/chatbox/internal/websocket/handler.go:250 +0x5f0
+  github.com/real-rm/chatbox/internal/websocket.TestMultiDevice_ReconnectionScenario.func1()
+      /Users/fx/work/chatbox/internal/websocket/handler_multidevice_test.go:342 +0x44
+  net/http.HandlerFunc.ServeHTTP()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/net/http/server.go:2322 +0x48
+  net/http.serverHandler.ServeHTTP()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/net/http/server.go:3340 +0x270
+  net/http.(*conn).serve()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/net/http/server.go:2109 +0x9b0
+  net/http.(*Server).Serve.gowrap3()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/net/http/server.go:3493 +0x48
+
+Goroutine 475 (running) created at:
+  testing.(*T).Run()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1997 +0x6e0
+  testing.runTests.func1()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2477 +0x74
+  testing.tRunner()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:1934 +0x164
+  testing.runTests()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2475 +0x734
+  testing.(*M).Run()
+      /opt/homebrew/Cellar/go/1.25.6/libexec/src/testing/testing.go:2337 +0xaf4
+  main.main()
+      _testmain.go:169 +0x100
+==================
+--- FAIL: TestMultiDevice_ReconnectionScenario (0.31s)
+    testing.go:1617: race detected during execution of test
++ connection is associated with JWT user ID: OK, passed 20 tests.
++ valid token allows connection establishment: OK, passed 20 tests.
++ ping message receives pong response: OK, passed 20 tests.
++ closed connection cleans up all resources: OK, passed 20 tests.
++ connection IDs are always unique for rapid connections: OK, passed 50
+   tests.
++ connection IDs are non-empty and contain user ID: OK, passed 50 tests.
++ all connections have read limit set: OK, passed 100 tests.
++ handler enforces message size limits: OK, passed 100 tests.
++ handler applies configured message size limit: OK, passed 100 tests.
++ connections have user ID and connection ID for logging: OK, passed 100
+   tests.
++ concurrent checkOrigin and SetAllowedOrigins are thread-safe: OK, passed
+   100 tests.
+2026-02-16T23:20:18.379+07:00 level=ERROR module=websocket msg=WebSocket upgrade failed, error=websocket: request origin not allowed by Upgrader.CheckOrigin, component="websocket", file="handler.go:230"
+FAIL
+FAIL	github.com/real-rm/chatbox/internal/websocket	18.499s
+FAIL

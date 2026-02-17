@@ -18,6 +18,7 @@ import (
 	"github.com/real-rm/chatbox/internal/httperrors"
 	"github.com/real-rm/chatbox/internal/llm"
 	"github.com/real-rm/chatbox/internal/notification"
+	"github.com/real-rm/chatbox/internal/ratelimit"
 	"github.com/real-rm/chatbox/internal/router"
 	"github.com/real-rm/chatbox/internal/session"
 	"github.com/real-rm/chatbox/internal/storage"
@@ -31,9 +32,12 @@ import (
 
 var (
 	// Global references for graceful shutdown
-	globalWSHandler *websocket.Handler
-	globalLogger    *golog.Logger
-	shutdownMu      sync.Mutex
+	globalWSHandler      *websocket.Handler
+	globalSessionMgr     *session.SessionManager
+	globalMessageRouter  *router.MessageRouter
+	globalAdminLimiter   *ratelimit.MessageLimiter
+	globalLogger         *golog.Logger
+	shutdownMu           sync.Mutex
 )
 
 // Register registers the chatbox service with the gomain router.
@@ -52,24 +56,35 @@ func Register(r *gin.Engine, config *goconfig.ConfigAccessor, logger *golog.Logg
 	chatboxLogger := logger.WithGroup("chatbox")
 	chatboxLogger.Info("Initializing chatbox service")
 
-	// Load configuration
-	// Priority: Environment variable > Config file
-	// This allows Kubernetes secrets to override config.toml values
-	var err error
+	// Validate critical configuration at startup
+	// This ensures misconfigurations are caught before serving traffic
 	jwtSecret := os.Getenv("JWT_SECRET")
 	if jwtSecret == "" {
 		// Fall back to config file
+		var err error
 		jwtSecret, err = config.ConfigString("chatbox.jwt_secret")
 		if err != nil {
 			return fmt.Errorf("failed to get JWT secret: %w", err)
 		}
 	}
+	
+	// Validate JWT secret strength
+	if err := validateJWTSecret(jwtSecret); err != nil {
+		chatboxLogger.Error("Configuration validation failed", "error", err)
+		return fmt.Errorf("configuration validation failed: %w", err)
+	}
 
-	reconnectTimeoutStr, err := config.ConfigStringWithDefault("chatbox.reconnect_timeout", "15m")
+	// Load configuration
+	// Priority: Environment variable > Config file
+	// This allows Kubernetes secrets to override config.toml values
+	var err error
+	var reconnectTimeoutStr string
+	reconnectTimeoutStr, err = config.ConfigStringWithDefault("chatbox.reconnect_timeout", "15m")
 	if err != nil {
 		return fmt.Errorf("failed to get reconnect timeout: %w", err)
 	}
-	reconnectTimeout, err := time.ParseDuration(reconnectTimeoutStr)
+	var reconnectTimeout time.Duration
+	reconnectTimeout, err = time.ParseDuration(reconnectTimeoutStr)
 	if err != nil {
 		return fmt.Errorf("invalid reconnect timeout format: %w", err)
 	}
@@ -155,6 +170,9 @@ func Register(r *gin.Engine, config *goconfig.ConfigAccessor, logger *golog.Logg
 
 	// Create session manager
 	sessionManager := session.NewSessionManager(reconnectTimeout, chatboxLogger)
+	
+	// Start cleanup goroutine for expired sessions
+	sessionManager.StartCleanup()
 
 	// Create LLM service
 	llmService, err := llm.NewLLMService(config, chatboxLogger)
@@ -168,8 +186,39 @@ func Register(r *gin.Engine, config *goconfig.ConfigAccessor, logger *golog.Logg
 		return fmt.Errorf("failed to create notification service: %w", err)
 	}
 
+	// Get LLM stream timeout from config
+	llmStreamTimeoutStr, err := config.ConfigStringWithDefault("chatbox.llm_stream_timeout", "120s")
+	if err != nil {
+		return fmt.Errorf("failed to get LLM stream timeout: %w", err)
+	}
+	llmStreamTimeout, err := time.ParseDuration(llmStreamTimeoutStr)
+	if err != nil {
+		return fmt.Errorf("invalid LLM stream timeout format: %w", err)
+	}
+
 	// Create message router
-	messageRouter := router.NewMessageRouter(sessionManager, llmService, uploadService, notificationService, storageService, chatboxLogger)
+	messageRouter := router.NewMessageRouter(sessionManager, llmService, uploadService, notificationService, storageService, llmStreamTimeout, chatboxLogger)
+
+	// Create admin rate limiter
+	adminRateLimit, err := config.ConfigIntWithDefault("chatbox.admin_rate_limit", 20)
+	if err != nil {
+		return fmt.Errorf("failed to get admin rate limit: %w", err)
+	}
+	adminRateWindowStr, err := config.ConfigStringWithDefault("chatbox.admin_rate_window", "1m")
+	if err != nil {
+		return fmt.Errorf("failed to get admin rate window: %w", err)
+	}
+	adminRateWindow, err := time.ParseDuration(adminRateWindowStr)
+	if err != nil {
+		return fmt.Errorf("invalid admin rate window format: %w", err)
+	}
+	
+	adminLimiter := ratelimit.NewMessageLimiter(adminRateWindow, adminRateLimit)
+	adminLimiter.StartCleanup()
+	
+	chatboxLogger.Info("Admin rate limiter configured",
+		"rate_limit", adminRateLimit,
+		"window", adminRateWindow)
 
 	// Create JWT validator
 	validator := auth.NewJWTValidator(jwtSecret)
@@ -192,6 +241,9 @@ func Register(r *gin.Engine, config *goconfig.ConfigAccessor, logger *golog.Logg
 	// Store global references for graceful shutdown
 	shutdownMu.Lock()
 	globalWSHandler = wsHandler
+	globalSessionMgr = sessionManager
+	globalMessageRouter = messageRouter
+	globalAdminLimiter = adminLimiter
 	globalLogger = chatboxLogger
 	shutdownMu.Unlock()
 
@@ -240,6 +292,7 @@ func Register(r *gin.Engine, config *goconfig.ConfigAccessor, logger *golog.Logg
 		// Admin HTTP endpoints
 		adminGroup := chatGroup.Group("/admin")
 		adminGroup.Use(authMiddleware(validator, chatboxLogger))
+		adminGroup.Use(adminRateLimitMiddleware(adminLimiter, chatboxLogger))
 		{
 			adminGroup.GET("/sessions", handleListSessions(storageService, sessionManager, chatboxLogger))
 			adminGroup.GET("/metrics", handleGetMetrics(storageService, chatboxLogger))
@@ -339,6 +392,52 @@ func authMiddleware(validator *auth.JWTValidator, logger *golog.Logger) gin.Hand
 
 		// Store claims in context
 		c.Set("claims", claims)
+		c.Next()
+	}
+}
+
+// adminRateLimitMiddleware creates a Gin middleware for admin endpoint rate limiting
+func adminRateLimitMiddleware(limiter *ratelimit.MessageLimiter, logger *golog.Logger) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// Get claims from context (set by authMiddleware)
+		claimsInterface, exists := c.Get("claims")
+		if !exists {
+			// If no claims, let authMiddleware handle it
+			c.Next()
+			return
+		}
+
+		claims, ok := claimsInterface.(*auth.Claims)
+		if !ok {
+			logger.Error("Invalid claims type in context", "component", "admin_rate_limit")
+			httperrors.RespondInternalError(c)
+			c.Abort()
+			return
+		}
+
+		// Check rate limit
+		if !limiter.Allow(claims.UserID) {
+			retryAfter := limiter.GetRetryAfter(claims.UserID)
+			
+			logger.Warn("Admin rate limit exceeded",
+				"user_id", claims.UserID,
+				"endpoint", c.Request.URL.Path,
+				"retry_after_ms", retryAfter,
+				"component", "admin_rate_limit")
+			
+			// Set Retry-After header (in seconds)
+			c.Header("Retry-After", fmt.Sprintf("%d", retryAfter/1000))
+			
+			// Return 429 Too Many Requests
+			c.JSON(429, gin.H{
+				"error":          "rate_limit_exceeded",
+				"message":        "Too many admin requests. Please try again later.",
+				"retry_after_ms": retryAfter,
+			})
+			c.Abort()
+			return
+		}
+
 		c.Next()
 	}
 }
@@ -733,6 +832,7 @@ func handleReadyCheck(mongo *gomongo.Mongo, logger *golog.Logger) gin.HandlerFun
 // Shutdown gracefully shuts down the chatbox service.
 // It closes all active WebSocket connections and flushes logs.
 // This function should be called when the application receives a SIGTERM or SIGINT signal.
+// It respects the context deadline and will force shutdown if the deadline is exceeded.
 func Shutdown(ctx context.Context) error {
 	shutdownMu.Lock()
 	defer shutdownMu.Unlock()
@@ -741,9 +841,29 @@ func Shutdown(ctx context.Context) error {
 		globalLogger.Info("Starting graceful shutdown of chatbox service")
 	}
 
-	// Close all WebSocket connections
+	// Stop session cleanup goroutine
+	if globalSessionMgr != nil {
+		globalSessionMgr.StopCleanup()
+	}
+
+	// Stop message router cleanup goroutines
+	if globalMessageRouter != nil {
+		globalMessageRouter.Shutdown()
+	}
+
+	// Stop admin rate limiter cleanup
+	if globalAdminLimiter != nil {
+		globalAdminLimiter.StopCleanup()
+	}
+
+	// Close all WebSocket connections with context deadline
 	if globalWSHandler != nil {
-		globalWSHandler.Shutdown()
+		if err := globalWSHandler.ShutdownWithContext(ctx); err != nil {
+			if globalLogger != nil {
+				globalLogger.Warn("WebSocket handler shutdown error", "error", err)
+			}
+			return err
+		}
 	}
 
 	// Flush logs
@@ -752,5 +872,40 @@ func Shutdown(ctx context.Context) error {
 		// Note: Logger.Close() should be called by gomain, not here
 	}
 
+	return nil
+}
+
+// validateJWTSecret validates the JWT secret strength
+// Returns error if secret is empty, too short, or contains weak patterns
+func validateJWTSecret(secret string) error {
+	// Common weak secrets to reject
+	weakSecrets := []string{
+		"secret", "test", "test123", "password", "admin",
+		"changeme", "default", "example", "demo", "12345",
+	}
+	
+	if secret == "" {
+		return fmt.Errorf("JWT secret is required")
+	}
+	
+	// Check minimum length (32 characters for strong security)
+	if len(secret) < 32 {
+		return fmt.Errorf(
+			"JWT secret must be at least 32 characters (got %d). "+
+				"Generate a strong secret with: openssl rand -base64 32",
+			len(secret))
+	}
+	
+	// Check for common weak secrets
+	lowerSecret := strings.ToLower(secret)
+	for _, weak := range weakSecrets {
+		if strings.Contains(lowerSecret, weak) {
+			return fmt.Errorf(
+				"JWT secret appears to be weak (contains '%s'). "+
+					"Use a cryptographically random secret generated with: openssl rand -base64 32",
+				weak)
+		}
+	}
+	
 	return nil
 }

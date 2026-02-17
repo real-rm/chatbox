@@ -368,7 +368,7 @@ The service can be configured using environment variables or config.toml file:
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `SERVER_PORT` | HTTP server port | `8080` |
-| `JWT_SECRET` | JWT signing secret | **Required** |
+| `JWT_SECRET` | JWT signing secret (minimum 32 characters) | **Required** |
 | `MONGO_URI` | MongoDB connection URI | **Required** |
 | `S3_BUCKET` | S3 bucket name | **Required** |
 | `RECONNECT_TIMEOUT` | Session reconnect timeout | `15m` |
@@ -376,6 +376,41 @@ The service can be configured using environment variables or config.toml file:
 | `RATE_LIMIT` | Requests per second limit | `100` |
 | `MAX_MESSAGE_SIZE` | Maximum WebSocket message size in bytes | `1048576` (1MB) |
 | `ENCRYPTION_KEY` | 32-byte AES-256 encryption key (base64 encoded) | Optional |
+
+#### Production Readiness Configuration
+
+The following environment variables control production readiness features:
+
+| Variable | Description | Default | Recommendation |
+|----------|-------------|---------|----------------|
+| `LLM_STREAM_TIMEOUT` | Timeout for LLM streaming requests | `120s` | 60s-300s depending on model |
+| `SESSION_CLEANUP_INTERVAL` | Interval for cleaning up expired sessions | `5m` | 5m-15m for production |
+| `SESSION_TTL` | Time-to-live for inactive sessions | `15m` | Match RECONNECT_TIMEOUT |
+| `RATE_LIMIT_CLEANUP_INTERVAL` | Interval for rate limiter cleanup | `5m` | 5m-10m for production |
+| `ADMIN_RATE_LIMIT` | Rate limit for admin endpoints (req/min) | `20` | 10-50 depending on usage |
+| `ADMIN_RATE_WINDOW` | Time window for admin rate limiting | `1m` | 1m recommended |
+| `MONGO_RETRY_ATTEMPTS` | Maximum retry attempts for MongoDB operations | `3` | 3-5 for production |
+| `MONGO_RETRY_DELAY` | Initial delay between MongoDB retries | `100ms` | 100ms-500ms |
+
+**Memory Management:**
+- `SESSION_CLEANUP_INTERVAL` and `SESSION_TTL` prevent session memory leaks
+- `RATE_LIMIT_CLEANUP_INTERVAL` prevents rate limiter memory growth
+- Response times are automatically bounded to last 100 entries per session
+
+**Reliability:**
+- `LLM_STREAM_TIMEOUT` prevents hung LLM connections
+- `MONGO_RETRY_ATTEMPTS` and `MONGO_RETRY_DELAY` handle transient MongoDB errors with exponential backoff
+
+**Security:**
+- `JWT_SECRET` must be at least 32 characters and not contain weak patterns
+- `ADMIN_RATE_LIMIT` protects admin endpoints from brute-force and DoS attacks
+- Admin and user rate limits are tracked independently
+
+**Rollback Strategy:**
+If any production readiness feature causes issues:
+- Increase timeout/interval values to reduce frequency
+- Set `ADMIN_RATE_LIMIT` to a very high value (e.g., 10000) to effectively disable
+- Set `MONGO_RETRY_ATTEMPTS=1` to disable retries
 
 See `deployments/kubernetes/configmap.yaml` for full list.
 

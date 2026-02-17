@@ -397,3 +397,140 @@ func TestProperty_RateLimitingConcurrency(t *testing.T) {
 
 	properties.TestingRun(t, gopter.ConsoleReporter(false))
 }
+
+// Feature: production-readiness-fixes, Property 9: Cleanup removes old events
+// **Validates: Requirements 11.3**
+//
+// For any rate limiter state, running Cleanup() should remove all events older than the time window.
+func TestProperty_CleanupRemovesOldEvents(t *testing.T) {
+	parameters := gopter.DefaultTestParameters()
+	parameters.MinSuccessfulTests = 100
+	properties := gopter.NewProperties(parameters)
+
+	properties.Property("cleanup removes all events older than window", prop.ForAll(
+		func(numUsers int, eventsPerUser int) bool {
+			if numUsers < 1 || numUsers > 20 || eventsPerUser < 1 || eventsPerUser > 50 {
+				return true // Skip invalid ranges
+			}
+
+			// Create message limiter with short window
+			window := 100 * time.Millisecond
+			ml := NewMessageLimiter(window, 100)
+
+			// Add events for multiple users
+			for i := 0; i < numUsers; i++ {
+				userID := string(rune('A' + i))
+				for j := 0; j < eventsPerUser; j++ {
+					ml.Allow(userID)
+				}
+			}
+
+			// Verify events exist
+			beforeCount := ml.getEventCount()
+			if beforeCount != numUsers*eventsPerUser {
+				return false
+			}
+
+			// Wait for events to expire
+			time.Sleep(window + 50*time.Millisecond)
+
+			// Run cleanup
+			ml.Cleanup()
+
+			// Verify all events were removed
+			afterCount := ml.getEventCount()
+			return afterCount == 0
+		},
+		gen.IntRange(1, 20),
+		gen.IntRange(1, 50),
+	))
+
+	properties.TestingRun(t, gopter.ConsoleReporter(false))
+}
+
+// Feature: production-readiness-fixes, Property 10: Cleanup runs periodically
+// **Validates: Requirements 11.1, 11.2**
+//
+// For any rate limiter with cleanup enabled, Cleanup() should be called at the configured interval.
+func TestProperty_CleanupRunsPeriodically(t *testing.T) {
+	parameters := gopter.DefaultTestParameters()
+	parameters.MinSuccessfulTests = 50
+	properties := gopter.NewProperties(parameters)
+
+	properties.Property("cleanup runs at configured interval", prop.ForAll(
+		func(intervalMs int) bool {
+			if intervalMs < 50 || intervalMs > 500 {
+				return true // Skip invalid ranges
+			}
+
+			interval := time.Duration(intervalMs) * time.Millisecond
+			window := 50 * time.Millisecond
+			
+			// Create message limiter with custom cleanup interval
+			ml := NewMessageLimiter(window, 100)
+			ml.cleanupInterval = interval
+			
+			// Add some events that will expire
+			ml.Allow("user1")
+			ml.Allow("user2")
+			
+			// Start cleanup
+			ml.StartCleanup()
+			defer ml.StopCleanup()
+			
+			// Wait for events to expire
+			time.Sleep(window + 20*time.Millisecond)
+			
+			// Wait for at least one cleanup cycle
+			time.Sleep(interval + 50*time.Millisecond)
+			
+			// Verify events were cleaned up
+			count := ml.getEventCount()
+			return count == 0
+		},
+		gen.IntRange(50, 500),
+	))
+
+	properties.TestingRun(t, gopter.ConsoleReporter(false))
+}
+
+// Feature: production-readiness-fixes, Property 11: Cleanup goroutine terminates
+// **Validates: Requirements 11.5**
+//
+// For any rate limiter, calling StopCleanup() should cause the cleanup goroutine to terminate within a reasonable time.
+func TestProperty_CleanupGoroutineTerminates(t *testing.T) {
+	parameters := gopter.DefaultTestParameters()
+	parameters.MinSuccessfulTests = 100
+	properties := gopter.NewProperties(parameters)
+
+	properties.Property("cleanup goroutine terminates on stop", prop.ForAll(
+		func(intervalMs int) bool {
+			if intervalMs < 10 || intervalMs > 200 {
+				return true // Skip invalid ranges
+			}
+
+			interval := time.Duration(intervalMs) * time.Millisecond
+			
+			// Create message limiter
+			ml := NewMessageLimiter(1*time.Second, 100)
+			ml.cleanupInterval = interval
+			
+			// Start cleanup
+			ml.StartCleanup()
+			
+			// Let it run for a bit
+			time.Sleep(interval / 2)
+			
+			// Stop cleanup and measure time
+			start := time.Now()
+			ml.StopCleanup()
+			elapsed := time.Since(start)
+			
+			// Should terminate within 2x the interval (reasonable timeout)
+			return elapsed < 2*interval+100*time.Millisecond
+		},
+		gen.IntRange(10, 200),
+	))
+
+	properties.TestingRun(t, gopter.ConsoleReporter(false))
+}

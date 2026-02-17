@@ -63,6 +63,11 @@ type MessageLimiter struct {
 	window time.Duration
 	limit  int
 	mu     sync.RWMutex
+	
+	// Cleanup goroutine management
+	cleanupInterval time.Duration
+	stopCleanup     chan struct{}
+	cleanupWg       sync.WaitGroup
 }
 
 // NewMessageLimiter creates a new message rate limiter
@@ -70,9 +75,11 @@ type MessageLimiter struct {
 // limit: maximum number of messages allowed in the window
 func NewMessageLimiter(window time.Duration, limit int) *MessageLimiter {
 	return &MessageLimiter{
-		events: make(map[string][]time.Time),
-		window: window,
-		limit:  limit,
+		events:          make(map[string][]time.Time),
+		window:          window,
+		limit:           limit,
+		cleanupInterval: 5 * time.Minute, // Default cleanup every 5 minutes
+		stopCleanup:     make(chan struct{}),
 	}
 }
 
@@ -175,5 +182,51 @@ func (ml *MessageLimiter) Cleanup() {
 		} else {
 			ml.events[userID] = recentEvents
 		}
+	}
+}
+
+// StartCleanup starts a background goroutine that periodically cleans up expired events
+func (ml *MessageLimiter) StartCleanup() {
+	ml.cleanupWg.Add(1)
+	go func() {
+		defer ml.cleanupWg.Done()
+		ticker := time.NewTicker(ml.cleanupInterval)
+		defer ticker.Stop()
+		
+		for {
+			select {
+			case <-ticker.C:
+				before := ml.getEventCount()
+				ml.Cleanup()
+				after := ml.getEventCount()
+				removed := before - after
+				if removed > 0 {
+					// Log cleanup stats (would use logger if available)
+					// For now, cleanup happens silently
+				}
+			case <-ml.stopCleanup:
+				return
+			}
+		}
+	}()
+}
+
+// getEventCount returns the total number of events across all users
+func (ml *MessageLimiter) getEventCount() int {
+	ml.mu.RLock()
+	defer ml.mu.RUnlock()
+	
+	count := 0
+	for _, events := range ml.events {
+		count += len(events)
+	}
+	return count
+}
+
+// StopCleanup stops the cleanup goroutine and waits for it to finish
+func (ml *MessageLimiter) StopCleanup() {
+	if ml.stopCleanup != nil {
+		close(ml.stopCleanup)
+		ml.cleanupWg.Wait()
 	}
 }

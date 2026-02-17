@@ -30,6 +30,22 @@ var (
 	ErrSessionNotFound = errors.New("session not found in database")
 )
 
+// retryConfig holds configuration for MongoDB retry logic
+type retryConfig struct {
+	maxAttempts  int
+	initialDelay time.Duration
+	maxDelay     time.Duration
+	multiplier   float64
+}
+
+// defaultRetryConfig provides default retry configuration
+var defaultRetryConfig = retryConfig{
+	maxAttempts:  3,
+	initialDelay: 100 * time.Millisecond,
+	maxDelay:     2 * time.Second,
+	multiplier:   2.0,
+}
+
 // StorageService manages conversation persistence in MongoDB using gomongo
 type StorageService struct {
 	mongo         *gomongo.Mongo
@@ -129,6 +145,61 @@ func NewStorageService(mongo *gomongo.Mongo, dbName, collName string, logger *go
 		encryptionKey: encryptionKey,
 	}
 }
+
+// isRetryableError checks if an error is retryable (transient)
+// Returns true for network errors and transient MongoDB errors
+func isRetryableError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	errStr := err.Error()
+
+	// Network errors
+	if containsAny(errStr, []string{
+		"connection refused",
+		"connection reset",
+		"timeout",
+		"temporary failure",
+		"i/o timeout",
+		"EOF",
+	}) {
+		return true
+	}
+
+	// MongoDB specific transient errors
+	if containsAny(errStr, []string{
+		"server selection timeout",
+		"no reachable servers",
+		"connection pool",
+		"socket",
+	}) {
+		return true
+	}
+
+	return false
+}
+
+// containsAny checks if a string contains any of the given substrings
+func containsAny(s string, substrings []string) bool {
+	for _, substr := range substrings {
+		if len(s) >= len(substr) {
+			for i := 0; i <= len(s)-len(substr); i++ {
+				match := true
+				for j := 0; j < len(substr); j++ {
+					if s[i+j] != substr[j] {
+						match = false
+						break
+					}
+				}
+				if match {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
 // EnsureIndexes creates the necessary indexes for the sessions collection
 // This should be called during application initialization to ensure optimal query performance
 func (s *StorageService) EnsureIndexes(ctx context.Context) error {
@@ -189,14 +260,18 @@ func (s *StorageService) CreateSession(sess *session.Session) error {
 		return ErrInvalidSessionID
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	// Convert session to document
 	doc := s.sessionToDocument(sess)
 
-	// Insert document using gomongo (automatically adds _ts and _mt timestamps)
-	_, err := s.collection.InsertOne(ctx, doc)
+	// Insert document with retry logic for transient errors
+	err := s.retryOperation(ctx, "CreateSession", func() error {
+		_, err := s.collection.InsertOne(ctx, doc)
+		return err
+	})
+	
 	if err != nil {
 		return fmt.Errorf("failed to create session: %w", err)
 	}
@@ -218,17 +293,23 @@ func (s *StorageService) UpdateSession(sess *session.Session) error {
 		return ErrInvalidSessionID
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	// Convert session to document
 	doc := s.sessionToDocument(sess)
 
-	// Update document using gomongo (automatically updates _mt timestamp)
+	// Update document with retry logic for transient errors
 	filter := bson.M{"_id": sess.ID}
 	update := bson.M{"$set": doc}
 
-	result, err := s.collection.UpdateOne(ctx, filter, update)
+	var result *mongo.UpdateResult
+	err := s.retryOperation(ctx, "UpdateSession", func() error {
+		var err error
+		result, err = s.collection.UpdateOne(ctx, filter, update)
+		return err
+	})
+	
 	if err != nil {
 		return fmt.Errorf("failed to update session: %w", err)
 	}
@@ -246,15 +327,18 @@ func (s *StorageService) GetSession(sessionID string) (*session.Session, error) 
 		return nil, ErrInvalidSessionID
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// Find document using gomongo
+	// Find document with retry logic for transient errors
 	filter := bson.M{"_id": sessionID}
 	var doc SessionDocument
 
-	result := s.collection.FindOne(ctx, filter)
-	err := result.Decode(&doc)
+	err := s.retryOperation(ctx, "GetSession", func() error {
+		result := s.collection.FindOne(ctx, filter)
+		return result.Decode(&doc)
+	})
+	
 	if err != nil {
 		if err == mongo.ErrNoDocuments {
 			return nil, ErrSessionNotFound
@@ -269,9 +353,11 @@ func (s *StorageService) GetSession(sessionID string) (*session.Session, error) 
 }
 
 // sessionToDocument converts a Session to a SessionDocument
+// This method acquires a read lock on the session to ensure thread-safe access
 func (s *StorageService) sessionToDocument(sess *session.Session) *SessionDocument {
-	// Note: Session fields are accessed directly without locking
-	// The caller should ensure thread-safety if needed
+	// Acquire read lock to prevent data races during serialization
+	sess.RLock()
+	defer sess.RUnlock()
 
 	// Convert messages
 	messages := make([]MessageDocument, len(sess.Messages))
@@ -1001,4 +1087,51 @@ func (s *StorageService) GetTokenUsage(startTime, endTime time.Time) (int, error
 	}
 
 	return result.TotalTokens, nil
+}
+
+// retryOperation executes an operation with retry logic for transient errors
+// Uses exponential backoff with configurable parameters
+func (s *StorageService) retryOperation(ctx context.Context, operation string, fn func() error) error {
+	var lastErr error
+	delay := defaultRetryConfig.initialDelay
+
+	for attempt := 1; attempt <= defaultRetryConfig.maxAttempts; attempt++ {
+		err := fn()
+		if err == nil {
+			return nil
+		}
+
+		// Check if error is retryable
+		if !isRetryableError(err) {
+			return err
+		}
+
+		lastErr = err
+
+		if attempt < defaultRetryConfig.maxAttempts {
+			s.logger.Warn("MongoDB operation failed, retrying",
+				"operation", operation,
+				"attempt", attempt,
+				"max_attempts", defaultRetryConfig.maxAttempts,
+				"delay", delay,
+				"error", err)
+
+			// Sleep with context awareness
+			select {
+			case <-time.After(delay):
+				// Continue to next attempt
+			case <-ctx.Done():
+				return fmt.Errorf("operation cancelled during retry: %w", ctx.Err())
+			}
+
+			// Exponential backoff
+			delay = time.Duration(float64(delay) * defaultRetryConfig.multiplier)
+			if delay > defaultRetryConfig.maxDelay {
+				delay = defaultRetryConfig.maxDelay
+			}
+		}
+	}
+
+	return fmt.Errorf("operation failed after %d attempts: %w",
+		defaultRetryConfig.maxAttempts, lastErr)
 }

@@ -32,7 +32,7 @@ func TestProperty_AutomaticSessionCreationForNewUsers(t *testing.T) {
 			logger := createTestLogger()
 			sm := session.NewSessionManager(15*time.Minute, logger)
 			mockStorage := &mockStorageService{}
-			router := NewMessageRouter(sm, nil, nil, nil, mockStorage, logger)
+			router := NewMessageRouter(sm, nil, nil, nil, mockStorage, 120*time.Second, logger)
 
 			conn := mockConnection(userID)
 			sessionID := fmt.Sprintf("new-session-%s", userID)
@@ -98,7 +98,7 @@ func TestProperty_ExistingSessionReuse(t *testing.T) {
 			logger := createTestLogger()
 			sm := session.NewSessionManager(15*time.Minute, logger)
 			mockStorage := &mockStorageService{}
-			router := NewMessageRouter(sm, nil, nil, nil, mockStorage, logger)
+			router := NewMessageRouter(sm, nil, nil, nil, mockStorage, 120*time.Second, logger)
 
 			// Create an existing session
 			existingSess, err := sm.CreateSession(userID)
@@ -158,7 +158,7 @@ func TestProperty_SessionCreationWithProvidedID(t *testing.T) {
 			logger := createTestLogger()
 			sm := session.NewSessionManager(15*time.Minute, logger)
 			mockStorage := &mockStorageService{}
-			router := NewMessageRouter(sm, nil, nil, nil, mockStorage, logger)
+			router := NewMessageRouter(sm, nil, nil, nil, mockStorage, 120*time.Second, logger)
 
 			conn := mockConnection(userID)
 
@@ -218,7 +218,7 @@ func TestProperty_DualStorageConsistency(t *testing.T) {
 			logger := createTestLogger()
 			sm := session.NewSessionManager(15*time.Minute, logger)
 			mockStorage := &mockStorageService{}
-			router := NewMessageRouter(sm, nil, nil, nil, mockStorage, logger)
+			router := NewMessageRouter(sm, nil, nil, nil, mockStorage, 120*time.Second, logger)
 
 			conn := mockConnection(userID)
 			sessionID := fmt.Sprintf("session-%s", userID)
@@ -294,7 +294,7 @@ func TestProperty_UserAssociationCorrectness(t *testing.T) {
 			logger := createTestLogger()
 			sm := session.NewSessionManager(15*time.Minute, logger)
 			mockStorage := &mockStorageService{}
-			router := NewMessageRouter(sm, nil, nil, nil, mockStorage, logger)
+			router := NewMessageRouter(sm, nil, nil, nil, mockStorage, 120*time.Second, logger)
 
 			conn := mockConnection(userID)
 			sessionID := fmt.Sprintf("session-%s", userID)
@@ -355,7 +355,7 @@ func TestProperty_SessionCreationErrorHandling(t *testing.T) {
 			mockStorage := &mockStorageService{
 				createSessionError: fmt.Errorf("database connection failed"),
 			}
-			router := NewMessageRouter(sm, nil, nil, nil, mockStorage, logger)
+			router := NewMessageRouter(sm, nil, nil, nil, mockStorage, 120*time.Second, logger)
 
 			conn := mockConnection(userID)
 			sessionID := fmt.Sprintf("session-%s", userID)
@@ -415,7 +415,7 @@ func TestProperty_ConcurrentSessionCreationSafety(t *testing.T) {
 			logger := createTestLogger()
 			sm := session.NewSessionManager(15*time.Minute, logger)
 			mockStorage := &mockStorageService{}
-			router := NewMessageRouter(sm, nil, nil, nil, mockStorage, logger)
+			router := NewMessageRouter(sm, nil, nil, nil, mockStorage, 120*time.Second, logger)
 
 			conn := mockConnection(userID)
 
@@ -488,7 +488,7 @@ func TestProperty_SessionRestorationFromDatabase(t *testing.T) {
 			logger := createTestLogger()
 			sm := session.NewSessionManager(15*time.Minute, logger)
 			mockStorage := &mockStorageService{}
-			router := NewMessageRouter(sm, nil, nil, nil, mockStorage, logger)
+			router := NewMessageRouter(sm, nil, nil, nil, mockStorage, 120*time.Second, logger)
 
 			conn := mockConnection(userID)
 			sessionID := fmt.Sprintf("session-%s", userID)

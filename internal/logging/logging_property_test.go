@@ -427,7 +427,7 @@ func TestRouterLogging(t *testing.T) {
 	mockLLM := &mockLLMService{}
 
 	// Create router
-	router := router.NewMessageRouter(sm, mockLLM, nil, nil, nil, logger)
+	router := router.NewMessageRouter(sm, mockLLM, nil, nil, nil, 120*time.Second, logger)
 
 	// Create a session
 	sess, err := sm.CreateSession("test-user-123")

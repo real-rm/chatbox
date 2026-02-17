@@ -4,6 +4,7 @@ package errors
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/real-rm/chatbox/internal/message"
 )
@@ -39,6 +40,7 @@ const (
 
 	// Service errors
 	ErrCodeLLMUnavailable ErrorCode = "LLM_UNAVAILABLE"
+	ErrCodeLLMTimeout     ErrorCode = "LLM_TIMEOUT"
 	ErrCodeDatabaseError  ErrorCode = "DATABASE_ERROR"
 	ErrCodeStorageError   ErrorCode = "STORAGE_ERROR"
 	ErrCodeServiceError   ErrorCode = "SERVICE_ERROR"
@@ -172,6 +174,12 @@ func ErrInvalidFileSize(size int64, maxSize int64) *ChatError {
 // ErrLLMUnavailable creates an LLM unavailable error
 func ErrLLMUnavailable(cause error) *ChatError {
 	return NewServiceError(ErrCodeLLMUnavailable, "AI service is temporarily unavailable", cause)
+}
+
+// ErrLLMTimeout creates an LLM timeout error
+func ErrLLMTimeout(timeout time.Duration) *ChatError {
+	return NewServiceError(ErrCodeLLMTimeout, 
+		fmt.Sprintf("AI service request timed out after %v", timeout), nil)
 }
 
 // ErrDatabaseError creates a database error

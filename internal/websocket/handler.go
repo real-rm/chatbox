@@ -3,6 +3,7 @@
 package websocket
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -89,6 +90,8 @@ func (c *Connection) GetUserID() string {
 
 // GetSessionID returns the session ID for this connection
 func (c *Connection) GetSessionID() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 	return c.SessionID
 }
 
@@ -151,6 +154,9 @@ func (h *Handler) SetAllowedOrigins(origins []string) {
 // checkOrigin validates the origin of a WebSocket upgrade request
 func (h *Handler) checkOrigin(r *http.Request) bool {
 	origin := r.Header.Get("Origin")
+	
+	h.mu.RLock()
+	defer h.mu.RUnlock()
 	
 	// If no origins configured, allow all (development mode)
 	if len(h.allowedOrigins) == 0 {
@@ -299,6 +305,13 @@ func (h *Handler) registerConnection(conn *Connection) {
 		"total_connections", len(h.connections[conn.UserID]))
 }
 
+// RegisterConnectionForTest registers a connection for testing purposes
+// This should only be used in tests
+func (h *Handler) RegisterConnectionForTest(conn *Connection) {
+	h.registerConnection(conn)
+}
+
+
 // unregisterConnection removes a connection from the active connections map
 func (h *Handler) unregisterConnection(conn *Connection) {
 	h.mu.Lock()
@@ -372,9 +385,18 @@ func (h *Handler) notifyConnectionLimit(userID string) {
 
 // Shutdown gracefully closes all active WebSocket connections
 // It sends close messages to all connected clients and waits for them to close
+// Deprecated: Use ShutdownWithContext instead
 func (h *Handler) Shutdown() {
+	ctx := context.Background()
+	h.ShutdownWithContext(ctx)
+}
+
+// ShutdownWithContext gracefully closes all active WebSocket connections
+// It respects the context deadline and will force shutdown if the deadline is exceeded
+func (h *Handler) ShutdownWithContext(ctx context.Context) error {
 	h.logger.Info("Shutting down WebSocket handler, closing all connections")
 
+	// Get all connections
 	h.mu.Lock()
 	connections := make([]*Connection, 0)
 	for _, userConns := range h.connections {
@@ -384,26 +406,51 @@ func (h *Handler) Shutdown() {
 	}
 	h.mu.Unlock()
 
-	// Close all connections
+	// Close connections in parallel with context deadline
+	var wg sync.WaitGroup
+	errChan := make(chan error, len(connections))
+
 	for _, conn := range connections {
-		h.logger.Info("Closing WebSocket connection",
-			"user_id", conn.UserID,
-			"connection_id", conn.ConnectionID)
+		wg.Add(1)
+		go func(c *Connection) {
+			defer wg.Done()
 
-		// Send close message
-		conn.mu.Lock()
-		if conn.conn != nil {
-			conn.conn.SetWriteDeadline(time.Now().Add(writeWait))
-			conn.conn.WriteMessage(websocket.CloseMessage,
-				websocket.FormatCloseMessage(websocket.CloseGoingAway, "Server shutting down"))
-		}
-		conn.mu.Unlock()
+			h.logger.Info("Closing WebSocket connection",
+				"user_id", c.UserID,
+				"connection_id", c.ConnectionID)
 
-		// Close the connection
-		conn.Close()
+			// Send close message
+			c.mu.Lock()
+			if c.conn != nil {
+				c.conn.SetWriteDeadline(time.Now().Add(writeWait))
+				c.conn.WriteMessage(websocket.CloseMessage,
+					websocket.FormatCloseMessage(websocket.CloseGoingAway, "Server shutting down"))
+			}
+			c.mu.Unlock()
+
+			// Close the connection
+			if err := c.Close(); err != nil {
+				errChan <- err
+			}
+		}(conn)
 	}
 
-	h.logger.Info("All WebSocket connections closed")
+	// Wait for all closures or context deadline
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		h.logger.Info("All WebSocket connections closed gracefully")
+		return nil
+	case <-ctx.Done():
+		h.logger.Warn("Shutdown deadline exceeded, forcing closure",
+			"remaining_connections", len(connections))
+		return ctx.Err()
+	}
 }
 
 // Close gracefully closes the WebSocket connection and cleans up resources

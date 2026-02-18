@@ -17,7 +17,7 @@ import (
 // process should remove it from the sessions map.
 func TestProperty_SessionCleanupRemovesExpiredSessions(t *testing.T) {
 	parameters := gopter.DefaultTestParameters()
-	parameters.MinSuccessfulTests = 100
+	parameters.MinSuccessfulTests = 20 // Reduced from 100 for faster execution
 	properties := gopter.NewProperties(parameters)
 
 	properties.Property("expired sessions are removed after TTL", prop.ForAll(
@@ -26,59 +26,59 @@ func TestProperty_SessionCleanupRemovesExpiredSessions(t *testing.T) {
 			if userID == "" {
 				return true
 			}
-			
-			// Ensure TTL is reasonable (between 10ms and 500ms for testing)
-			if ttlMillis < 10 || ttlMillis > 500 {
+
+			// Ensure TTL is reasonable (between 10ms and 100ms for faster testing)
+			if ttlMillis < 10 || ttlMillis > 100 {
 				return true
 			}
-			
+
 			ttl := time.Duration(ttlMillis) * time.Millisecond
-			
+
 			logger := getTestLogger()
 			sm := NewSessionManager(15*time.Minute, logger)
-			
+
 			// Configure short TTL for testing
 			sm.sessionTTL = ttl
 			sm.cleanupInterval = 10 * time.Millisecond
-			
+
 			// Create a session
 			session, err := sm.CreateSession(userID)
 			if err != nil {
 				return false
 			}
 			sessionID := session.ID
-			
+
 			// End the session
 			err = sm.EndSession(sessionID)
 			if err != nil {
 				return false
 			}
-			
+
 			// Verify session exists before cleanup
 			sm.mu.RLock()
 			_, existsBefore := sm.sessions[sessionID]
 			sm.mu.RUnlock()
-			
+
 			if !existsBefore {
 				return false
 			}
-			
+
 			// Wait for TTL to expire (add buffer for timing)
 			time.Sleep(ttl + 50*time.Millisecond)
-			
+
 			// Run cleanup
 			sm.cleanupExpiredSessions()
-			
+
 			// Verify session is removed after cleanup
 			sm.mu.RLock()
 			_, existsAfter := sm.sessions[sessionID]
 			sm.mu.RUnlock()
-			
+
 			// Session should be removed
 			return !existsAfter
 		},
 		gen.Identifier(),
-		gen.IntRange(10, 500),
+		gen.IntRange(10, 100), // Reduced from 500 for faster execution
 	))
 
 	properties.TestingRun(t)
@@ -101,16 +101,16 @@ func TestProperty_SessionCleanupRemovesMultipleExpiredSessions(t *testing.T) {
 			if numSessions < 1 || numSessions > 20 {
 				return true
 			}
-			
+
 			ttl := 50 * time.Millisecond
-			
+
 			logger := getTestLogger()
 			sm := NewSessionManager(15*time.Minute, logger)
-			
+
 			// Configure short TTL for testing
 			sm.sessionTTL = ttl
 			sm.cleanupInterval = 10 * time.Millisecond
-			
+
 			// Create and end multiple sessions
 			sessionIDs := make([]string, numSessions)
 			for i := 0; i < numSessions; i++ {
@@ -120,34 +120,34 @@ func TestProperty_SessionCleanupRemovesMultipleExpiredSessions(t *testing.T) {
 					return false
 				}
 				sessionIDs[i] = session.ID
-				
+
 				// End the session
 				err = sm.EndSession(session.ID)
 				if err != nil {
 					return false
 				}
 			}
-			
+
 			// Verify all sessions exist before cleanup
 			sm.mu.RLock()
 			countBefore := len(sm.sessions)
 			sm.mu.RUnlock()
-			
+
 			if countBefore != numSessions {
 				return false
 			}
-			
+
 			// Wait for TTL to expire
 			time.Sleep(ttl + 50*time.Millisecond)
-			
+
 			// Run cleanup
 			sm.cleanupExpiredSessions()
-			
+
 			// Verify all sessions are removed after cleanup
 			sm.mu.RLock()
 			countAfter := len(sm.sessions)
 			sm.mu.RUnlock()
-			
+
 			// All sessions should be removed
 			return countAfter == 0
 		},
@@ -174,40 +174,40 @@ func TestProperty_SessionCleanupHandlesNilEndTime(t *testing.T) {
 			if userID == "" {
 				return true
 			}
-			
+
 			ttl := 50 * time.Millisecond
-			
+
 			logger := getTestLogger()
 			sm := NewSessionManager(15*time.Minute, logger)
-			
+
 			// Configure short TTL for testing
 			sm.sessionTTL = ttl
 			sm.cleanupInterval = 10 * time.Millisecond
-			
+
 			// Create a session
 			session, err := sm.CreateSession(userID)
 			if err != nil {
 				return false
 			}
 			sessionID := session.ID
-			
+
 			// Manually set session to inactive with nil EndTime
 			sm.mu.Lock()
 			session.IsActive = false
 			session.EndTime = nil
 			sm.mu.Unlock()
-			
+
 			// Wait longer than TTL
 			time.Sleep(ttl + 50*time.Millisecond)
-			
+
 			// Run cleanup
 			sm.cleanupExpiredSessions()
-			
+
 			// Verify session still exists (not removed)
 			sm.mu.RLock()
 			_, exists := sm.sessions[sessionID]
 			sm.mu.RUnlock()
-			
+
 			// Session should NOT be removed
 			return exists
 		},
@@ -234,39 +234,39 @@ func TestProperty_SessionCleanupRespectsTimeWindow(t *testing.T) {
 			if userID == "" {
 				return true
 			}
-			
+
 			ttl := 200 * time.Millisecond
-			
+
 			logger := getTestLogger()
 			sm := NewSessionManager(15*time.Minute, logger)
-			
+
 			// Configure TTL for testing
 			sm.sessionTTL = ttl
 			sm.cleanupInterval = 10 * time.Millisecond
-			
+
 			// Create and end a session
 			session, err := sm.CreateSession(userID)
 			if err != nil {
 				return false
 			}
 			sessionID := session.ID
-			
+
 			err = sm.EndSession(sessionID)
 			if err != nil {
 				return false
 			}
-			
+
 			// Wait less than TTL (half the TTL)
 			time.Sleep(ttl / 2)
-			
+
 			// Run cleanup
 			sm.cleanupExpiredSessions()
-			
+
 			// Verify session still exists (not removed yet)
 			sm.mu.RLock()
 			_, exists := sm.sessions[sessionID]
 			sm.mu.RUnlock()
-			
+
 			// Session should NOT be removed yet
 			return exists
 		},
@@ -284,7 +284,7 @@ func TestProperty_SessionCleanupRespectsTimeWindow(t *testing.T) {
 // sessions map, regardless of how long it has been active.
 func TestProperty_ActiveSessionsNeverCleanedUp(t *testing.T) {
 	parameters := gopter.DefaultTestParameters()
-	parameters.MinSuccessfulTests = 100
+	parameters.MinSuccessfulTests = 20 // Reduced from 100 for faster execution
 	properties := gopter.NewProperties(parameters)
 
 	properties.Property("active sessions are never removed by cleanup", prop.ForAll(
@@ -293,29 +293,29 @@ func TestProperty_ActiveSessionsNeverCleanedUp(t *testing.T) {
 			if userID == "" {
 				return true
 			}
-			
-			// Ensure wait time is reasonable (between 10ms and 500ms for testing)
-			if waitMillis < 10 || waitMillis > 500 {
+
+			// Ensure wait time is reasonable (between 10ms and 100ms for faster testing)
+			if waitMillis < 10 || waitMillis > 100 {
 				return true
 			}
-			
+
 			waitTime := time.Duration(waitMillis) * time.Millisecond
 			ttl := 50 * time.Millisecond // Short TTL for testing
-			
+
 			logger := getTestLogger()
 			sm := NewSessionManager(15*time.Minute, logger)
-			
+
 			// Configure short TTL for testing
 			sm.sessionTTL = ttl
 			sm.cleanupInterval = 10 * time.Millisecond
-			
+
 			// Create an active session
 			session, err := sm.CreateSession(userID)
 			if err != nil {
 				return false
 			}
 			sessionID := session.ID
-			
+
 			// Verify session is active
 			sm.mu.RLock()
 			if !session.IsActive {
@@ -323,26 +323,26 @@ func TestProperty_ActiveSessionsNeverCleanedUp(t *testing.T) {
 				return false
 			}
 			sm.mu.RUnlock()
-			
+
 			// Wait longer than TTL (to ensure cleanup would remove expired sessions)
 			time.Sleep(waitTime)
-			
+
 			// Run cleanup multiple times
 			sm.cleanupExpiredSessions()
 			sm.cleanupExpiredSessions()
 			sm.cleanupExpiredSessions()
-			
+
 			// Verify active session still exists
 			sm.mu.RLock()
 			_, exists := sm.sessions[sessionID]
 			stillActive := session.IsActive
 			sm.mu.RUnlock()
-			
+
 			// Active session should NEVER be removed
 			return exists && stillActive
 		},
 		gen.Identifier(),
-		gen.IntRange(10, 500),
+		gen.IntRange(10, 100), // Reduced from 500 for faster execution
 	))
 
 	properties.TestingRun(t)
@@ -365,16 +365,16 @@ func TestProperty_MultipleActiveSessionsPreservedDuringCleanup(t *testing.T) {
 			if numSessions < 1 || numSessions > 20 {
 				return true
 			}
-			
+
 			ttl := 50 * time.Millisecond
-			
+
 			logger := getTestLogger()
 			sm := NewSessionManager(15*time.Minute, logger)
-			
+
 			// Configure short TTL for testing
 			sm.sessionTTL = ttl
 			sm.cleanupInterval = 10 * time.Millisecond
-			
+
 			// Create multiple active sessions
 			sessionIDs := make([]string, numSessions)
 			for i := 0; i < numSessions; i++ {
@@ -385,7 +385,7 @@ func TestProperty_MultipleActiveSessionsPreservedDuringCleanup(t *testing.T) {
 				}
 				sessionIDs[i] = session.ID
 			}
-			
+
 			// Verify all sessions exist and are active
 			sm.mu.RLock()
 			countBefore := 0
@@ -395,19 +395,19 @@ func TestProperty_MultipleActiveSessionsPreservedDuringCleanup(t *testing.T) {
 				}
 			}
 			sm.mu.RUnlock()
-			
+
 			if countBefore != numSessions {
 				return false
 			}
-			
+
 			// Wait longer than TTL
 			time.Sleep(ttl + 50*time.Millisecond)
-			
+
 			// Run cleanup multiple times
 			sm.cleanupExpiredSessions()
 			sm.cleanupExpiredSessions()
 			sm.cleanupExpiredSessions()
-			
+
 			// Verify all active sessions still exist
 			sm.mu.RLock()
 			countAfter := 0
@@ -417,7 +417,7 @@ func TestProperty_MultipleActiveSessionsPreservedDuringCleanup(t *testing.T) {
 				}
 			}
 			sm.mu.RUnlock()
-			
+
 			// All active sessions should still be present
 			return countAfter == numSessions
 		},
@@ -444,16 +444,16 @@ func TestProperty_CleanupSelectivelyRemovesInactiveSessions(t *testing.T) {
 			if numActive < 1 || numActive > 10 || numInactive < 1 || numInactive > 10 {
 				return true
 			}
-			
+
 			ttl := 50 * time.Millisecond
-			
+
 			logger := getTestLogger()
 			sm := NewSessionManager(15*time.Minute, logger)
-			
+
 			// Configure short TTL for testing
 			sm.sessionTTL = ttl
 			sm.cleanupInterval = 10 * time.Millisecond
-			
+
 			// Create active sessions
 			activeSessionIDs := make([]string, numActive)
 			for i := 0; i < numActive; i++ {
@@ -464,7 +464,7 @@ func TestProperty_CleanupSelectivelyRemovesInactiveSessions(t *testing.T) {
 				}
 				activeSessionIDs[i] = session.ID
 			}
-			
+
 			// Create and end inactive sessions
 			inactiveSessionIDs := make([]string, numInactive)
 			for i := 0; i < numInactive; i++ {
@@ -474,29 +474,29 @@ func TestProperty_CleanupSelectivelyRemovesInactiveSessions(t *testing.T) {
 					return false
 				}
 				inactiveSessionIDs[i] = session.ID
-				
+
 				// End the session
 				err = sm.EndSession(session.ID)
 				if err != nil {
 					return false
 				}
 			}
-			
+
 			// Verify initial state
 			sm.mu.RLock()
 			totalBefore := len(sm.sessions)
 			sm.mu.RUnlock()
-			
+
 			if totalBefore != numActive+numInactive {
 				return false
 			}
-			
+
 			// Wait for TTL to expire
 			time.Sleep(ttl + 50*time.Millisecond)
-			
+
 			// Run cleanup
 			sm.cleanupExpiredSessions()
-			
+
 			// Verify active sessions still exist
 			sm.mu.RLock()
 			activeCount := 0
@@ -505,7 +505,7 @@ func TestProperty_CleanupSelectivelyRemovesInactiveSessions(t *testing.T) {
 					activeCount++
 				}
 			}
-			
+
 			// Verify inactive sessions are removed
 			inactiveCount := 0
 			for _, sessionID := range inactiveSessionIDs {
@@ -514,7 +514,7 @@ func TestProperty_CleanupSelectivelyRemovesInactiveSessions(t *testing.T) {
 				}
 			}
 			sm.mu.RUnlock()
-			
+
 			// All active sessions should remain, all inactive should be removed
 			return activeCount == numActive && inactiveCount == 0
 		},

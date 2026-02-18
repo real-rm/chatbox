@@ -273,9 +273,9 @@ func AssertMemoryGrowth(t *testing.T, before, after runtime.MemStats, descriptio
 	t.Helper()
 	growth := int64(after.Alloc) - int64(before.Alloc)
 	growthMB := float64(growth) / (1024 * 1024)
-	
+
 	t.Logf("Memory growth (%s): %d bytes (%.2f MB)", description, growth, growthMB)
-	
+
 	if growth > 0 {
 		t.Logf("  Alloc: %d → %d", before.Alloc, after.Alloc)
 		t.Logf("  TotalAlloc: %d → %d", before.TotalAlloc, after.TotalAlloc)
@@ -287,9 +287,9 @@ func AssertMemoryGrowth(t *testing.T, before, after runtime.MemStats, descriptio
 func AssertGoroutineCount(t *testing.T, before, after int, description string) {
 	t.Helper()
 	delta := after - before
-	
+
 	t.Logf("Goroutine count (%s): %d → %d (delta: %d)", description, before, after, delta)
-	
+
 	// Allow for small variations due to test framework and GC
 	tolerance := 5
 	if delta > tolerance {
@@ -300,7 +300,7 @@ func AssertGoroutineCount(t *testing.T, before, after int, description string) {
 	} else {
 		t.Logf("  ✓ Goroutine count stable (within tolerance of ±%d)", tolerance)
 	}
-	
+
 	assert.InDelta(t, before, after, float64(tolerance),
 		"Goroutine count should not increase significantly")
 }

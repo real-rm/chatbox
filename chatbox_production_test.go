@@ -45,7 +45,7 @@ func TestProductionIssue17_WeakSecretAcceptance(t *testing.T) {
 		t.Run(tc.secret, func(t *testing.T) {
 			// Subtask 16.1.2 & 16.1.3: Verify weak secrets are rejected
 			err := validateJWTSecret(tc.secret)
-			
+
 			// Weak secrets should be rejected
 			assert.Error(t, err, "Weak secret '%s' should be rejected (%s)", tc.secret, tc.reason)
 			t.Logf("✓ Weak secret '%s' correctly rejected: %v", tc.secret, err)
@@ -81,35 +81,35 @@ func TestProductionIssue17_WeakSecretAcceptance(t *testing.T) {
 func TestProductionIssue15_ShutdownTimeout(t *testing.T) {
 	// Subtask 14.2.1: Create Handler with connections
 	handler := createTestHandlerWithConnections(t, 5)
-	
+
 	// Subtask 14.2.2: Create context with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	
+
 	// Subtask 14.2.4: Measure completion time
 	startTime := time.Now()
-	
+
 	// Subtask 14.2.3: Call Shutdown
 	err := handler.ShutdownWithContext(ctx)
-	
+
 	completionTime := time.Since(startTime)
-	
+
 	// Verify shutdown completed
 	if err != nil {
 		t.Logf("Shutdown returned error: %v", err)
 	} else {
 		t.Log("Shutdown completed successfully")
 	}
-	
+
 	// Subtask 14.2.5: Document timeout behavior
 	t.Logf("Shutdown completion time: %v", completionTime)
 	t.Logf("Context timeout: 2s")
-	
+
 	// Verify shutdown completed within reasonable time
 	if completionTime > 3*time.Second {
 		t.Errorf("Shutdown took too long: %v (expected < 3s)", completionTime)
 	}
-	
+
 	t.Log("FINDING: ShutdownWithContext() respects context deadline")
 	t.Log("FINDING: Connections are closed in parallel using goroutines")
 	t.Log("FINDING: Shutdown waits for all connections to close or context deadline")
@@ -129,27 +129,27 @@ func createTestHandlerWithConnections(t *testing.T, numConnections int) *websock
 	if err != nil {
 		t.Fatalf("Failed to create logger: %v", err)
 	}
-	
+
 	// Create a mock router
 	mockRouter := &mockMessageRouter{}
-	
+
 	// Create a JWT validator (not needed for this test but required by Handler)
 	validator := auth.NewJWTValidator("test-secret-key-for-testing-only")
-	
+
 	// Create handler
 	handler := websocket.NewHandler(validator, mockRouter, logger, 1024*1024)
-	
+
 	// Create mock connections
 	for i := 0; i < numConnections; i++ {
 		userID := fmt.Sprintf("user-%d", i)
 		conn := createMockWebSocketConnection(t, userID)
-		
+
 		// Register the connection directly in the handler
 		handler.RegisterConnectionForTest(conn)
 	}
-	
+
 	t.Logf("Created handler with %d mock connections", numConnections)
-	
+
 	return handler
 }
 
@@ -157,10 +157,10 @@ func createTestHandlerWithConnections(t *testing.T, numConnections int) *websock
 func createMockWebSocketConnection(t *testing.T, userID string) *websocket.Connection {
 	// Create a mock connection using the NewConnection helper
 	conn := websocket.NewConnection(userID, []string{"user"})
-	
+
 	// Set a connection ID
 	conn.ConnectionID = fmt.Sprintf("%s-%d", userID, time.Now().UnixNano())
-	
+
 	return conn
 }
 
@@ -188,7 +188,7 @@ func TestProductionIssue18_AdminRateLimiting(t *testing.T) {
 	// Subtask 17.1.1: Create test server
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	
+
 	// Create test logger
 	logger, err := golog.InitLog(golog.LogConfig{
 		Dir:            t.TempDir(),
@@ -196,19 +196,19 @@ func TestProductionIssue18_AdminRateLimiting(t *testing.T) {
 		StandardOutput: false,
 	})
 	require.NoError(t, err, "Failed to create logger")
-	
+
 	// Create JWT validator with test secret
 	testSecret := "test-secret-key-for-admin-rate-limiting-test-32chars"
 	validator := auth.NewJWTValidator(testSecret)
-	
+
 	// Create rate limiter with low limits for testing
 	// Allow 10 requests per 10 seconds
 	limiter := ratelimit.NewMessageLimiter(10*time.Second, 10)
 	defer limiter.Cleanup()
-	
+
 	// Create mock storage service
 	mockStorage := &mockStorageService{}
-	
+
 	// Register admin endpoint with rate limiting
 	adminGroup := router.Group("/chat/admin")
 	adminGroup.Use(authMiddleware(validator, logger))
@@ -218,36 +218,36 @@ func TestProductionIssue18_AdminRateLimiting(t *testing.T) {
 			c.JSON(200, gin.H{"sessions": []string{}})
 		})
 	}
-	
+
 	// Create test server
 	server := httptest.NewServer(router)
 	defer server.Close()
-	
+
 	// Create JWT token with admin role
 	token := createTestAdminToken(testSecret, "admin-user-1", time.Hour)
-	
+
 	// Subtask 17.1.2: Send 1000 rapid requests
 	t.Log("Sending 1000 rapid requests to /chat/admin/sessions...")
-	
+
 	successCount := 0
 	rateLimitedCount := 0
 	otherErrorCount := 0
-	
+
 	client := &http.Client{Timeout: 5 * time.Second}
-	
+
 	for i := 0; i < 1000; i++ {
 		req, err := http.NewRequest("GET", server.URL+"/chat/admin/sessions", nil)
 		require.NoError(t, err)
-		
+
 		req.Header.Set("Authorization", "Bearer "+token)
-		
+
 		resp, err := client.Do(req)
 		if err != nil {
 			t.Logf("Request %d failed: %v", i, err)
 			otherErrorCount++
 			continue
 		}
-		
+
 		// Subtask 17.1.3: Verify rate limiting status
 		switch resp.StatusCode {
 		case 200:
@@ -263,27 +263,27 @@ func TestProductionIssue18_AdminRateLimiting(t *testing.T) {
 			t.Logf("Request %d returned unexpected status: %d", i, resp.StatusCode)
 			otherErrorCount++
 		}
-		
+
 		resp.Body.Close()
-		
+
 		// Log progress every 100 requests
 		if (i+1)%100 == 0 {
 			t.Logf("Progress: %d requests sent (success: %d, rate limited: %d, errors: %d)",
 				i+1, successCount, rateLimitedCount, otherErrorCount)
 		}
 	}
-	
+
 	// Subtask 17.1.4: Document current behavior
 	t.Logf("\n=== Rate Limiting Test Results ===")
 	t.Logf("Total requests sent: 1000")
 	t.Logf("Successful requests (200): %d", successCount)
 	t.Logf("Rate limited requests (429): %d", rateLimitedCount)
 	t.Logf("Other errors: %d", otherErrorCount)
-	
+
 	// Verify rate limiting is working
 	assert.Greater(t, rateLimitedCount, 0, "Expected some requests to be rate limited")
 	assert.LessOrEqual(t, successCount, 20, "Expected most requests to be rate limited (limit is 10 per 10s)")
-	
+
 	t.Log("\nFINDING: Admin endpoints HAVE rate limiting configured")
 	t.Log("IMPLEMENTATION: adminRateLimitMiddleware in chatbox.go")
 	t.Log("CONFIGURATION: Default 20 requests per minute (configurable)")
@@ -293,7 +293,7 @@ func TestProductionIssue18_AdminRateLimiting(t *testing.T) {
 	t.Log("RECOMMENDATION: Monitor rate limit metrics in production")
 	t.Log("RECOMMENDATION: Adjust limits based on actual usage patterns")
 	t.Log("RECOMMENDATION: Consider different limits for different admin endpoints")
-	
+
 	// Verify the mock storage wasn't called (we're testing rate limiting, not storage)
 	assert.Equal(t, 0, mockStorage.callCount, "Storage should not be called in this test")
 }
@@ -372,4 +372,3 @@ func TestProductionIssue06_EncryptionKeyValidation(t *testing.T) {
 	t.Log("STATUS: Encryption key validation works correctly")
 	t.Log("FINDING: Only 32-byte keys or empty keys are accepted")
 }
-

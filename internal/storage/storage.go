@@ -12,8 +12,10 @@ import (
 	"sort"
 	"time"
 
+	"github.com/real-rm/chatbox/internal/constants"
 	"github.com/real-rm/chatbox/internal/metrics"
 	"github.com/real-rm/chatbox/internal/session"
+	"github.com/real-rm/chatbox/internal/util"
 	"github.com/real-rm/golog"
 	"github.com/real-rm/gomongo"
 	"go.mongodb.org/mongo-driver/bson"
@@ -40,10 +42,10 @@ type retryConfig struct {
 
 // defaultRetryConfig provides default retry configuration
 var defaultRetryConfig = retryConfig{
-	maxAttempts:  3,
-	initialDelay: 100 * time.Millisecond,
-	maxDelay:     2 * time.Second,
-	multiplier:   2.0,
+	maxAttempts:  constants.MaxRetryAttempts,
+	initialDelay: constants.InitialRetryDelay,
+	maxDelay:     constants.MaxRetryDelay,
+	multiplier:   constants.RetryMultiplier,
 }
 
 // StorageService manages conversation persistence in MongoDB using gomongo
@@ -69,10 +71,10 @@ type SessionDocument struct {
 	AssistingAdminName string            `bson:"assistingAdminName,omitempty"`
 	HelpRequested      bool              `bson:"helpRequested"`
 	TotalTokens        int               `bson:"totalTokens"`
-	MaxResponseTime    int64             `bson:"maxRespTime"` // milliseconds
-	AvgResponseTime    int64             `bson:"avgRespTime"` // milliseconds
-	CreatedAt          time.Time         `bson:"_ts,omitempty"`     // gomongo automatic timestamp
-	ModifiedAt         time.Time         `bson:"_mt,omitempty"`     // gomongo automatic timestamp
+	MaxResponseTime    int64             `bson:"maxRespTime"`   // milliseconds
+	AvgResponseTime    int64             `bson:"avgRespTime"`   // milliseconds
+	CreatedAt          time.Time         `bson:"_ts,omitempty"` // gomongo automatic timestamp
+	ModifiedAt         time.Time         `bson:"_mt,omitempty"` // gomongo automatic timestamp
 }
 
 // MessageDocument represents a message stored in MongoDB
@@ -99,6 +101,7 @@ type SessionMetadata struct {
 	MaxResponseTime int64 // milliseconds
 	AvgResponseTime int64 // milliseconds
 }
+
 // SessionListOptions defines filtering, sorting, and pagination options for listing sessions
 type SessionListOptions struct {
 	// Pagination
@@ -149,6 +152,7 @@ func NewStorageService(mongo *gomongo.Mongo, dbName, collName string, logger *go
 // isRetryableError checks if an error is retryable (transient)
 // Returns true for network errors and transient MongoDB errors
 func isRetryableError(err error) bool {
+	// No else needed: early return pattern (guard clause)
 	if err == nil {
 		return false
 	}
@@ -200,34 +204,35 @@ func containsAny(s string, substrings []string) bool {
 	}
 	return false
 }
+
 // EnsureIndexes creates the necessary indexes for the sessions collection
 // This should be called during application initialization to ensure optimal query performance
 func (s *StorageService) EnsureIndexes(ctx context.Context) error {
 	// Create index for user_id (uid) - used for user-specific session queries
 	userIDIndex := mongo.IndexModel{
-		Keys: bson.D{{Key: "uid", Value: 1}},
-		Options: options.Index().SetName("idx_user_id"),
+		Keys:    bson.D{{Key: constants.MongoFieldUserID, Value: 1}},
+		Options: options.Index().SetName(constants.IndexUserID),
 	}
 
 	// Create index for start_time (ts) - used for time-based queries and sorting
 	startTimeIndex := mongo.IndexModel{
-		Keys: bson.D{{Key: "ts", Value: -1}}, // Descending for most recent first
-		Options: options.Index().SetName("idx_start_time"),
+		Keys:    bson.D{{Key: constants.MongoFieldTimestamp, Value: -1}}, // Descending for most recent first
+		Options: options.Index().SetName(constants.IndexStartTime),
 	}
 
 	// Create index for admin_assisted - used for filtering admin-assisted sessions
 	adminAssistedIndex := mongo.IndexModel{
-		Keys: bson.D{{Key: "adminAssisted", Value: 1}},
-		Options: options.Index().SetName("idx_admin_assisted"),
+		Keys:    bson.D{{Key: constants.MongoFieldAdminAssisted, Value: 1}},
+		Options: options.Index().SetName(constants.IndexAdminAssisted),
 	}
 
 	// Create compound index for common query patterns (user_id + start_time)
 	compoundIndex := mongo.IndexModel{
 		Keys: bson.D{
-			{Key: "uid", Value: 1},
-			{Key: "ts", Value: -1},
+			{Key: constants.MongoFieldUserID, Value: 1},
+			{Key: constants.MongoFieldTimestamp, Value: -1},
 		},
-		Options: options.Index().SetName("idx_user_start_time"),
+		Options: options.Index().SetName(constants.IndexUserStartTime),
 	}
 
 	// Create all indexes
@@ -239,12 +244,13 @@ func (s *StorageService) EnsureIndexes(ctx context.Context) error {
 	}
 
 	_, err := s.collection.CreateIndexes(ctx, indexes)
+	// No else needed: early return pattern (guard clause)
 	if err != nil {
 		return fmt.Errorf("failed to create indexes: %w", err)
 	}
 
 	s.logger.Info("MongoDB indexes created successfully",
-		"indexes", []string{"idx_user_id", "idx_start_time", "idx_admin_assisted", "idx_user_start_time"},
+		"indexes", []string{constants.IndexUserID, constants.IndexStartTime, constants.IndexAdminAssisted, constants.IndexUserStartTime},
 	)
 
 	return nil
@@ -252,15 +258,17 @@ func (s *StorageService) EnsureIndexes(ctx context.Context) error {
 
 // CreateSession creates a new session document in MongoDB
 func (s *StorageService) CreateSession(sess *session.Session) error {
+	// No else needed: early return pattern (guard clause)
 	if sess == nil {
 		return ErrInvalidSession
 	}
 
+	// No else needed: early return pattern (guard clause)
 	if sess.ID == "" {
 		return ErrInvalidSessionID
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := util.NewTimeoutContext(constants.DefaultContextTimeout)
 	defer cancel()
 
 	// Convert session to document
@@ -271,7 +279,8 @@ func (s *StorageService) CreateSession(sess *session.Session) error {
 		_, err := s.collection.InsertOne(ctx, doc)
 		return err
 	})
-	
+
+	// No else needed: early return pattern (guard clause)
 	if err != nil {
 		return fmt.Errorf("failed to create session: %w", err)
 	}
@@ -285,22 +294,24 @@ func (s *StorageService) CreateSession(sess *session.Session) error {
 
 // UpdateSession updates an existing session document in MongoDB
 func (s *StorageService) UpdateSession(sess *session.Session) error {
+	// No else needed: early return pattern (guard clause)
 	if sess == nil {
 		return ErrInvalidSession
 	}
 
+	// No else needed: early return pattern (guard clause)
 	if sess.ID == "" {
 		return ErrInvalidSessionID
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := util.NewTimeoutContext(constants.DefaultContextTimeout)
 	defer cancel()
 
 	// Convert session to document
 	doc := s.sessionToDocument(sess)
 
 	// Update document with retry logic for transient errors
-	filter := bson.M{"_id": sess.ID}
+	filter := bson.M{constants.MongoFieldID: sess.ID}
 	update := bson.M{"$set": doc}
 
 	var result *mongo.UpdateResult
@@ -309,11 +320,13 @@ func (s *StorageService) UpdateSession(sess *session.Session) error {
 		result, err = s.collection.UpdateOne(ctx, filter, update)
 		return err
 	})
-	
+
+	// No else needed: early return pattern (guard clause)
 	if err != nil {
 		return fmt.Errorf("failed to update session: %w", err)
 	}
 
+	// No else needed: early return pattern (guard clause)
 	if result.MatchedCount == 0 {
 		return ErrSessionNotFound
 	}
@@ -323,24 +336,27 @@ func (s *StorageService) UpdateSession(sess *session.Session) error {
 
 // GetSession retrieves a session from MongoDB by ID
 func (s *StorageService) GetSession(sessionID string) (*session.Session, error) {
+	// No else needed: early return pattern (guard clause)
 	if sessionID == "" {
 		return nil, ErrInvalidSessionID
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := util.NewTimeoutContext(constants.DefaultContextTimeout)
 	defer cancel()
 
 	// Find document with retry logic for transient errors
-	filter := bson.M{"_id": sessionID}
+	filter := bson.M{constants.MongoFieldID: sessionID}
 	var doc SessionDocument
 
 	err := s.retryOperation(ctx, "GetSession", func() error {
 		result := s.collection.FindOne(ctx, filter)
 		return result.Decode(&doc)
 	})
-	
+
+	// No else needed: early return pattern (guard clause)
+	// CRITICAL FIX C4: Use errors.Is for proper error comparison
 	if err != nil {
-		if err == mongo.ErrNoDocuments {
+		if errors.Is(err, mongo.ErrNoDocuments) {
 			return nil, ErrSessionNotFound
 		}
 		return nil, fmt.Errorf("failed to get session: %w", err)
@@ -382,12 +398,14 @@ func (s *StorageService) sessionToDocument(sess *session.Session) *SessionDocume
 
 	// Calculate max and average response times
 	var maxResponseTime, avgResponseTime int64
+	// No else needed: optional operation (only calculate if response times exist)
 	if len(sess.ResponseTimes) > 0 {
 		var total time.Duration
 		maxDuration := sess.ResponseTimes[0]
 
 		for _, rt := range sess.ResponseTimes {
 			total += rt
+			// No else needed: optional operation (only update max if larger)
 			if rt > maxDuration {
 				maxDuration = rt
 			}
@@ -423,8 +441,10 @@ func (s *StorageService) documentToSession(doc *SessionDocument) *session.Sessio
 	for i, msg := range doc.Messages {
 		content := msg.Content
 		// Decrypt content if encryption key is provided
+		// No else needed: optional operation (only decrypt if key is available)
 		if len(s.encryptionKey) > 0 {
 			decrypted, err := s.decrypt(msg.Content)
+			// No else needed: optional operation (fallback to original on error)
 			if err == nil {
 				content = decrypted
 			}
@@ -445,6 +465,7 @@ func (s *StorageService) documentToSession(doc *SessionDocument) *session.Sessio
 	// Note: We can't perfectly reconstruct the original response times,
 	// but we can create a reasonable approximation
 	var responseTimes []time.Duration
+	// No else needed: optional operation (only reconstruct if data exists)
 	if doc.MaxResponseTime > 0 && doc.AvgResponseTime > 0 {
 		// Create a single entry with the average (simplified)
 		responseTimes = []time.Duration{
@@ -476,15 +497,17 @@ func (s *StorageService) documentToSession(doc *SessionDocument) *session.Sessio
 
 // AddMessage adds a message to an existing session and persists it immediately
 func (s *StorageService) AddMessage(sessionID string, msg *session.Message) error {
+	// No else needed: early return pattern (guard clause)
 	if sessionID == "" {
 		return ErrInvalidSessionID
 	}
 
+	// No else needed: early return pattern (guard clause)
 	if msg == nil {
 		return errors.New("message cannot be nil")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := util.NewTimeoutContext(constants.MessageAddTimeout)
 	defer cancel()
 
 	// Convert message to document
@@ -498,8 +521,10 @@ func (s *StorageService) AddMessage(sessionID string, msg *session.Message) erro
 	}
 
 	// Encrypt sensitive content if encryption key is provided
+	// No else needed: optional operation (only encrypt if key is available)
 	if len(s.encryptionKey) > 0 {
 		encrypted, err := s.encrypt(msgDoc.Content)
+		// No else needed: early return pattern (guard clause)
 		if err != nil {
 			return fmt.Errorf("failed to encrypt message content: %w", err)
 		}
@@ -507,17 +532,19 @@ func (s *StorageService) AddMessage(sessionID string, msg *session.Message) erro
 	}
 
 	// Push message to messages array using gomongo (automatically updates _mt)
-	filter := bson.M{"_id": sessionID}
+	filter := bson.M{constants.MongoFieldID: sessionID}
 	update := bson.M{
-		"$push": bson.M{"msgs": msgDoc},
+		"$push": bson.M{constants.MongoFieldMessages: msgDoc},
 		"$set":  bson.M{"lastActivity": time.Now()},
 	}
 
 	result, err := s.collection.UpdateOne(ctx, filter, update)
+	// No else needed: early return pattern (guard clause)
 	if err != nil {
 		return fmt.Errorf("failed to add message: %w", err)
 	}
 
+	// No else needed: early return pattern (guard clause)
 	if result.MatchedCount == 0 {
 		return ErrSessionNotFound
 	}
@@ -527,18 +554,21 @@ func (s *StorageService) AddMessage(sessionID string, msg *session.Message) erro
 
 // EndSession updates the session with end timestamp and duration
 func (s *StorageService) EndSession(sessionID string, endTime time.Time) error {
+	// No else needed: early return pattern (guard clause)
 	if sessionID == "" {
 		return ErrInvalidSessionID
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := util.NewTimeoutContext(constants.SessionEndTimeout)
 	defer cancel()
 
 	// Get the session to calculate duration
 	var doc SessionDocument
-	err := s.collection.FindOne(ctx, bson.M{"_id": sessionID}).Decode(&doc)
+	err := s.collection.FindOne(ctx, bson.M{constants.MongoFieldID: sessionID}).Decode(&doc)
+	// No else needed: early return pattern (guard clause)
+	// CRITICAL FIX C4: Use errors.Is for proper error comparison
 	if err != nil {
-		if err == mongo.ErrNoDocuments {
+		if errors.Is(err, mongo.ErrNoDocuments) {
 			return ErrSessionNotFound
 		}
 		return fmt.Errorf("failed to get session: %w", err)
@@ -548,19 +578,21 @@ func (s *StorageService) EndSession(sessionID string, endTime time.Time) error {
 	duration := int64(endTime.Sub(doc.StartTime).Seconds())
 
 	// Update session with end time and duration using gomongo (automatically updates _mt)
-	filter := bson.M{"_id": sessionID}
+	filter := bson.M{constants.MongoFieldID: sessionID}
 	update := bson.M{
 		"$set": bson.M{
-			"endTs": endTime,
-			"dur":   duration,
+			constants.MongoFieldEndTime:  endTime,
+			constants.MongoFieldDuration: duration,
 		},
 	}
 
 	result, err := s.collection.UpdateOne(ctx, filter, update)
+	// No else needed: early return pattern (guard clause)
 	if err != nil {
 		return fmt.Errorf("failed to end session: %w", err)
 	}
 
+	// No else needed: early return pattern (guard clause)
 	if result.MatchedCount == 0 {
 		return ErrSessionNotFound
 	}
@@ -574,22 +606,26 @@ func (s *StorageService) EndSession(sessionID string, endTime time.Time) error {
 
 // encrypt encrypts data using AES-256-GCM
 func (s *StorageService) encrypt(plaintext string) (string, error) {
+	// No else needed: early return pattern (guard clause)
 	if len(s.encryptionKey) == 0 {
 		return plaintext, nil
 	}
 
 	block, err := aes.NewCipher(s.encryptionKey)
+	// No else needed: early return pattern (guard clause)
 	if err != nil {
 		return "", fmt.Errorf("failed to create cipher: %w", err)
 	}
 
 	gcm, err := cipher.NewGCM(block)
+	// No else needed: early return pattern (guard clause)
 	if err != nil {
 		return "", fmt.Errorf("failed to create GCM: %w", err)
 	}
 
 	// Create nonce
 	nonce := make([]byte, gcm.NonceSize())
+	// No else needed: early return pattern (guard clause)
 	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
 		return "", fmt.Errorf("failed to generate nonce: %w", err)
 	}
@@ -603,27 +639,32 @@ func (s *StorageService) encrypt(plaintext string) (string, error) {
 
 // decrypt decrypts data using AES-256-GCM
 func (s *StorageService) decrypt(ciphertext string) (string, error) {
+	// No else needed: early return pattern (guard clause)
 	if len(s.encryptionKey) == 0 {
 		return ciphertext, nil
 	}
 
 	// Decode from base64
 	data, err := base64.StdEncoding.DecodeString(ciphertext)
+	// No else needed: early return pattern (guard clause)
 	if err != nil {
 		return "", fmt.Errorf("failed to decode base64: %w", err)
 	}
 
 	block, err := aes.NewCipher(s.encryptionKey)
+	// No else needed: early return pattern (guard clause)
 	if err != nil {
 		return "", fmt.Errorf("failed to create cipher: %w", err)
 	}
 
 	gcm, err := cipher.NewGCM(block)
+	// No else needed: early return pattern (guard clause)
 	if err != nil {
 		return "", fmt.Errorf("failed to create GCM: %w", err)
 	}
 
 	nonceSize := gcm.NonceSize()
+	// No else needed: early return pattern (guard clause)
 	if len(data) < nonceSize {
 		return "", errors.New("ciphertext too short")
 	}
@@ -633,6 +674,7 @@ func (s *StorageService) decrypt(ciphertext string) (string, error) {
 
 	// Decrypt
 	plaintext, err := gcm.Open(nil, nonce, ciphertextBytes, nil)
+	// No else needed: early return pattern (guard clause)
 	if err != nil {
 		return "", fmt.Errorf("failed to decrypt: %w", err)
 	}
@@ -643,19 +685,20 @@ func (s *StorageService) decrypt(ciphertext string) (string, error) {
 // ListUserSessions retrieves all sessions for a user ordered by last activity (most recent first)
 // The limit parameter controls the maximum number of sessions to return (0 = no limit)
 func (s *StorageService) ListUserSessions(userID string, limit int) ([]*SessionMetadata, error) {
+	// No else needed: early return pattern (guard clause)
 	if userID == "" {
 		return nil, errors.New("user ID cannot be empty")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := util.NewTimeoutContext(constants.DefaultContextTimeout)
 	defer cancel()
 
 	// Build query filter
-	filter := bson.M{"uid": userID}
+	filter := bson.M{constants.MongoFieldUserID: userID}
 
 	// Build find options with sorting by ts (descending)
 	findOptions := options.Find()
-	findOptions.SetSort(bson.D{{Key: "ts", Value: -1}})
+	findOptions.SetSort(bson.D{{Key: constants.MongoFieldTimestamp, Value: -1}})
 
 	if limit > 0 {
 		findOptions.SetLimit(int64(limit))
@@ -663,6 +706,7 @@ func (s *StorageService) ListUserSessions(userID string, limit int) ([]*SessionM
 
 	// Execute query using gomongo
 	cursor, err := s.collection.Find(ctx, filter, findOptions)
+	// No else needed: early return pattern (guard clause)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list user sessions: %w", err)
 	}
@@ -710,19 +754,21 @@ func (s *StorageService) ListUserSessions(userID string, limit int) ([]*SessionM
 // The limit parameter controls the maximum number of sessions to return (0 = no limit)
 // This is primarily used by admin endpoints to view all sessions in the system
 func (s *StorageService) ListAllSessions(limit int) ([]*SessionMetadata, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := util.NewTimeoutContext(constants.DefaultContextTimeout)
 	defer cancel()
 
 	// Build find options with sorting by ts (descending)
 	findOptions := options.Find()
-	findOptions.SetSort(bson.D{{Key: "ts", Value: -1}})
+	findOptions.SetSort(bson.D{{Key: constants.MongoFieldTimestamp, Value: -1}})
 
+	// No else needed: optional operation (only set limit if specified)
 	if limit > 0 {
 		findOptions.SetLimit(int64(limit))
 	}
 
 	// Execute query using gomongo (no filter = all documents)
 	cursor, err := s.collection.Find(ctx, bson.M{}, findOptions)
+	// No else needed: early return pattern (guard clause)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list all sessions: %w", err)
 	}
@@ -732,12 +778,14 @@ func (s *StorageService) ListAllSessions(limit int) ([]*SessionMetadata, error) 
 	var sessions []*SessionMetadata
 	for cursor.Next(ctx) {
 		var doc SessionDocument
+		// No else needed: early return pattern (guard clause)
 		if err := cursor.Decode(&doc); err != nil {
 			return nil, fmt.Errorf("failed to decode session document: %w", err)
 		}
 
 		// Determine last message time
 		lastMessageTime := doc.StartTime
+		// No else needed: optional operation (only update if messages exist)
 		if len(doc.Messages) > 0 {
 			lastMessageTime = doc.Messages[len(doc.Messages)-1].Timestamp
 		}
@@ -759,16 +807,18 @@ func (s *StorageService) ListAllSessions(limit int) ([]*SessionMetadata, error) 
 		sessions = append(sessions, metadata)
 	}
 
+	// No else needed: early return pattern (guard clause)
 	if err := cursor.Err(); err != nil {
 		return nil, fmt.Errorf("cursor error: %w", err)
 	}
 
 	return sessions, nil
 }
+
 // ListAllSessionsWithOptions lists all sessions with filtering, sorting, and pagination
 // This method is designed for admin dashboards to efficiently query large session datasets
 func (s *StorageService) ListAllSessionsWithOptions(opts *SessionListOptions) ([]*SessionMetadata, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := util.NewTimeoutContext(constants.MetricsTimeout)
 	defer cancel()
 
 	// Set defaults
@@ -776,71 +826,79 @@ func (s *StorageService) ListAllSessionsWithOptions(opts *SessionListOptions) ([
 		opts = &SessionListOptions{}
 	}
 	if opts.Limit <= 0 {
-		opts.Limit = 100
+		opts.Limit = constants.DefaultSessionLimit
 	}
-	if opts.Limit > 1000 {
-		opts.Limit = 1000 // Cap at 1000 for performance
+	if opts.Limit > constants.MaxSessionLimit {
+		opts.Limit = constants.MaxSessionLimit // Cap at max for performance
 	}
 	if opts.SortBy == "" {
-		opts.SortBy = "ts"
+		opts.SortBy = constants.SortByTimestamp
 	}
 	if opts.SortOrder == "" {
-		opts.SortOrder = "desc"
+		opts.SortOrder = constants.SortOrderDesc
 	}
 
 	// Build filter
 	filter := bson.M{}
 
+	// No else needed: optional operation (only add filter if specified)
 	if opts.UserID != "" {
-		filter["uid"] = opts.UserID
+		filter[constants.MongoFieldUserID] = opts.UserID
 	}
 
+	// No else needed: optional operation (only add filter if specified)
 	if opts.StartTimeFrom != nil {
-		filter["ts"] = bson.M{"$gte": *opts.StartTimeFrom}
+		filter[constants.MongoFieldTimestamp] = bson.M{"$gte": *opts.StartTimeFrom}
 	}
 
+	// No else needed: optional operation (only add filter if specified)
 	if opts.StartTimeTo != nil {
-		if existingFilter, ok := filter["ts"].(bson.M); ok {
+		// No else needed: optional operation (merge with existing filter or create new)
+		if existingFilter, ok := filter[constants.MongoFieldTimestamp].(bson.M); ok {
 			existingFilter["$lte"] = *opts.StartTimeTo
 		} else {
-			filter["ts"] = bson.M{"$lte": *opts.StartTimeTo}
+			filter[constants.MongoFieldTimestamp] = bson.M{"$lte": *opts.StartTimeTo}
 		}
 	}
 
+	// No else needed: optional operation (only add filter if specified)
 	if opts.AdminAssisted != nil {
-		filter["adminAssisted"] = *opts.AdminAssisted
+		filter[constants.MongoFieldAdminAssisted] = *opts.AdminAssisted
 	}
 
+	// No else needed: optional operation (only add filter if specified)
 	if opts.Active != nil {
+		// No else needed: conditional operation (different filter based on value)
 		if *opts.Active {
 			// Active sessions have no endTs
-			filter["endTs"] = bson.M{"$exists": false}
+			filter[constants.MongoFieldEndTime] = bson.M{"$exists": false}
 		} else {
 			// Ended sessions have endTs
-			filter["endTs"] = bson.M{"$exists": true}
+			filter[constants.MongoFieldEndTime] = bson.M{"$exists": true}
 		}
 	}
 
 	// Build sort
 	sortOrder := -1 // descending
-	if opts.SortOrder == "asc" {
+	// No else needed: optional operation (only change if ascending)
+	if opts.SortOrder == constants.SortOrderAsc {
 		sortOrder = 1
 	}
 
-	sortField := "ts"
+	sortField := constants.MongoFieldTimestamp
 	switch opts.SortBy {
-	case "endTs":
-		sortField = "endTs"
-	case "message_count":
+	case constants.SortByEndTime:
+		sortField = constants.MongoFieldEndTime
+	case constants.SortByMessageCount:
 		// We'll need to sort by array size, which requires aggregation
 		// For now, we'll sort by ts and handle message_count in application
-		sortField = "ts"
-	case "totalTokens":
-		sortField = "totalTokens"
-	case "uid":
-		sortField = "uid"
+		sortField = constants.MongoFieldTimestamp
+	case constants.SortByTotalTokens:
+		sortField = constants.MongoFieldTotalTokens
+	case constants.SortByUserID:
+		sortField = constants.MongoFieldUserID
 	default:
-		sortField = "ts"
+		sortField = constants.MongoFieldTimestamp
 	}
 
 	// Build find options
@@ -851,6 +909,7 @@ func (s *StorageService) ListAllSessionsWithOptions(opts *SessionListOptions) ([
 
 	// Execute query
 	cursor, err := s.collection.Find(ctx, filter, findOptions)
+	// No else needed: early return pattern (guard clause)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list sessions with options: %w", err)
 	}
@@ -860,12 +919,14 @@ func (s *StorageService) ListAllSessionsWithOptions(opts *SessionListOptions) ([
 	var sessions []*SessionMetadata
 	for cursor.Next(ctx) {
 		var doc SessionDocument
+		// No else needed: early return pattern (guard clause)
 		if err := cursor.Decode(&doc); err != nil {
 			return nil, fmt.Errorf("failed to decode session document: %w", err)
 		}
 
 		// Determine last message time
 		lastMessageTime := doc.StartTime
+		// No else needed: optional operation (only update if messages exist)
 		if len(doc.Messages) > 0 {
 			lastMessageTime = doc.Messages[len(doc.Messages)-1].Timestamp
 		}
@@ -887,13 +948,15 @@ func (s *StorageService) ListAllSessionsWithOptions(opts *SessionListOptions) ([
 		sessions = append(sessions, metadata)
 	}
 
+	// No else needed: early return pattern (guard clause)
 	if err := cursor.Err(); err != nil {
 		return nil, fmt.Errorf("cursor error: %w", err)
 	}
 
 	// If sorting by message_count, sort in application
-	if opts.SortBy == "message_count" {
-		sortByMessageCount(sessions, opts.SortOrder == "asc")
+	// No else needed: optional operation (only sort if requested)
+	if opts.SortBy == constants.SortByMessageCount {
+		sortByMessageCount(sessions, opts.SortOrder == constants.SortOrderAsc)
 	}
 
 	return sessions, nil
@@ -909,20 +972,20 @@ func sortByMessageCount(sessions []*SessionMetadata, ascending bool) {
 	})
 }
 
-
 // GetSessionMetrics calculates aggregated metrics for all sessions within a time period
 // Returns metrics including total sessions, active sessions, token usage, and response times
 func (s *StorageService) GetSessionMetrics(startTime, endTime time.Time) (*Metrics, error) {
+	// No else needed: early return pattern (guard clause)
 	if endTime.Before(startTime) {
 		return nil, errors.New("end time must be after start time")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := util.NewTimeoutContext(constants.MetricsTimeout)
 	defer cancel()
 
 	// Build query filter for sessions within time range
 	filter := bson.M{
-		"ts": bson.M{
+		constants.MongoFieldTimestamp: bson.M{
 			"$gte": startTime,
 			"$lte": endTime,
 		},
@@ -930,6 +993,7 @@ func (s *StorageService) GetSessionMetrics(startTime, endTime time.Time) (*Metri
 
 	// Execute query using gomongo
 	cursor, err := s.collection.Find(ctx, filter)
+	// No else needed: early return pattern (guard clause)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get session metrics: %w", err)
 	}
@@ -957,6 +1021,7 @@ func (s *StorageService) GetSessionMetrics(startTime, endTime time.Time) (*Metri
 	// Process each session
 	for cursor.Next(ctx) {
 		var doc SessionDocument
+		// No else needed: early return pattern (guard clause)
 		if err := cursor.Decode(&doc); err != nil {
 			return nil, fmt.Errorf("failed to decode session document: %w", err)
 		}
@@ -964,11 +1029,13 @@ func (s *StorageService) GetSessionMetrics(startTime, endTime time.Time) (*Metri
 		metrics.TotalSessions++
 
 		// Count active sessions (no end time)
+		// No else needed: optional operation (only count if active)
 		if doc.EndTime == nil {
 			metrics.ActiveSessions++
 		}
 
 		// Count admin-assisted sessions
+		// No else needed: optional operation (only count if assisted)
 		if doc.AdminAssisted {
 			metrics.AdminAssistedCount++
 		}
@@ -977,11 +1044,13 @@ func (s *StorageService) GetSessionMetrics(startTime, endTime time.Time) (*Metri
 		metrics.TotalTokens += doc.TotalTokens
 
 		// Track max response time
+		// No else needed: optional operation (only update if larger)
 		if doc.MaxResponseTime > metrics.MaxResponseTime {
 			metrics.MaxResponseTime = doc.MaxResponseTime
 		}
 
 		// Aggregate average response times
+		// No else needed: optional operation (only aggregate if exists)
 		if doc.AvgResponseTime > 0 {
 			totalResponseTime += doc.AvgResponseTime
 			responseTimeCount++
@@ -992,22 +1061,26 @@ func (s *StorageService) GetSessionMetrics(startTime, endTime time.Time) (*Metri
 		startUnix := doc.StartTime.Unix()
 		concurrentMap[startUnix]++
 
+		// No else needed: optional operation (only decrement if session ended)
 		if doc.EndTime != nil {
 			endUnix := doc.EndTime.Unix()
 			concurrentMap[endUnix]--
 		}
 	}
 
+	// No else needed: early return pattern (guard clause)
 	if err := cursor.Err(); err != nil {
 		return nil, fmt.Errorf("cursor error: %w", err)
 	}
 
 	// Calculate average response time
+	// No else needed: optional operation (only calculate if data exists)
 	if responseTimeCount > 0 {
 		metrics.AvgResponseTime = totalResponseTime / int64(responseTimeCount)
 	}
 
 	// Calculate max concurrent and average concurrent sessions
+	// No else needed: optional operation (only calculate if data exists)
 	if len(concurrentMap) > 0 {
 		// Sort timestamps
 		timestamps := make([]int64, 0, len(concurrentMap))
@@ -1027,6 +1100,7 @@ func (s *StorageService) GetSessionMetrics(startTime, endTime time.Time) (*Metri
 
 		for _, ts := range timestamps {
 			currentConcurrent += concurrentMap[ts]
+			// No else needed: optional operation (only update if larger)
 			if currentConcurrent > metrics.MaxConcurrent {
 				metrics.MaxConcurrent = currentConcurrent
 			}
@@ -1034,6 +1108,7 @@ func (s *StorageService) GetSessionMetrics(startTime, endTime time.Time) (*Metri
 			sampleCount++
 		}
 
+		// No else needed: optional operation (only calculate if samples exist)
 		if sampleCount > 0 {
 			metrics.AvgConcurrent = float64(totalConcurrent) / float64(sampleCount)
 		}
@@ -1044,28 +1119,30 @@ func (s *StorageService) GetSessionMetrics(startTime, endTime time.Time) (*Metri
 
 // GetTokenUsage calculates the total token usage across all sessions within a time period
 func (s *StorageService) GetTokenUsage(startTime, endTime time.Time) (int, error) {
+	// No else needed: early return pattern (guard clause)
 	if endTime.Before(startTime) {
 		return 0, errors.New("end time must be after start time")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := util.NewTimeoutContext(constants.DefaultContextTimeout)
 	defer cancel()
 
 	// Use MongoDB aggregation pipeline to sum token usage
 	pipeline := mongo.Pipeline{
 		{{Key: "$match", Value: bson.M{
-			"ts": bson.M{
+			constants.MongoFieldTimestamp: bson.M{
 				"$gte": startTime,
 				"$lte": endTime,
 			},
 		}}},
 		{{Key: "$group", Value: bson.M{
-			"_id":        nil,
+			"_id":         nil,
 			"totalTokens": bson.M{"$sum": "$totalTokens"},
 		}}},
 	}
 
 	cursor, err := s.collection.Aggregate(ctx, pipeline)
+	// No else needed: early return pattern (guard clause)
 	if err != nil {
 		return 0, fmt.Errorf("failed to aggregate token usage: %w", err)
 	}
@@ -1076,12 +1153,15 @@ func (s *StorageService) GetTokenUsage(startTime, endTime time.Time) (int, error
 		TotalTokens int `bson:"totalTokens"`
 	}
 
+	// No else needed: optional operation (only decode if result exists)
 	if cursor.Next(ctx) {
+		// No else needed: early return pattern (guard clause)
 		if err := cursor.Decode(&result); err != nil {
 			return 0, fmt.Errorf("failed to decode aggregation result: %w", err)
 		}
 	}
 
+	// No else needed: early return pattern (guard clause)
 	if err := cursor.Err(); err != nil {
 		return 0, fmt.Errorf("cursor error: %w", err)
 	}
@@ -1097,17 +1177,20 @@ func (s *StorageService) retryOperation(ctx context.Context, operation string, f
 
 	for attempt := 1; attempt <= defaultRetryConfig.maxAttempts; attempt++ {
 		err := fn()
+		// No else needed: early return pattern (guard clause - success case)
 		if err == nil {
 			return nil
 		}
 
 		// Check if error is retryable
+		// No else needed: early return pattern (guard clause - non-retryable error)
 		if !isRetryableError(err) {
 			return err
 		}
 
 		lastErr = err
 
+		// No else needed: optional operation (only retry if attempts remain)
 		if attempt < defaultRetryConfig.maxAttempts {
 			s.logger.Warn("MongoDB operation failed, retrying",
 				"operation", operation,
@@ -1126,6 +1209,7 @@ func (s *StorageService) retryOperation(ctx context.Context, operation string, f
 
 			// Exponential backoff
 			delay = time.Duration(float64(delay) * defaultRetryConfig.multiplier)
+			// No else needed: optional operation (only cap if exceeds max)
 			if delay > defaultRetryConfig.maxDelay {
 				delay = defaultRetryConfig.maxDelay
 			}

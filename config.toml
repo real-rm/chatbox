@@ -12,6 +12,22 @@ jwt_secret = "PLACEHOLDER_JWT_SECRET"
 reconnect_timeout = "15m"
 max_connections = 10000
 rate_limit = 100
+
+# HTTP path prefix for all chatbox routes (default: "/chatbox")
+# Set via environment variable CHATBOX_PATH_PREFIX or config file
+# Must start with "/" (e.g., "/chatbox", "/api/chat", "/v1/chat")
+# This allows running multiple services on the same domain with different paths
+# Examples:
+#   path_prefix = "/chatbox"        # Default - all routes under /chatbox/*
+#   path_prefix = "/api/chat"       # All routes under /api/chat/*
+#   path_prefix = "/v1/chat"        # All routes under /v1/chat/*
+# Routes affected:
+#   - WebSocket: {path_prefix}/ws
+#   - User sessions: {path_prefix}/sessions
+#   - Admin endpoints: {path_prefix}/admin/*
+#   - Health checks: {path_prefix}/healthz, {path_prefix}/readyz
+path_prefix = "/chatbox"
+
 # Comma-separated list of allowed origins for WebSocket connections
 # Example: "https://example.com,https://app.example.com"
 # Leave empty to allow all origins (development mode only)

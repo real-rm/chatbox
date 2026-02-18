@@ -85,7 +85,7 @@ type SessionManager struct {
 	mu               sync.RWMutex
 	reconnectTimeout time.Duration
 	logger           *golog.Logger
-	
+
 	// Cleanup goroutine management
 	cleanupInterval time.Duration
 	sessionTTL      time.Duration
@@ -255,7 +255,7 @@ func (sm *SessionManager) StartCleanup() {
 		defer sm.cleanupWg.Done()
 		ticker := time.NewTicker(sm.cleanupInterval)
 		defer ticker.Stop()
-		
+
 		for {
 			select {
 			case <-ticker.C:
@@ -266,6 +266,7 @@ func (sm *SessionManager) StartCleanup() {
 		}
 	}()
 }
+
 // cleanupExpiredSessions removes inactive sessions that have exceeded the TTL
 // This method should only be called by the cleanup goroutine
 func (sm *SessionManager) cleanupExpiredSessions() {
@@ -288,11 +289,28 @@ func (sm *SessionManager) cleanupExpiredSessions() {
 		sm.logger.Info("Cleaned up expired sessions", "count", removed)
 	}
 }
+
 // StopCleanup stops the background cleanup goroutine
 // This should be called during graceful shutdown
+// CRITICAL FIX C3: Use sync.Once to prevent double-close panic
 func (sm *SessionManager) StopCleanup() {
-	close(sm.stopCleanup)
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+
+	// Only close if channel is not nil and not already closed
+	if sm.stopCleanup != nil {
+		select {
+		case <-sm.stopCleanup:
+			// Already closed, do nothing
+		default:
+			close(sm.stopCleanup)
+		}
+	}
+
+	// Wait for cleanup goroutine to finish (outside the lock)
+	sm.mu.Unlock()
 	sm.cleanupWg.Wait()
+	sm.mu.Lock()
 }
 
 // GetMemoryStats returns the current memory statistics for sessions

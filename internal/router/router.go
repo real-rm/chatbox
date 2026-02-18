@@ -4,13 +4,13 @@ package router
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/real-rm/chatbox/internal/constants"
 	chaterrors "github.com/real-rm/chatbox/internal/errors"
 	"github.com/real-rm/chatbox/internal/llm"
 	"github.com/real-rm/chatbox/internal/message"
@@ -18,6 +18,7 @@ import (
 	"github.com/real-rm/chatbox/internal/ratelimit"
 	"github.com/real-rm/chatbox/internal/session"
 	"github.com/real-rm/chatbox/internal/upload"
+	"github.com/real-rm/chatbox/internal/util"
 	"github.com/real-rm/chatbox/internal/websocket"
 	"github.com/real-rm/golog"
 )
@@ -69,10 +70,10 @@ type MessageRouter struct {
 // NewMessageRouter creates a new message router
 func NewMessageRouter(sessionManager *session.SessionManager, llmService LLMService, uploadService *upload.UploadService, notificationService NotificationService, storageService StorageService, llmStreamTimeout time.Duration, logger *golog.Logger) *MessageRouter {
 	routerLogger := logger.WithGroup("router")
-	
-	messageLimiter := ratelimit.NewMessageLimiter(1*time.Minute, 100) // 100 messages per minute
+
+	messageLimiter := ratelimit.NewMessageLimiter(constants.DefaultRateWindow, constants.DefaultRateLimit)
 	messageLimiter.StartCleanup()
-	
+
 	return &MessageRouter{
 		sessionManager:      sessionManager,
 		llmService:          llmService,
@@ -121,6 +122,7 @@ func (mr *MessageRouter) RouteMessage(conn *websocket.Connection, msg *message.M
 	}
 
 	// Check message rate limit for user messages
+	// No else needed: only user messages require rate limiting (optional operation)
 	if msg.Type == message.TypeUserMessage {
 		if !mr.messageLimiter.Allow(conn.UserID) {
 			retryAfter := mr.messageLimiter.GetRetryAfter(conn.UserID)
@@ -156,6 +158,7 @@ func (mr *MessageRouter) RouteMessage(conn *websocket.Connection, msg *message.M
 	}
 
 	// Handle any errors that occurred
+	// No else needed: early return pattern (guard clause)
 	if err != nil {
 		mr.HandleError(msg.SessionID, err)
 		return err // Still return the error for logging/testing
@@ -195,6 +198,7 @@ func (mr *MessageRouter) HandleUserMessage(conn *websocket.Connection, msg *mess
 		Sender:    message.SenderAI,
 		Timestamp: time.Now(),
 	}
+	// No else needed: optional operation (fire-and-forget), failure is logged but not fatal
 	if err := mr.sendToConnection(msg.SessionID, loadingMsg); err != nil {
 		mr.logger.Warn("Failed to send loading indicator", "error", err)
 	}
@@ -202,43 +206,47 @@ func (mr *MessageRouter) HandleUserMessage(conn *websocket.Connection, msg *mess
 	// Prepare messages for LLM (convert from message.Message to llm.ChatMessage)
 	llmMessages := []llm.ChatMessage{
 		{
-			Role:    "user",
+			Role:    constants.SenderUser,
 			Content: msg.Content,
 		},
 	}
 
 	// Use default model if not set
+	// No else needed: conditional assignment, value already set if condition is false
 	modelID := sess.ModelID
 	if modelID == "" {
-		modelID = "gpt-4" // Default model
+		modelID = constants.DefaultModel
 	}
 
 	// Forward to LLM service with streaming
 	// Use configured timeout for LLM streaming
+	// No else needed: conditional assignment, value already set if condition is false
 	timeout := mr.llmStreamTimeout
 	if timeout == 0 {
-		timeout = 120 * time.Second // Default 2 minutes
+		timeout = constants.DefaultLLMStreamTimeout
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	ctx, cancel := util.NewTimeoutContext(timeout)
 	defer cancel()
 
 	startTime := time.Now()
-	
+
 	// Use streaming for real-time response
 	chunkChan, err := mr.llmService.StreamMessage(ctx, modelID, llmMessages)
+	// No else needed: early return pattern (guard clause)
 	if err != nil {
 		// Check if error is due to timeout
+		// No else needed: early return pattern (guard clause)
 		if ctx.Err() == context.DeadlineExceeded {
-			mr.logger.Error("LLM streaming timeout",
+			util.LogError(mr.logger, "router", "stream LLM response", ctx.Err(),
 				"session_id", msg.SessionID,
 				"model_id", modelID,
 				"timeout", timeout,
 				"elapsed", time.Since(startTime))
-			
+
 			// Create timeout-specific error
 			timeoutErr := chaterrors.ErrLLMTimeout(timeout)
-			
+
 			// Send timeout error response to client
 			errorMsg := &message.Message{
 				Type:      message.TypeError,
@@ -249,15 +257,14 @@ func (mr *MessageRouter) HandleUserMessage(conn *websocket.Connection, msg *mess
 			}
 			return mr.sendToConnection(msg.SessionID, errorMsg)
 		}
-		
-		mr.logger.Error("LLM service error",
+
+		util.LogError(mr.logger, "router", "call LLM service", err,
 			"session_id", msg.SessionID,
-			"model_id", modelID,
-			"error", err)
-		
+			"model_id", modelID)
+
 		// Create appropriate error based on the failure
 		llmErr := chaterrors.ErrLLMUnavailable(err)
-		
+
 		// Send error response to client
 		errorMsg := &message.Message{
 			Type:      message.TypeError,
@@ -272,16 +279,17 @@ func (mr *MessageRouter) HandleUserMessage(conn *websocket.Connection, msg *mess
 	// Stream response chunks to client
 	var fullContent strings.Builder
 	var tokenCount int
-	
+
 	for chunk := range chunkChan {
 		// Check if context has timed out during streaming
+		// No else needed: early return pattern (guard clause)
 		if ctx.Err() == context.DeadlineExceeded {
-			mr.logger.Error("LLM streaming timeout during chunk processing",
+			util.LogError(mr.logger, "router", "process LLM streaming chunk", ctx.Err(),
 				"session_id", msg.SessionID,
 				"model_id", modelID,
 				"timeout", timeout,
 				"elapsed", time.Since(startTime))
-			
+
 			// Send timeout error to client
 			timeoutErr := chaterrors.ErrLLMTimeout(timeout)
 			errorMsg := &message.Message{
@@ -294,10 +302,11 @@ func (mr *MessageRouter) HandleUserMessage(conn *websocket.Connection, msg *mess
 			mr.sendToConnection(msg.SessionID, errorMsg)
 			return ctx.Err()
 		}
-		
+
+		// No else needed: optional operation, only process non-empty chunks
 		if chunk.Content != "" {
 			fullContent.WriteString(chunk.Content)
-			
+
 			// Send chunk to client
 			chunkMsg := &message.Message{
 				Type:      message.TypeAIResponse,
@@ -311,15 +320,17 @@ func (mr *MessageRouter) HandleUserMessage(conn *websocket.Connection, msg *mess
 					"done":      fmt.Sprintf("%t", chunk.Done),
 				},
 			}
-			
+
+			// No else needed: optional operation (fire-and-forget), failure is logged but not fatal
 			if err := mr.sendToConnection(msg.SessionID, chunkMsg); err != nil {
 				mr.logger.Warn("Failed to send chunk to client",
 					"session_id", msg.SessionID,
 					"error", err)
 			}
 		}
-		
+
 		// If this is the final chunk, break
+		// No else needed: loop continues to next iteration if not done
 		if chunk.Done {
 			break
 		}
@@ -330,8 +341,9 @@ func (mr *MessageRouter) HandleUserMessage(conn *websocket.Connection, msg *mess
 	mr.sessionManager.RecordResponseTime(msg.SessionID, responseTime)
 
 	// Estimate token usage (rough estimate: ~4 chars per token)
+	// No else needed: optional operation, only update if there's content
 	if fullContent.Len() > 0 {
-		tokenCount = fullContent.Len() / 4
+		tokenCount = fullContent.Len() / constants.CharsPerToken
 		mr.sessionManager.UpdateTokenUsage(msg.SessionID, tokenCount)
 	}
 
@@ -356,7 +368,7 @@ func (mr *MessageRouter) handleHelpRequest(conn *websocket.Connection, msg *mess
 	sess, err := mr.sessionManager.GetSession(msg.SessionID)
 	if err != nil {
 		return chaterrors.NewValidationError(
-			chaterrors.ErrCodeMissingField,
+			chaterrors.ErrCodeNotFound,
 			"Session not found",
 			err,
 		)
@@ -364,7 +376,7 @@ func (mr *MessageRouter) handleHelpRequest(conn *websocket.Connection, msg *mess
 
 	// Mark session as requiring assistance
 	if err := mr.sessionManager.MarkHelpRequested(msg.SessionID); err != nil {
-		mr.logger.Error("Failed to mark help requested", "error", err, "session_id", msg.SessionID)
+		util.LogError(mr.logger, "router", "mark help requested", err, "session_id", msg.SessionID)
 		return chaterrors.ErrDatabaseError(err)
 	}
 
@@ -373,11 +385,12 @@ func (mr *MessageRouter) handleHelpRequest(conn *websocket.Connection, msg *mess
 		"user_id", sess.UserID)
 
 	// Send notification to admins
+	// No else needed: optional operation (fire-and-forget), only send if service is available
 	if mr.notificationService != nil {
 		go func() {
+			// No else needed: optional operation (fire-and-forget), failure is logged but not fatal
 			if err := mr.notificationService.SendHelpRequestAlert(sess.UserID, msg.SessionID); err != nil {
-				mr.logger.Error("Failed to send help request notification",
-					"error", err,
+				util.LogError(mr.logger, "router", "send help request notification", err,
 					"session_id", msg.SessionID,
 					"user_id", sess.UserID)
 			}
@@ -395,15 +408,32 @@ func (mr *MessageRouter) handleHelpRequest(conn *websocket.Connection, msg *mess
 
 	return mr.sendToConnection(msg.SessionID, response)
 }
+
 // getOrCreateSession retrieves an existing session or creates a new one if not found
+// SECURITY: Enforces session ownership - users can only access their own sessions
 func (mr *MessageRouter) getOrCreateSession(conn *websocket.Connection, sessionID string) (*session.Session, error) {
 	// Try to get existing session
 	sess, err := mr.sessionManager.GetSession(sessionID)
+	// No else needed: early return pattern (guard clause)
 	if err == nil {
-		return sess, nil // Session exists
+		// CRITICAL FIX C1: Verify session ownership to prevent IDOR
+		// No else needed: early return pattern (guard clause)
+		if sess.UserID != conn.UserID {
+			mr.logger.Warn("Session ownership violation attempt",
+				"session_id", sessionID,
+				"session_owner", sess.UserID,
+				"requesting_user", conn.UserID)
+			return nil, chaterrors.NewValidationError(
+				chaterrors.ErrCodeUnauthorized,
+				"You do not have permission to access this session",
+				nil,
+			)
+		}
+		return sess, nil // Session exists and belongs to user
 	}
 
 	// Session not found - create new one
+	// No else needed: early return pattern (guard clause)
 	if errors.Is(err, session.ErrSessionNotFound) {
 		return mr.createNewSession(conn, sessionID)
 	}
@@ -430,7 +460,6 @@ func (mr *MessageRouter) createNewSession(conn *websocket.Connection, sessionID 
 	return sess, nil
 }
 
-
 // handleModelSelection processes model selection messages
 func (mr *MessageRouter) handleModelSelection(conn *websocket.Connection, msg *message.Message) error {
 	if conn == nil {
@@ -454,7 +483,7 @@ func (mr *MessageRouter) handleModelSelection(conn *websocket.Connection, msg *m
 	_, err := mr.sessionManager.GetSession(msg.SessionID)
 	if err != nil {
 		return chaterrors.NewValidationError(
-			chaterrors.ErrCodeMissingField,
+			chaterrors.ErrCodeNotFound,
 			"Session not found",
 			err,
 		)
@@ -502,7 +531,7 @@ func (mr *MessageRouter) handleFileUpload(conn *websocket.Connection, msg *messa
 	sess, err := mr.sessionManager.GetSession(msg.SessionID)
 	if err != nil {
 		return chaterrors.NewValidationError(
-			chaterrors.ErrCodeMissingField,
+			chaterrors.ErrCodeNotFound,
 			"Session not found",
 			err,
 		)
@@ -526,7 +555,7 @@ func (mr *MessageRouter) handleFileUpload(conn *websocket.Connection, msg *messa
 
 	// Store file upload message in session
 	if err := mr.sessionManager.AddMessage(msg.SessionID, sessionMsg); err != nil {
-		mr.logger.Error("Failed to store file upload message", "error", err, "session_id", msg.SessionID)
+		util.LogError(mr.logger, "router", "store file upload message", err, "session_id", msg.SessionID)
 		return chaterrors.ErrDatabaseError(err)
 	}
 
@@ -542,6 +571,7 @@ func (mr *MessageRouter) handleFileUpload(conn *websocket.Connection, msg *messa
 		Timestamp: time.Now(),
 	}
 
+	// No else needed: optional operation (fire-and-forget), failure is logged but not fatal
 	if err := mr.BroadcastToSession(msg.SessionID, notification); err != nil {
 		mr.logger.Warn("Failed to broadcast file upload", "error", err, "session_id", msg.SessionID)
 	}
@@ -572,7 +602,7 @@ func (mr *MessageRouter) handleVoiceMessage(conn *websocket.Connection, msg *mes
 	sess, err := mr.sessionManager.GetSession(msg.SessionID)
 	if err != nil {
 		return chaterrors.NewValidationError(
-			chaterrors.ErrCodeMissingField,
+			chaterrors.ErrCodeNotFound,
 			"Session not found",
 			err,
 		)
@@ -596,7 +626,7 @@ func (mr *MessageRouter) handleVoiceMessage(conn *websocket.Connection, msg *mes
 
 	// Store voice message in session
 	if err := mr.sessionManager.AddMessage(msg.SessionID, sessionMsg); err != nil {
-		mr.logger.Error("Failed to store voice message", "error", err, "session_id", msg.SessionID)
+		util.LogError(mr.logger, "router", "store voice message", err, "session_id", msg.SessionID)
 		return chaterrors.ErrDatabaseError(err)
 	}
 
@@ -612,11 +642,13 @@ func (mr *MessageRouter) handleVoiceMessage(conn *websocket.Connection, msg *mes
 		Timestamp: time.Now(),
 	}
 
+	// No else needed: optional operation (fire-and-forget), failure is logged but not fatal
 	if err := mr.BroadcastToSession(msg.SessionID, notification); err != nil {
 		mr.logger.Warn("Failed to broadcast voice message", "error", err, "session_id", msg.SessionID)
 	}
 
 	// Forward audio file reference to LLM for transcription/processing if LLM service is available
+	// No else needed: optional operation (fire-and-forget), only process if LLM service is available
 	if mr.llmService != nil && sess.ModelID != "" {
 		go mr.processVoiceMessageWithLLM(msg.SessionID, msg.FileURL, sess.ModelID)
 	}
@@ -626,14 +658,14 @@ func (mr *MessageRouter) handleVoiceMessage(conn *websocket.Connection, msg *mes
 
 // processVoiceMessageWithLLM forwards the voice message to LLM for transcription
 func (mr *MessageRouter) processVoiceMessageWithLLM(sessionID string, audioFileURL string, modelID string) {
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	ctx, cancel := util.NewTimeoutContext(constants.VoiceProcessTimeout)
 	defer cancel()
 
 	// Create a message indicating the audio file for the LLM
 	// Note: The actual transcription capability depends on the LLM provider
 	llmMessages := []llm.ChatMessage{
 		{
-			Role:    "user",
+			Role:    constants.SenderUser,
 			Content: fmt.Sprintf("Audio file: %s", audioFileURL),
 		},
 	}
@@ -645,14 +677,15 @@ func (mr *MessageRouter) processVoiceMessageWithLLM(sessionID string, audioFileU
 
 	// Send to LLM for processing
 	resp, err := mr.llmService.SendMessage(ctx, modelID, llmMessages)
+	// No else needed: early return pattern (guard clause)
 	if err != nil {
-		mr.logger.Error("Failed to process voice message with LLM",
-			"error", err,
+		util.LogError(mr.logger, "router", "process voice message with LLM", err,
 			"session_id", sessionID)
 		return
 	}
 
 	// If LLM provides a response (transcription or processing result), send it back
+	// No else needed: optional operation, only send if there's content
 	if resp.Content != "" {
 		aiMessage := &message.Message{
 			Type:      message.TypeAIResponse,
@@ -668,21 +701,25 @@ func (mr *MessageRouter) processVoiceMessageWithLLM(sessionID string, audioFileU
 			Timestamp: time.Now(),
 			Sender:    string(message.SenderAI),
 		}
+		// No else needed: optional operation (fire-and-forget), failure is logged but not fatal
 		if err := mr.sessionManager.AddMessage(sessionID, sessionMsg); err != nil {
-			mr.logger.Error("Failed to store AI response", "error", err, "session_id", sessionID)
+			util.LogError(mr.logger, "router", "store AI response", err, "session_id", sessionID)
 		}
 
 		// Broadcast AI response
+		// No else needed: optional operation (fire-and-forget), failure is logged but not fatal
 		if err := mr.BroadcastToSession(sessionID, aiMessage); err != nil {
 			mr.logger.Warn("Failed to broadcast AI response", "error", err, "session_id", sessionID)
 		}
 
 		// Update token usage
+		// No else needed: optional operation (fire-and-forget), failure is logged but not fatal
 		if err := mr.sessionManager.UpdateTokenUsage(sessionID, resp.TokensUsed); err != nil {
 			mr.logger.Warn("Failed to update token usage", "error", err, "session_id", sessionID)
 		}
 
 		// Record response time
+		// No else needed: optional operation (fire-and-forget), failure is logged but not fatal
 		if err := mr.sessionManager.RecordResponseTime(sessionID, resp.Duration); err != nil {
 			mr.logger.Warn("Failed to record response time", "error", err, "session_id", sessionID)
 		}
@@ -732,7 +769,7 @@ func (mr *MessageRouter) HandleAIGeneratedFile(sessionID string, fileURL string,
 	_, err := mr.sessionManager.GetSession(sessionID)
 	if err != nil {
 		return chaterrors.NewValidationError(
-			chaterrors.ErrCodeMissingField,
+			chaterrors.ErrCodeNotFound,
 			"Session not found",
 			err,
 		)
@@ -754,7 +791,7 @@ func (mr *MessageRouter) HandleAIGeneratedFile(sessionID string, fileURL string,
 
 	// Store AI message in session
 	if err := mr.sessionManager.AddMessage(sessionID, sessionMsg); err != nil {
-		mr.logger.Error("Failed to store AI generated file message", "error", err, "session_id", sessionID)
+		util.LogError(mr.logger, "router", "store AI generated file message", err, "session_id", sessionID)
 		return chaterrors.ErrDatabaseError(err)
 	}
 
@@ -770,6 +807,7 @@ func (mr *MessageRouter) HandleAIGeneratedFile(sessionID string, fileURL string,
 	}
 
 	// Broadcast to all session participants
+	// No else needed: optional operation (fire-and-forget), failure is logged but not fatal
 	if err := mr.BroadcastToSession(sessionID, aiMessage); err != nil {
 		mr.logger.Warn("Failed to broadcast AI generated file", "error", err, "session_id", sessionID)
 	}
@@ -792,7 +830,7 @@ func (mr *MessageRouter) HandleAIVoiceResponse(sessionID string, audioFileURL st
 	_, err := mr.sessionManager.GetSession(sessionID)
 	if err != nil {
 		return chaterrors.NewValidationError(
-			chaterrors.ErrCodeMissingField,
+			chaterrors.ErrCodeNotFound,
 			"Session not found",
 			err,
 		)
@@ -814,7 +852,7 @@ func (mr *MessageRouter) HandleAIVoiceResponse(sessionID string, audioFileURL st
 
 	// Store AI voice message in session
 	if err := mr.sessionManager.AddMessage(sessionID, sessionMsg); err != nil {
-		mr.logger.Error("Failed to store AI voice response", "error", err, "session_id", sessionID)
+		util.LogError(mr.logger, "router", "store AI voice response", err, "session_id", sessionID)
 		return chaterrors.ErrDatabaseError(err)
 	}
 
@@ -830,6 +868,7 @@ func (mr *MessageRouter) HandleAIVoiceResponse(sessionID string, audioFileURL st
 	}
 
 	// Broadcast to all session participants
+	// No else needed: optional operation (fire-and-forget), failure is logged but not fatal
 	if err := mr.BroadcastToSession(sessionID, aiMessage); err != nil {
 		mr.logger.Warn("Failed to broadcast AI voice response", "error", err, "session_id", sessionID)
 	}
@@ -843,12 +882,13 @@ func (mr *MessageRouter) sendToConnection(sessionID string, msg *message.Message
 	conn, exists := mr.connections[sessionID]
 	mr.mu.RUnlock()
 
+	// No else needed: early return pattern (guard clause)
 	if !exists {
 		return fmt.Errorf("%w: session %s", ErrConnectionNotFound, sessionID)
 	}
 
 	// Marshal message to JSON
-	data, err := json.Marshal(msg)
+	data, err := util.MarshalJSON(msg)
 	if err != nil {
 		return fmt.Errorf("failed to marshal message: %w", err)
 	}
@@ -876,25 +916,29 @@ func (mr *MessageRouter) BroadcastToSession(sessionID string, msg *message.Messa
 	sess, err := mr.sessionManager.GetSession(sessionID)
 	if err != nil {
 		return chaterrors.NewValidationError(
-			chaterrors.ErrCodeMissingField,
+			chaterrors.ErrCodeNotFound,
 			"Session not found",
 			err,
 		)
 	}
 
 	// Send to user connection
+	// No else needed: optional operation (fire-and-forget), failure is logged but not fatal
 	if err := mr.sendToConnection(sessionID, msg); err != nil {
 		mr.logger.Warn("Failed to send to user connection", "error", err, "session_id", sessionID)
 	}
 
 	// If admin is assisting, send to admin connection too
+	// No else needed: optional operation, only send if admin is assisting
 	if sess.AssistingAdminID != "" {
 		mr.mu.RLock()
 		adminConn, exists := mr.adminConns[sess.AssistingAdminID]
 		mr.mu.RUnlock()
 
+		// No else needed: optional operation, only send if admin connection exists
 		if exists {
-			data, err := json.Marshal(msg)
+			data, err := util.MarshalJSON(msg)
+			// No else needed: early return pattern (guard clause)
 			if err != nil {
 				return chaterrors.ErrInvalidMessageFormat("failed to marshal message", err)
 			}
@@ -916,6 +960,7 @@ func (mr *MessageRouter) GetConnection(sessionID string) (*websocket.Connection,
 	defer mr.mu.RUnlock()
 
 	conn, exists := mr.connections[sessionID]
+	// No else needed: early return pattern (guard clause)
 	if !exists {
 		return nil, fmt.Errorf("%w: session %s", ErrConnectionNotFound, sessionID)
 	}
@@ -937,7 +982,7 @@ func (mr *MessageRouter) HandleAdminTakeover(adminConn *websocket.Connection, se
 	sess, err := mr.sessionManager.GetSession(sessionID)
 	if err != nil {
 		return chaterrors.NewValidationError(
-			chaterrors.ErrCodeMissingField,
+			chaterrors.ErrCodeNotFound,
 			"Session not found",
 			err,
 		)
@@ -954,6 +999,7 @@ func (mr *MessageRouter) HandleAdminTakeover(adminConn *websocket.Connection, se
 	}
 
 	// Get admin name from connection (extracted from JWT claims)
+	// No else needed: conditional assignment, value already set if condition is false
 	adminName := adminConn.Name
 	if adminName == "" {
 		adminName = adminConn.UserID // Fallback to user ID if name not available
@@ -961,7 +1007,7 @@ func (mr *MessageRouter) HandleAdminTakeover(adminConn *websocket.Connection, se
 
 	// Mark session as admin-assisted
 	if err := mr.sessionManager.MarkAdminAssisted(sessionID, adminConn.UserID, adminName); err != nil {
-		mr.logger.Error("Failed to mark admin assisted", "error", err, "session_id", sessionID)
+		util.LogError(mr.logger, "router", "mark admin assisted", err, "session_id", sessionID)
 		return chaterrors.ErrDatabaseError(err)
 	}
 
@@ -969,7 +1015,7 @@ func (mr *MessageRouter) HandleAdminTakeover(adminConn *websocket.Connection, se
 	mr.mu.Lock()
 	mr.adminConns[adminConn.UserID] = adminConn
 	mr.mu.Unlock()
-	
+
 	// Increment admin takeover metric
 	metrics.AdminTakeovers.Inc()
 
@@ -992,6 +1038,7 @@ func (mr *MessageRouter) HandleAdminTakeover(adminConn *websocket.Connection, se
 		},
 	}
 
+	// No else needed: optional operation (fire-and-forget), failure is logged but not fatal
 	if err := mr.BroadcastToSession(sessionID, adminJoinMsg); err != nil {
 		mr.logger.Warn("Failed to broadcast admin join message", "error", err, "session_id", sessionID)
 	}
@@ -1012,7 +1059,7 @@ func (mr *MessageRouter) HandleAdminLeave(adminID, sessionID string) error {
 	sess, err := mr.sessionManager.GetSession(sessionID)
 	if err != nil {
 		return chaterrors.NewValidationError(
-			chaterrors.ErrCodeMissingField,
+			chaterrors.ErrCodeNotFound,
 			"Session not found",
 			err,
 		)
@@ -1031,7 +1078,7 @@ func (mr *MessageRouter) HandleAdminLeave(adminID, sessionID string) error {
 
 	// Clear admin assistance
 	if err := mr.sessionManager.ClearAdminAssistance(sessionID); err != nil {
-		mr.logger.Error("Failed to clear admin assistance", "error", err, "session_id", sessionID)
+		util.LogError(mr.logger, "router", "clear admin assistance", err, "session_id", sessionID)
 		return chaterrors.ErrDatabaseError(err)
 	}
 
@@ -1059,6 +1106,7 @@ func (mr *MessageRouter) HandleAdminLeave(adminID, sessionID string) error {
 		},
 	}
 
+	// No else needed: optional operation (fire-and-forget), failure is logged but not fatal
 	if err := mr.sendToConnection(sessionID, adminLeaveMsg); err != nil {
 		mr.logger.Warn("Failed to send admin leave message", "error", err, "session_id", sessionID)
 	}
@@ -1093,12 +1141,14 @@ func (mr *MessageRouter) UnregisterAdminConnection(adminID string) {
 // HandleError handles errors by sending appropriate error messages to the client
 // For fatal errors, it closes the connection after sending the error message
 func (mr *MessageRouter) HandleError(sessionID string, err error) error {
+	// No else needed: early return pattern (guard clause)
 	if err == nil {
 		return nil
 	}
 
 	// Check if it's a ChatError
 	var chatErr *chaterrors.ChatError
+	// No else needed: early return pattern (guard clause)
 	if errors.As(err, &chatErr) {
 		return mr.handleChatError(sessionID, chatErr)
 	}
@@ -1134,6 +1184,7 @@ func (mr *MessageRouter) handleChatError(sessionID string, chatErr *chaterrors.C
 	}
 
 	// Send error message to client
+	// No else needed: optional operation (fire-and-forget), failure is logged but not fatal
 	if err := mr.sendToConnection(sessionID, errorMsg); err != nil {
 		mr.logger.Warn("Failed to send error message to client",
 			"session_id", sessionID,
@@ -1141,6 +1192,7 @@ func (mr *MessageRouter) handleChatError(sessionID string, chatErr *chaterrors.C
 	}
 
 	// If fatal error, close the connection
+	// No else needed: optional operation, only close connection for fatal errors
 	if chatErr.IsFatal() {
 		mr.logger.Info("Fatal error, closing connection",
 			"session_id", sessionID,
@@ -1151,11 +1203,13 @@ func (mr *MessageRouter) handleChatError(sessionID string, chatErr *chaterrors.C
 		conn, exists := mr.connections[sessionID]
 		mr.mu.RUnlock()
 
+		// No else needed: optional operation, only close if connection exists
 		if exists {
 			// Give a brief moment for the error message to be sent
-			time.Sleep(100 * time.Millisecond)
+			time.Sleep(constants.InitialRetryDelay)
 
 			// Close the connection
+			// No else needed: optional operation (fire-and-forget), failure is logged but not fatal
 			if err := conn.Close(); err != nil {
 				mr.logger.Warn("Failed to close connection",
 					"session_id", sessionID,

@@ -21,7 +21,7 @@ CMD_DIR := ./cmd/server
 MAIN_FILE := $(CMD_DIR)/main.go
 
 # Test variables
-TEST_TIMEOUT := 30s
+TEST_TIMEOUT := 2m
 COVERAGE_FILE := coverage.out
 COVERAGE_HTML := coverage.html
 

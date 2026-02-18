@@ -30,7 +30,7 @@ func TestIntegration_SessionCreationFlow(t *testing.T) {
 
 		// Connect as new user
 		conn := mockConnection("user-new-123")
-		
+
 		// First, create a session to get a valid session ID
 		sess, err := router.getOrCreateSession(conn, "any-id")
 		require.NoError(t, err)
@@ -221,7 +221,7 @@ func TestIntegration_SessionCreationWithMessages(t *testing.T) {
 
 		// Create connection
 		conn := mockConnection("user-msg-123")
-		
+
 		// Create session first
 		sess, err := router.getOrCreateSession(conn, "any-id")
 		require.NoError(t, err)
@@ -267,7 +267,7 @@ func TestIntegration_SessionCreationWithMessages(t *testing.T) {
 
 		// Create connection
 		conn := mockConnection("user-msg-456")
-		
+
 		// Create session
 		sess, err := router.getOrCreateSession(conn, "any-id")
 		require.NoError(t, err)

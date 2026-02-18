@@ -34,10 +34,10 @@ func TestMessageFraming_SeparateFrames(t *testing.T) {
 			if err != nil {
 				return
 			}
-			
+
 			// Verify it's a text message
 			assert.Equal(t, websocket.TextMessage, messageType)
-			
+
 			// Store the frame data
 			receivedFrames = append(receivedFrames, string(data))
 			frameReceived <- true
@@ -184,7 +184,7 @@ func TestMessageFraming_NoNewlineConcatenation(t *testing.T) {
 
 	// Verify the concatenated data does NOT contain newlines between messages
 	dataStr := string(receivedData)
-	
+
 	// The data should be two separate JSON objects concatenated directly
 	// (because we read them into the same buffer), but each was sent in a separate frame
 	// We verify that there's no newline character used as a separator

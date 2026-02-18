@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/real-rm/chatbox/internal/util"
 	"github.com/real-rm/goconfig"
 	"github.com/real-rm/golog"
 	"github.com/real-rm/gomail"
@@ -178,7 +179,7 @@ func (ns *NotificationService) SendHelpRequestAlert(userID, sessionID string) er
 		// Use SendWithRetry for automatic failover
 		engines := ns.mailer.GetEngineNames()
 		if err := ns.mailer.SendWithRetry(engines, msg); err != nil {
-			ns.logger.Error("Failed to send help request email", "error", err, "session_id", sessionID)
+			util.LogError(ns.logger, "notification", "send help request email", err, "session_id", sessionID)
 			return fmt.Errorf("failed to send email: %w", err)
 		}
 
@@ -203,7 +204,7 @@ func (ns *NotificationService) SendHelpRequestAlert(userID, sessionID string) er
 			}
 
 			if err := ns.smsSender.Send(opt); err != nil {
-				ns.logger.Error("Failed to send help request SMS", "error", err, "phone", phone)
+				util.LogError(ns.logger, "notification", "send help request SMS", err, "phone", phone)
 				// Continue to next phone number
 			} else {
 				ns.logger.Info("Help request SMS sent", "phone", phone)
@@ -257,7 +258,7 @@ func (ns *NotificationService) SendCriticalError(errorType, details string, affe
 		// Use SendWithRetry for automatic failover - critical errors need high reliability
 		engines := ns.mailer.GetEngineNames()
 		if err := ns.mailer.SendWithRetry(engines, msg); err != nil {
-			ns.logger.Error("Failed to send critical error email", "error", err, "error_type", errorType)
+			util.LogError(ns.logger, "notification", "send critical error email", err, "error_type", errorType)
 			return fmt.Errorf("failed to send email: %w", err)
 		}
 
@@ -282,7 +283,7 @@ func (ns *NotificationService) SendCriticalError(errorType, details string, affe
 			}
 
 			if err := ns.smsSender.Send(opt); err != nil {
-				ns.logger.Error("Failed to send critical error SMS", "error", err, "phone", phone)
+				util.LogError(ns.logger, "notification", "send critical error SMS", err, "phone", phone)
 				// Continue to next phone number
 			} else {
 				ns.logger.Info("Critical error SMS sent", "phone", phone)
@@ -328,7 +329,7 @@ func (ns *NotificationService) SendSystemAlert(subject, message string) error {
 	}
 
 	if err := ns.mailer.SendMail(engines[0], msg); err != nil {
-		ns.logger.Error("Failed to send system alert email", "error", err, "subject", subject)
+		util.LogError(ns.logger, "notification", "send system alert email", err, "subject", subject)
 		return fmt.Errorf("failed to send email: %w", err)
 	}
 

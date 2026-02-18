@@ -42,7 +42,7 @@ func TestEncryptionRoundTrip_CompleteFlow(t *testing.T) {
 			content: "Unicode: 你好世界 🌍 مرحبا العالم",
 		},
 		{
-			name:    "Long message",
+			name: "Long message",
 			content: "This is a much longer message that contains multiple sentences. " +
 				"It should still be encrypted and decrypted correctly. " +
 				"The encryption should handle arbitrary length messages without issues. " +
@@ -72,7 +72,7 @@ func TestEncryptionRoundTrip_CompleteFlow(t *testing.T) {
 			// Step 1: Encrypt the message
 			encrypted, err := service.encrypt(tc.content)
 			require.NoError(t, err, "Encryption should not fail")
-			
+
 			// Verify encryption actually happened (unless empty)
 			if tc.content != "" {
 				assert.NotEqual(t, tc.content, encrypted, "Encrypted content should differ from plaintext")
@@ -317,7 +317,7 @@ func TestEncryptionRoundTrip_KeyLength(t *testing.T) {
 				assert.Error(t, err, "Encryption with invalid key length should fail")
 			} else {
 				assert.NoError(t, err, "Encryption with valid key length should succeed")
-				
+
 				// Verify decryption works
 				decrypted, err := service.decrypt(encrypted)
 				assert.NoError(t, err)

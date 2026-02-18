@@ -31,12 +31,14 @@ const (
 	ErrCodeInvalidToken      ErrorCode = "INVALID_TOKEN"
 	ErrCodeExpiredToken      ErrorCode = "EXPIRED_TOKEN"
 	ErrCodeInsufficientPerms ErrorCode = "INSUFFICIENT_PERMISSIONS"
+	ErrCodeUnauthorized      ErrorCode = "UNAUTHORIZED" // CRITICAL FIX M5: Add proper error code
 
 	// Validation errors
 	ErrCodeInvalidFormat   ErrorCode = "INVALID_FORMAT"
 	ErrCodeMissingField    ErrorCode = "MISSING_FIELD"
 	ErrCodeInvalidFileType ErrorCode = "INVALID_FILE_TYPE"
 	ErrCodeInvalidFileSize ErrorCode = "INVALID_FILE_SIZE"
+	ErrCodeNotFound        ErrorCode = "NOT_FOUND" // CRITICAL FIX M5: Add proper error code
 
 	// Service errors
 	ErrCodeLLMUnavailable ErrorCode = "LLM_UNAVAILABLE"
@@ -178,7 +180,7 @@ func ErrLLMUnavailable(cause error) *ChatError {
 
 // ErrLLMTimeout creates an LLM timeout error
 func ErrLLMTimeout(timeout time.Duration) *ChatError {
-	return NewServiceError(ErrCodeLLMTimeout, 
+	return NewServiceError(ErrCodeLLMTimeout,
 		fmt.Sprintf("AI service request timed out after %v", timeout), nil)
 }
 
@@ -202,4 +204,15 @@ func ErrTooManyRequests(retryAfter int) *ChatError {
 func ErrConnectionLimitExceeded(retryAfter int) *ChatError {
 	return NewRateLimitError(ErrCodeConnectionLimit,
 		"Connection limit exceeded, please try again later", retryAfter, nil)
+}
+
+// ErrNotFound creates a not found error (CRITICAL FIX M5)
+func ErrNotFound(resourceType string) *ChatError {
+	return NewValidationError(ErrCodeNotFound,
+		fmt.Sprintf("%s not found", resourceType), nil)
+}
+
+// ErrUnauthorized creates an unauthorized access error (CRITICAL FIX M5)
+func ErrUnauthorized(message string) *ChatError {
+	return NewAuthError(ErrCodeUnauthorized, message, nil)
 }

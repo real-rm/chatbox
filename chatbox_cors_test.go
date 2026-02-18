@@ -34,7 +34,7 @@ func TestCORSConfiguration(t *testing.T) {
 		// Test that the configuration key exists and can be read
 		corsOrigins, err := config.ConfigStringWithDefault("chatbox.cors_allowed_origins", "")
 		assert.NoError(t, err)
-		
+
 		// The default config.toml has empty cors_allowed_origins
 		// This test verifies the configuration can be read
 		assert.NotNil(t, corsOrigins)
@@ -45,7 +45,7 @@ func TestCORSConfiguration(t *testing.T) {
 		// Test that the configuration can be parsed as expected
 		corsOriginsStr, err := config.ConfigStringWithDefault("chatbox.cors_allowed_origins", "")
 		assert.NoError(t, err)
-		
+
 		// If empty, CORS middleware should not be enabled
 		if corsOriginsStr == "" {
 			t.Log("No CORS origins configured - CORS middleware disabled")
@@ -68,7 +68,7 @@ func TestCORSMiddlewareIntegration(t *testing.T) {
 		// Manually apply CORS middleware for testing
 		// This simulates what happens in Register() when cors_allowed_origins is configured
 		// We'll test with a simple configuration
-		
+
 		// Add a test endpoint
 		router.GET("/test", func(c *gin.Context) {
 			c.JSON(200, gin.H{"message": "test"})
@@ -78,7 +78,7 @@ func TestCORSMiddlewareIntegration(t *testing.T) {
 		req := httptest.NewRequest("GET", "/test", nil)
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, req)
-		
+
 		assert.Equal(t, http.StatusOK, w.Code)
 		t.Log("✓ Endpoint responds successfully")
 	})
@@ -86,7 +86,7 @@ func TestCORSMiddlewareIntegration(t *testing.T) {
 	t.Run("CORS preflight requests", func(t *testing.T) {
 		// Document that CORS preflight (OPTIONS) requests should be handled
 		// when CORS middleware is configured
-		
+
 		t.Log("CORS Preflight Request Handling:")
 		t.Log("- When cors_allowed_origins is configured, gin-contrib/cors middleware is applied")
 		t.Log("- Preflight OPTIONS requests are automatically handled by the middleware")

@@ -7,6 +7,18 @@ This directory contains comprehensive documentation for the Chatbox WebSocket ap
 - [DEPLOYMENT.md](../DEPLOYMENT.md) - Deployment instructions and Docker setup
 - [SECRET_SETUP_QUICKSTART.md](SECRET_SETUP_QUICKSTART.md) - Quick guide to setting up secrets
 
+## Architecture & Code Quality
+
+The chatbox application follows strict code quality standards:
+
+- **No Magic Numbers/Strings**: All constants centralized in `internal/constants/`
+- **DRY Principle**: Common functionality in `internal/util/` package
+- **High Test Coverage**: 80%+ coverage with unit, property-based, and integration tests
+- **Documented Patterns**: All code patterns clearly documented
+- **Clean Architecture**: Clear separation of concerns across packages
+
+See [CODE_QUALITY.md](CODE_QUALITY.md) for comprehensive code quality documentation and [DEPLOYMENT.md](../DEPLOYMENT.md#code-quality-and-architecture) for deployment implications.
+
 ## Production Readiness
 
 - [PRODUCTION_READINESS_PLAN.md](PRODUCTION_READINESS_PLAN.md) - Complete production readiness review
@@ -18,6 +30,7 @@ This directory contains comprehensive documentation for the Chatbox WebSocket ap
 - [PRIVATE_REGISTRY_SETUP.md](PRIVATE_REGISTRY_SETUP.md) - Private Go module registry configuration
 - [SECRET_MANAGEMENT.md](SECRET_MANAGEMENT.md) - Secret management best practices
 - [KEY_MANAGEMENT.md](KEY_MANAGEMENT.md) - Encryption key management
+- [CODE_QUALITY.md](CODE_QUALITY.md) - Code quality standards and best practices
 
 ## Features & Components
 

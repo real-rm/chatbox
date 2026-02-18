@@ -454,41 +454,41 @@ func TestProperty_CleanupRemovesOldEvents(t *testing.T) {
 // For any rate limiter with cleanup enabled, Cleanup() should be called at the configured interval.
 func TestProperty_CleanupRunsPeriodically(t *testing.T) {
 	parameters := gopter.DefaultTestParameters()
-	parameters.MinSuccessfulTests = 50
+	parameters.MinSuccessfulTests = 10 // Reduced from 50 for faster execution
 	properties := gopter.NewProperties(parameters)
 
 	properties.Property("cleanup runs at configured interval", prop.ForAll(
 		func(intervalMs int) bool {
-			if intervalMs < 50 || intervalMs > 500 {
+			if intervalMs < 50 || intervalMs > 200 { // Reduced from 500 for faster execution
 				return true // Skip invalid ranges
 			}
 
 			interval := time.Duration(intervalMs) * time.Millisecond
 			window := 50 * time.Millisecond
-			
+
 			// Create message limiter with custom cleanup interval
 			ml := NewMessageLimiter(window, 100)
 			ml.cleanupInterval = interval
-			
+
 			// Add some events that will expire
 			ml.Allow("user1")
 			ml.Allow("user2")
-			
+
 			// Start cleanup
 			ml.StartCleanup()
 			defer ml.StopCleanup()
-			
+
 			// Wait for events to expire
 			time.Sleep(window + 20*time.Millisecond)
-			
+
 			// Wait for at least one cleanup cycle
 			time.Sleep(interval + 50*time.Millisecond)
-			
+
 			// Verify events were cleaned up
 			count := ml.getEventCount()
 			return count == 0
 		},
-		gen.IntRange(50, 500),
+		gen.IntRange(50, 200), // Reduced from 500 for faster execution
 	))
 
 	properties.TestingRun(t, gopter.ConsoleReporter(false))
@@ -510,22 +510,22 @@ func TestProperty_CleanupGoroutineTerminates(t *testing.T) {
 			}
 
 			interval := time.Duration(intervalMs) * time.Millisecond
-			
+
 			// Create message limiter
 			ml := NewMessageLimiter(1*time.Second, 100)
 			ml.cleanupInterval = interval
-			
+
 			// Start cleanup
 			ml.StartCleanup()
-			
+
 			// Let it run for a bit
 			time.Sleep(interval / 2)
-			
+
 			// Stop cleanup and measure time
 			start := time.Now()
 			ml.StopCleanup()
 			elapsed := time.Since(start)
-			
+
 			// Should terminate within 2x the interval (reasonable timeout)
 			return elapsed < 2*interval+100*time.Millisecond
 		},

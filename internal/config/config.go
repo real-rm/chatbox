@@ -7,13 +7,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
-)
 
-// Common weak secrets to reject
-var weakSecrets = []string{
-	"secret", "test", "test123", "password", "admin",
-	"changeme", "default", "example", "demo", "12345",
-}
+	"github.com/real-rm/chatbox/internal/constants"
+)
 
 // Config holds all application configuration
 type Config struct {
@@ -35,6 +31,7 @@ type ServerConfig struct {
 	LLMStreamTimeout time.Duration
 	AdminRateLimit   int           // Admin endpoint rate limit (requests per minute)
 	AdminRateWindow  time.Duration // Admin rate limit window
+	PathPrefix       string        // HTTP path prefix for all routes (default: "/chatbox")
 }
 
 // LLMConfig holds LLM provider configurations
@@ -106,23 +103,24 @@ type KubernetesConfig struct {
 func Load() (*Config, error) {
 	cfg := &Config{
 		Server: ServerConfig{
-			Port:             getEnvAsInt("SERVER_PORT", 8080),
-			ReconnectTimeout: getEnvAsDuration("RECONNECT_TIMEOUT", 15*time.Minute),
+			Port:             getEnvAsInt("SERVER_PORT", constants.DefaultPort),
+			ReconnectTimeout: getEnvAsDuration("RECONNECT_TIMEOUT", constants.DefaultReconnectTimeout),
 			MaxConnections:   getEnvAsInt("MAX_CONNECTIONS", 10000),
-			RateLimit:        getEnvAsInt("RATE_LIMIT", 100),
+			RateLimit:        getEnvAsInt("RATE_LIMIT", constants.DefaultRateLimit),
 			JWTSecret:        getEnv("JWT_SECRET", ""),
-			LLMStreamTimeout: getEnvAsDuration("LLM_STREAM_TIMEOUT", 120*time.Second),
-			AdminRateLimit:   getEnvAsInt("ADMIN_RATE_LIMIT", 20),                      // Default: 20 requests per minute
-			AdminRateWindow:  getEnvAsDuration("ADMIN_RATE_WINDOW", 1*time.Minute),     // Default: 1 minute window
+			LLMStreamTimeout: getEnvAsDuration("LLM_STREAM_TIMEOUT", constants.DefaultLLMStreamTimeout),
+			AdminRateLimit:   getEnvAsInt("ADMIN_RATE_LIMIT", constants.DefaultAdminRateLimit),
+			AdminRateWindow:  getEnvAsDuration("ADMIN_RATE_WINDOW", constants.DefaultRateWindow),
+			PathPrefix:       getEnv("CHATBOX_PATH_PREFIX", constants.DefaultPathPrefix),
 		},
 		Database: DatabaseConfig{
-			URI:            getEnv("MONGO_URI", "mongodb://localhost:27017"),
-			Database:       getEnv("MONGO_DATABASE", "chat"),
-			Collection:     getEnv("MONGO_COLLECTION", "sessions"),
-			ConnectTimeout: getEnvAsDuration("MONGO_CONNECT_TIMEOUT", 10*time.Second),
-			RetryAttempts:  getEnvAsInt("MONGO_RETRY_ATTEMPTS", 3),
-			RetryDelay:     getEnvAsDuration("MONGO_RETRY_DELAY", 100*time.Millisecond),
-			RetryMaxDelay:  getEnvAsDuration("MONGO_RETRY_MAX_DELAY", 2*time.Second),
+			URI:            getEnv("MONGO_URI", constants.DefaultMongoURI),
+			Database:       getEnv("MONGO_DATABASE", constants.DefaultDatabase),
+			Collection:     getEnv("MONGO_COLLECTION", constants.DefaultCollection),
+			ConnectTimeout: getEnvAsDuration("MONGO_CONNECT_TIMEOUT", constants.DefaultContextTimeout),
+			RetryAttempts:  getEnvAsInt("MONGO_RETRY_ATTEMPTS", constants.MaxRetryAttempts),
+			RetryDelay:     getEnvAsDuration("MONGO_RETRY_DELAY", constants.InitialRetryDelay),
+			RetryMaxDelay:  getEnvAsDuration("MONGO_RETRY_MAX_DELAY", constants.MaxRetryDelay),
 		},
 		Storage: StorageConfig{
 			Endpoint:        getEnv("S3_ENDPOINT", ""),
@@ -170,16 +168,16 @@ func (c *Config) Validate() error {
 		errs = append(errs, errors.New("JWT secret is required"))
 	} else {
 		// Check minimum length (32 characters for strong security)
-		if len(c.Server.JWTSecret) < 32 {
+		if len(c.Server.JWTSecret) < constants.MinJWTSecretLength {
 			errs = append(errs, fmt.Errorf(
-				"JWT secret must be at least 32 characters (got %d). "+
+				"JWT secret must be at least %d characters (got %d). "+
 					"Generate a strong secret with: openssl rand -base64 32",
-				len(c.Server.JWTSecret)))
+				constants.MinJWTSecretLength, len(c.Server.JWTSecret)))
 		}
 
 		// Check for common weak secrets
 		lowerSecret := strings.ToLower(c.Server.JWTSecret)
-		for _, weak := range weakSecrets {
+		for _, weak := range constants.WeakSecrets {
 			if strings.Contains(lowerSecret, weak) {
 				errs = append(errs, fmt.Errorf(
 					"JWT secret appears to be weak (contains '%s'). "+
@@ -197,6 +195,11 @@ func (c *Config) Validate() error {
 	}
 	if c.Server.RateLimit <= 0 {
 		errs = append(errs, errors.New("rate limit must be positive"))
+	}
+	if c.Server.PathPrefix == "" {
+		errs = append(errs, errors.New("path prefix cannot be empty"))
+	} else if !strings.HasPrefix(c.Server.PathPrefix, "/") {
+		errs = append(errs, errors.New("path prefix must start with '/'"))
 	}
 
 	// Validate database config

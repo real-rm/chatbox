@@ -33,7 +33,7 @@ func TestSortByMessageCount_LargeDataset(t *testing.T) {
 			// Create sessions with random message counts
 			sessions := make([]*SessionMetadata, tc.size)
 			rand.Seed(time.Now().UnixNano())
-			
+
 			for i := 0; i < tc.size; i++ {
 				sessions[i] = &SessionMetadata{
 					ID:           fmt.Sprintf("session-%d", i),
@@ -66,7 +66,7 @@ func TestSortByMessageCount_LargeDataset(t *testing.T) {
 			// Verify performance is acceptable (should be sub-second for 10k items)
 			assert.True(t, elapsed < time.Second,
 				"Sorting %d sessions took %v, expected < 1s", tc.size, elapsed)
-			
+
 			t.Logf("Sorted %d sessions in %v", tc.size, elapsed)
 		})
 	}
@@ -77,7 +77,7 @@ func TestSortByMessageCount_LargeDataset_EdgeCases(t *testing.T) {
 	t.Run("AllSameMessageCount", func(t *testing.T) {
 		size := 10000
 		sessions := make([]*SessionMetadata, size)
-		
+
 		for i := 0; i < size; i++ {
 			sessions[i] = &SessionMetadata{
 				ID:           fmt.Sprintf("session-%d", i),
@@ -86,7 +86,7 @@ func TestSortByMessageCount_LargeDataset_EdgeCases(t *testing.T) {
 		}
 
 		sortByMessageCount(sessions, true)
-		
+
 		// Verify all still have same count
 		for i := 0; i < len(sessions); i++ {
 			assert.Equal(t, 100, sessions[i].MessageCount)
@@ -96,7 +96,7 @@ func TestSortByMessageCount_LargeDataset_EdgeCases(t *testing.T) {
 	t.Run("AlreadySorted", func(t *testing.T) {
 		size := 10000
 		sessions := make([]*SessionMetadata, size)
-		
+
 		for i := 0; i < size; i++ {
 			sessions[i] = &SessionMetadata{
 				ID:           fmt.Sprintf("session-%d", i),
@@ -107,12 +107,12 @@ func TestSortByMessageCount_LargeDataset_EdgeCases(t *testing.T) {
 		start := time.Now()
 		sortByMessageCount(sessions, true)
 		elapsed := time.Since(start)
-		
+
 		// Verify still sorted
 		for i := 1; i < len(sessions); i++ {
 			assert.True(t, sessions[i-1].MessageCount <= sessions[i].MessageCount)
 		}
-		
+
 		// Should be fast even for already sorted data
 		assert.True(t, elapsed < time.Second)
 		t.Logf("Sorted %d already-sorted sessions in %v", size, elapsed)
@@ -121,7 +121,7 @@ func TestSortByMessageCount_LargeDataset_EdgeCases(t *testing.T) {
 	t.Run("ReverseSorted", func(t *testing.T) {
 		size := 10000
 		sessions := make([]*SessionMetadata, size)
-		
+
 		for i := 0; i < size; i++ {
 			sessions[i] = &SessionMetadata{
 				ID:           fmt.Sprintf("session-%d", i),
@@ -132,12 +132,12 @@ func TestSortByMessageCount_LargeDataset_EdgeCases(t *testing.T) {
 		start := time.Now()
 		sortByMessageCount(sessions, true)
 		elapsed := time.Since(start)
-		
+
 		// Verify now sorted ascending
 		for i := 1; i < len(sessions); i++ {
 			assert.True(t, sessions[i-1].MessageCount <= sessions[i].MessageCount)
 		}
-		
+
 		assert.True(t, elapsed < time.Second)
 		t.Logf("Sorted %d reverse-sorted sessions in %v", size, elapsed)
 	})
@@ -145,7 +145,7 @@ func TestSortByMessageCount_LargeDataset_EdgeCases(t *testing.T) {
 	t.Run("ManyDuplicates", func(t *testing.T) {
 		size := 10000
 		sessions := make([]*SessionMetadata, size)
-		
+
 		// Create sessions with only 10 different message counts
 		for i := 0; i < size; i++ {
 			sessions[i] = &SessionMetadata{
@@ -155,7 +155,7 @@ func TestSortByMessageCount_LargeDataset_EdgeCases(t *testing.T) {
 		}
 
 		sortByMessageCount(sessions, true)
-		
+
 		// Verify sorted correctly
 		for i := 1; i < len(sessions); i++ {
 			assert.True(t, sessions[i-1].MessageCount <= sessions[i].MessageCount)
@@ -175,7 +175,7 @@ func TestListAllSessionsWithOptions_LargeDataset_Sorting(t *testing.T) {
 	size := 1000
 
 	t.Logf("Creating %d test sessions with varied message counts...", size)
-	
+
 	// Create sessions with varied message counts
 	rand.Seed(time.Now().UnixNano())
 	for i := 0; i < size; i++ {
@@ -210,21 +210,21 @@ func TestListAllSessionsWithOptions_LargeDataset_Sorting(t *testing.T) {
 			SortBy:    "message_count",
 			SortOrder: "asc",
 		}
-		
+
 		start := time.Now()
 		result, err := service.ListAllSessionsWithOptions(opts)
 		elapsed := time.Since(start)
-		
+
 		assert.NoError(t, err)
 		assert.Equal(t, size, len(result))
-		
+
 		// Verify ascending order
 		for i := 1; i < len(result); i++ {
 			assert.True(t, result[i-1].MessageCount <= result[i].MessageCount,
 				"Not sorted ascending at index %d: %d > %d",
 				i, result[i-1].MessageCount, result[i].MessageCount)
 		}
-		
+
 		assert.True(t, elapsed < 2*time.Second,
 			"Query took %v, expected < 2s", elapsed)
 		t.Logf("Sorted %d sessions ascending in %v", size, elapsed)
@@ -237,21 +237,21 @@ func TestListAllSessionsWithOptions_LargeDataset_Sorting(t *testing.T) {
 			SortBy:    "message_count",
 			SortOrder: "desc",
 		}
-		
+
 		start := time.Now()
 		result, err := service.ListAllSessionsWithOptions(opts)
 		elapsed := time.Since(start)
-		
+
 		assert.NoError(t, err)
 		assert.Equal(t, size, len(result))
-		
+
 		// Verify descending order
 		for i := 1; i < len(result); i++ {
 			assert.True(t, result[i-1].MessageCount >= result[i].MessageCount,
 				"Not sorted descending at index %d: %d < %d",
 				i, result[i-1].MessageCount, result[i].MessageCount)
 		}
-		
+
 		assert.True(t, elapsed < 2*time.Second,
 			"Query took %v, expected < 2s", elapsed)
 		t.Logf("Sorted %d sessions descending in %v", size, elapsed)
@@ -260,7 +260,7 @@ func TestListAllSessionsWithOptions_LargeDataset_Sorting(t *testing.T) {
 	// Test with pagination and sorting
 	t.Run("PaginationWithSorting", func(t *testing.T) {
 		pageSize := 100
-		
+
 		// Get first page
 		opts := &SessionListOptions{
 			Limit:     pageSize,
@@ -271,13 +271,13 @@ func TestListAllSessionsWithOptions_LargeDataset_Sorting(t *testing.T) {
 		page1, err := service.ListAllSessionsWithOptions(opts)
 		assert.NoError(t, err)
 		assert.Equal(t, pageSize, len(page1))
-		
+
 		// Get second page
 		opts.Offset = pageSize
 		page2, err := service.ListAllSessionsWithOptions(opts)
 		assert.NoError(t, err)
 		assert.Equal(t, pageSize, len(page2))
-		
+
 		// Verify pages are sorted correctly
 		// Last item of page 1 should have >= message count than first item of page 2
 		assert.True(t, page1[pageSize-1].MessageCount >= page2[0].MessageCount,
@@ -293,12 +293,12 @@ func TestSortByMessageCount_StressTest(t *testing.T) {
 	}
 
 	sizes := []int{10000, 50000, 100000}
-	
+
 	for _, size := range sizes {
 		t.Run(fmt.Sprintf("Size_%d", size), func(t *testing.T) {
 			sessions := make([]*SessionMetadata, size)
 			rand.Seed(time.Now().UnixNano())
-			
+
 			for i := 0; i < size; i++ {
 				sessions[i] = &SessionMetadata{
 					ID:           fmt.Sprintf("session-%d", i),
@@ -324,7 +324,7 @@ func TestSortByMessageCount_StressTest(t *testing.T) {
 			}
 			assert.True(t, elapsed < maxTime,
 				"Sorting %d sessions took %v, expected < %v", size, elapsed, maxTime)
-			
+
 			t.Logf("Sorted %d sessions in %v (%.2f µs per item)",
 				size, elapsed, float64(elapsed.Microseconds())/float64(size))
 		})

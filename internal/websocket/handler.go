@@ -19,6 +19,7 @@ import (
 	"github.com/real-rm/chatbox/internal/message"
 	"github.com/real-rm/chatbox/internal/metrics"
 	"github.com/real-rm/chatbox/internal/ratelimit"
+	"github.com/real-rm/chatbox/internal/util"
 	"github.com/real-rm/golog"
 )
 
@@ -105,9 +106,9 @@ type Handler struct {
 	validator      *auth.JWTValidator
 	logger         *golog.Logger
 	connLimiter    *ratelimit.ConnectionLimiter
-	router         MessageRouter // Add router for message processing
+	router         MessageRouter   // Add router for message processing
 	allowedOrigins map[string]bool // Allowed origins for CORS
-	maxMessageSize int64 // Maximum message size in bytes
+	maxMessageSize int64           // Maximum message size in bytes
 
 	// connections tracks active connections by user ID and connection ID
 	connections map[string]map[string]*Connection
@@ -140,12 +141,12 @@ func NewHandler(validator *auth.JWTValidator, router MessageRouter, logger *golo
 func (h *Handler) SetAllowedOrigins(origins []string) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	
+
 	h.allowedOrigins = make(map[string]bool)
 	for _, origin := range origins {
 		h.allowedOrigins[origin] = true
 	}
-	
+
 	h.logger.Info("Configured allowed origins",
 		"count", len(origins),
 		"origins", origins)
@@ -154,21 +155,21 @@ func (h *Handler) SetAllowedOrigins(origins []string) {
 // checkOrigin validates the origin of a WebSocket upgrade request
 func (h *Handler) checkOrigin(r *http.Request) bool {
 	origin := r.Header.Get("Origin")
-	
+
 	h.mu.RLock()
 	defer h.mu.RUnlock()
-	
+
 	// If no origins configured, allow all (development mode)
 	if len(h.allowedOrigins) == 0 {
 		h.logger.Debug("No origin restrictions configured, allowing all origins")
 		return true
 	}
-	
+
 	// Check if origin is in allowed list
 	if h.allowedOrigins[origin] {
 		return true
 	}
-	
+
 	h.logger.Warn("Origin not allowed",
 		"origin", origin,
 		"allowed_origins", h.allowedOrigins)
@@ -184,6 +185,7 @@ func (h *Handler) checkOrigin(r *http.Request) bool {
 func (h *Handler) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	// Extract token from query parameter or Authorization header
 	token := r.URL.Query().Get("token")
+	// No else needed: try alternative source (Authorization header)
 	if token == "" {
 		// Try Authorization header
 		authHeader := r.Header.Get("Authorization")
@@ -192,6 +194,7 @@ func (h *Handler) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// No else needed: early return pattern (guard clause)
 	if token == "" {
 		http.Error(w, "Missing authentication token", http.StatusUnauthorized)
 		return
@@ -199,6 +202,7 @@ func (h *Handler) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 	// Validate JWT token
 	claims, err := h.validator.ValidateToken(token)
+	// No else needed: early return pattern (guard clause)
 	if err != nil {
 		h.logger.Warn("JWT validation failed",
 			"error", err,
@@ -208,6 +212,7 @@ func (h *Handler) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check connection rate limit
+	// No else needed: early return pattern (guard clause)
 	if !h.connLimiter.Allow(claims.UserID) {
 		h.logger.Warn("Connection limit exceeded",
 			"user_id", claims.UserID,
@@ -224,12 +229,11 @@ func (h *Handler) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	// Upgrade HTTP connection to WebSocket
 	localUpgrader := upgrader
 	localUpgrader.CheckOrigin = h.checkOrigin
-	
+
 	conn, err := localUpgrader.Upgrade(w, r, nil)
+	// No else needed: early return pattern (guard clause)
 	if err != nil {
-		h.logger.Error("WebSocket upgrade failed",
-			"error", err,
-			"component", "websocket")
+		util.LogError(h.logger, "websocket", "upgrade connection", err)
 		return
 	}
 
@@ -257,9 +261,10 @@ func (h *Handler) createConnection(conn *websocket.Conn, claims *auth.Claims) *C
 	// The connection ID format: userID-nanosecondTimestamp-randomHex
 	// This ensures uniqueness even for rapid connections from the same user
 	randomBytes := make([]byte, 8)
+	// No else needed: fallback logic for rare error case
 	if _, err := rand.Read(randomBytes); err != nil {
 		// Fallback to timestamp-only if random generation fails (extremely rare)
-		h.logger.Error("Failed to generate random bytes for connection ID, using timestamp only", "error", err)
+		util.LogError(h.logger, "websocket", "generate random bytes for connection ID", err)
 		connectionID := fmt.Sprintf("%s-%d", claims.UserID, time.Now().UnixNano())
 		return &Connection{
 			conn:         conn,
@@ -270,9 +275,9 @@ func (h *Handler) createConnection(conn *websocket.Conn, claims *auth.Claims) *C
 			send:         make(chan []byte, 256),
 		}
 	}
-	
+
 	connectionID := fmt.Sprintf("%s-%d-%s", claims.UserID, time.Now().UnixNano(), hex.EncodeToString(randomBytes))
-	
+
 	return &Connection{
 		conn:         conn,
 		ConnectionID: connectionID,
@@ -288,6 +293,7 @@ func (h *Handler) registerConnection(conn *Connection) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
+	// No else needed: initialize if needed (lazy initialization)
 	// Initialize user's connection map if it doesn't exist
 	if h.connections[conn.UserID] == nil {
 		h.connections[conn.UserID] = make(map[string]*Connection)
@@ -295,10 +301,10 @@ func (h *Handler) registerConnection(conn *Connection) {
 
 	// Store connection by user ID and connection ID
 	h.connections[conn.UserID][conn.ConnectionID] = conn
-	
+
 	// Increment WebSocket connections metric
 	metrics.WebSocketConnections.Inc()
-	
+
 	h.logger.Info("Connection registered",
 		"user_id", conn.UserID,
 		"connection_id", conn.ConnectionID,
@@ -311,7 +317,6 @@ func (h *Handler) RegisterConnectionForTest(conn *Connection) {
 	h.registerConnection(conn)
 }
 
-
 // unregisterConnection removes a connection from the active connections map
 func (h *Handler) unregisterConnection(conn *Connection) {
 	h.mu.Lock()
@@ -321,10 +326,10 @@ func (h *Handler) unregisterConnection(conn *Connection) {
 		if _, exists := userConns[conn.ConnectionID]; exists {
 			delete(userConns, conn.ConnectionID)
 			close(conn.send)
-			
+
 			// Release connection from rate limiter for each connection
 			h.connLimiter.Release(conn.UserID)
-			
+
 			// Decrement WebSocket connections metric
 			metrics.WebSocketConnections.Dec()
 
@@ -332,7 +337,7 @@ func (h *Handler) unregisterConnection(conn *Connection) {
 			if len(userConns) == 0 {
 				delete(h.connections, conn.UserID)
 			}
-			
+
 			h.logger.Info("Connection unregistered",
 				"user_id", conn.UserID,
 				"connection_id", conn.ConnectionID,
@@ -347,6 +352,7 @@ func (h *Handler) notifyConnectionLimit(userID string) {
 	userConns, exists := h.connections[userID]
 	h.mu.RUnlock()
 
+	// No else needed: early return pattern (guard clause)
 	if !exists || len(userConns) == 0 {
 		return
 	}
@@ -361,10 +367,10 @@ func (h *Handler) notifyConnectionLimit(userID string) {
 	}
 
 	notificationBytes, err := json.Marshal(notificationMsg)
+	// No else needed: early return pattern (guard clause)
 	if err != nil {
-		h.logger.Error("Failed to marshal connection limit notification",
-			"user_id", userID,
-			"error", err)
+		util.LogError(h.logger, "websocket", "marshal connection limit notification", err,
+			"user_id", userID)
 		return
 	}
 
@@ -488,12 +494,13 @@ func (c *Connection) readPump(h *Handler) {
 			"user_id", c.UserID,
 			"session_id", c.SessionID,
 			"component", "websocket")
-		
+
+		// No else needed: conditional cleanup (only if session ID is set)
 		// Unregister from router if we have a session ID
 		if c.SessionID != "" && h.router != nil {
 			h.router.UnregisterConnection(c.SessionID)
 		}
-		
+
 		h.unregisterConnection(c)
 		c.Close()
 	}()
@@ -514,7 +521,9 @@ func (c *Connection) readPump(h *Handler) {
 	// Read messages in a loop
 	for {
 		_, rawMessage, err := c.conn.ReadMessage()
+		// No else needed: error handling with break (exits loop)
 		if err != nil {
+			// No else needed: specific error handling (logs and continues to break)
 			// Check if error is due to message size limit exceeded
 			if errors.Is(err, websocket.ErrReadLimit) {
 				h.logger.Warn("WebSocket message size limit exceeded",
@@ -523,12 +532,10 @@ func (c *Connection) readPump(h *Handler) {
 					"limit", h.maxMessageSize,
 					"component", "websocket")
 			} else if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				h.logger.Error("WebSocket unexpected close",
+				util.LogError(h.logger, "websocket", "handle unexpected close", err,
 					"user_id", c.UserID,
 					"session_id", c.SessionID,
-					"connection_id", c.ConnectionID,
-					"component", "websocket",
-					"error", err)
+					"connection_id", c.ConnectionID)
 			} else {
 				h.logger.Info("WebSocket connection closing",
 					"user_id", c.UserID,
@@ -541,15 +548,16 @@ func (c *Connection) readPump(h *Handler) {
 
 		// Parse incoming message
 		var msg message.Message
+		// No else needed: error handling with continue (skips to next iteration)
 		if err := json.Unmarshal(rawMessage, &msg); err != nil {
 			h.logger.Warn("Failed to parse message",
 				"user_id", c.UserID,
 				"connection_id", c.ConnectionID,
 				"error", err)
-			
+
 			// Increment message errors metric
 			metrics.MessageErrors.Inc()
-			
+
 			// Send error response to client
 			errorMsg := &message.Message{
 				Type:   message.TypeError,
@@ -567,11 +575,16 @@ func (c *Connection) readPump(h *Handler) {
 			continue
 		}
 
+		// CRITICAL FIX C2: Sanitize incoming message to prevent XSS
+		msg.Sanitize()
+
+		// No else needed: optional operation (set default value)
 		// Set timestamp if not provided
 		if msg.Timestamp.IsZero() {
 			msg.Timestamp = time.Now()
 		}
 
+		// No else needed: optional operation (set default value)
 		// Set sender if not provided
 		if msg.Sender == "" {
 			msg.Sender = message.SenderUser
@@ -588,21 +601,23 @@ func (c *Connection) readPump(h *Handler) {
 		metrics.MessagesReceived.Inc()
 
 		// Route message to message router
+		// No else needed: router is required for message processing
 		if h.router != nil {
+			// No else needed: conditional registration (only if session ID present and not yet set)
 			// If message has a session ID and connection doesn't have one yet, set it
 			if msg.SessionID != "" && c.SessionID == "" {
 				c.mu.Lock()
 				c.SessionID = msg.SessionID
 				c.mu.Unlock()
-				
+
+				// No else needed: error handling with continue (skips to next iteration)
 				// Register connection with router for this session
 				if err := h.router.RegisterConnection(msg.SessionID, c); err != nil {
-					h.logger.Error("Failed to register connection with router",
+					util.LogError(h.logger, "websocket", "register connection with router", err,
 						"user_id", c.UserID,
 						"session_id", msg.SessionID,
-						"connection_id", c.ConnectionID,
-						"error", err)
-					
+						"connection_id", c.ConnectionID)
+
 					// Send error response to client for registration failure
 					errorMsg := &message.Message{
 						Type:      message.TypeError,
@@ -626,34 +641,35 @@ func (c *Connection) readPump(h *Handler) {
 					}
 					continue
 				}
-				
+
 				h.logger.Info("Connection registered with router",
 					"user_id", c.UserID,
 					"session_id", msg.SessionID,
 					"connection_id", c.ConnectionID)
 			}
-			
+
+			// No else needed: error handling (logs and sends error response)
 			// Call router with the connection
 			if err := h.router.RouteMessage(c, &msg); err != nil {
 				// Log detailed error server-side
-				h.logger.Error("Failed to route message",
+				util.LogError(h.logger, "websocket", "route message", err,
 					"user_id", c.UserID,
 					"session_id", c.SessionID,
 					"connection_id", c.ConnectionID,
-					"message_type", msg.Type,
-					"error", err)
-				
+					"message_type", msg.Type)
+
 				// Increment message errors metric
 				metrics.MessageErrors.Inc()
-				
+
 				// Check if it's a ChatError for proper error handling
 				var chatErr *chaterrors.ChatError
 				var errorInfo *message.ErrorInfo
-				
+
+				// No else needed: type assertion with specific handling
 				if errors.As(err, &chatErr) {
 					// Use the ChatError's error info
 					errorInfo = chatErr.ToErrorInfo()
-					
+
 					h.logger.Debug("Routing error details",
 						"error_code", chatErr.Code,
 						"error_category", chatErr.Category,
@@ -668,7 +684,7 @@ func (c *Connection) readPump(h *Handler) {
 						Recoverable: true,
 					}
 				}
-				
+
 				// Send error response to client
 				errorMsg := &message.Message{
 					Type:      message.TypeError,
@@ -677,7 +693,7 @@ func (c *Connection) readPump(h *Handler) {
 					Error:     errorInfo,
 					Timestamp: time.Now(),
 				}
-				
+
 				if errorBytes, err := json.Marshal(errorMsg); err == nil {
 					select {
 					case c.send <- errorBytes:
@@ -687,17 +703,16 @@ func (c *Connection) readPump(h *Handler) {
 							"connection_id", c.ConnectionID)
 					}
 				} else {
-					h.logger.Error("Failed to marshal error message",
+					util.LogError(h.logger, "websocket", "marshal error message", err,
 						"user_id", c.UserID,
-						"connection_id", c.ConnectionID,
-						"error", err)
+						"connection_id", c.ConnectionID)
 				}
 			}
 		} else {
 			h.logger.Warn("No router configured, message not processed",
 				"user_id", c.UserID,
 				"connection_id", c.ConnectionID)
-			
+
 			// Send error response to client when router is not configured
 			errorMsg := &message.Message{
 				Type:      message.TypeError,
@@ -742,22 +757,25 @@ func (c *Connection) writePump() {
 			// Set write deadline
 			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
 
+			// No else needed: channel closed handling (sends close and returns)
 			if !ok {
 				// Channel closed, send close message
 				c.conn.WriteMessage(websocket.CloseMessage, []byte{})
 				return
 			}
 
+			// No else needed: error handling with return (exits function)
 			// Write each message as a separate WebSocket frame
 			// This ensures proper JSON parsing on the client side
 			if err := c.conn.WriteMessage(websocket.TextMessage, message); err != nil {
 				return
 			}
-			
+
 			// Increment messages sent metric
 			metrics.MessagesSent.Inc()
 
 		case <-ticker.C:
+			// No else needed: error handling with return (exits function)
 			// Send ping message
 			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {

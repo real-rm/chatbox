@@ -17,7 +17,7 @@ func TestMetricsEndpoint(t *testing.T) {
 
 	// Create a test router
 	r := gin.New()
-	
+
 	// Register the metrics endpoint
 	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
@@ -44,7 +44,7 @@ func TestMetricsEndpointContentType(t *testing.T) {
 
 	// Create a test router
 	r := gin.New()
-	
+
 	// Register the metrics endpoint
 	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 

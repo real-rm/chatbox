@@ -15,18 +15,18 @@ type ErrorResponse struct {
 
 // Generic error messages that don't expose internal details
 const (
-	MsgUnauthorized          = "Authentication required"
-	MsgInvalidToken          = "Invalid or expired authentication token"
-	MsgInvalidAuthHeader     = "Invalid authorization header"
-	MsgForbidden             = "Insufficient permissions"
-	MsgInvalidRequest        = "Invalid request parameters"
-	MsgInternalError         = "An internal error occurred"
-	MsgServiceUnavailable    = "Service temporarily unavailable"
-	MsgResourceNotFound      = "Resource not found"
-	MsgBadRequest            = "Bad request"
-	MsgInvalidTimeFormat     = "Invalid time format, expected RFC3339"
-	MsgSessionNotFound       = "Session not found"
-	MsgOperationFailed       = "Operation failed"
+	MsgUnauthorized       = "Authentication required"
+	MsgInvalidToken       = "Invalid or expired authentication token"
+	MsgInvalidAuthHeader  = "Invalid authorization header"
+	MsgForbidden          = "Insufficient permissions"
+	MsgInvalidRequest     = "Invalid request parameters"
+	MsgInternalError      = "An internal error occurred"
+	MsgServiceUnavailable = "Service temporarily unavailable"
+	MsgResourceNotFound   = "Resource not found"
+	MsgBadRequest         = "Bad request"
+	MsgInvalidTimeFormat  = "Invalid time format, expected RFC3339"
+	MsgSessionNotFound    = "Session not found"
+	MsgOperationFailed    = "Operation failed"
 )
 
 // Error codes for client-side handling

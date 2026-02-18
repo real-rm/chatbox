@@ -15,6 +15,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/real-rm/chatbox/internal/auth"
+	"github.com/real-rm/chatbox/internal/constants"
 	"github.com/real-rm/chatbox/internal/httperrors"
 	"github.com/real-rm/chatbox/internal/llm"
 	"github.com/real-rm/chatbox/internal/notification"
@@ -23,6 +24,7 @@ import (
 	"github.com/real-rm/chatbox/internal/session"
 	"github.com/real-rm/chatbox/internal/storage"
 	"github.com/real-rm/chatbox/internal/upload"
+	"github.com/real-rm/chatbox/internal/util"
 	"github.com/real-rm/chatbox/internal/websocket"
 	"github.com/real-rm/goconfig"
 	"github.com/real-rm/golog"
@@ -32,12 +34,12 @@ import (
 
 var (
 	// Global references for graceful shutdown
-	globalWSHandler      *websocket.Handler
-	globalSessionMgr     *session.SessionManager
-	globalMessageRouter  *router.MessageRouter
-	globalAdminLimiter   *ratelimit.MessageLimiter
-	globalLogger         *golog.Logger
-	shutdownMu           sync.Mutex
+	globalWSHandler     *websocket.Handler
+	globalSessionMgr    *session.SessionManager
+	globalMessageRouter *router.MessageRouter
+	globalAdminLimiter  *ratelimit.MessageLimiter
+	globalLogger        *golog.Logger
+	shutdownMu          sync.Mutex
 )
 
 // Register registers the chatbox service with the gomain router.
@@ -63,12 +65,14 @@ func Register(r *gin.Engine, config *goconfig.ConfigAccessor, logger *golog.Logg
 		// Fall back to config file
 		var err error
 		jwtSecret, err = config.ConfigString("chatbox.jwt_secret")
+		// No else needed: early return pattern (guard clause)
 		if err != nil {
 			return fmt.Errorf("failed to get JWT secret: %w", err)
 		}
 	}
-	
+
 	// Validate JWT secret strength
+	// No else needed: early return pattern (guard clause)
 	if err := validateJWTSecret(jwtSecret); err != nil {
 		chatboxLogger.Error("Configuration validation failed", "error", err)
 		return fmt.Errorf("configuration validation failed: %w", err)
@@ -79,17 +83,19 @@ func Register(r *gin.Engine, config *goconfig.ConfigAccessor, logger *golog.Logg
 	// This allows Kubernetes secrets to override config.toml values
 	var err error
 	var reconnectTimeoutStr string
-	reconnectTimeoutStr, err = config.ConfigStringWithDefault("chatbox.reconnect_timeout", "15m")
+	reconnectTimeoutStr, err = config.ConfigStringWithDefault("chatbox.reconnect_timeout", constants.DefaultReconnectTimeout.String())
 	if err != nil {
 		return fmt.Errorf("failed to get reconnect timeout: %w", err)
 	}
 	var reconnectTimeout time.Duration
 	reconnectTimeout, err = time.ParseDuration(reconnectTimeoutStr)
+	// No else needed: early return pattern (guard clause)
 	if err != nil {
 		return fmt.Errorf("invalid reconnect timeout format: %w", err)
 	}
 
 	// Initialize goupload for file uploads
+	// No else needed: early return pattern (guard clause)
 	if err := goupload.Init(goupload.InitOptions{
 		Logger: logger,
 		Config: config,
@@ -100,6 +106,7 @@ func Register(r *gin.Engine, config *goconfig.ConfigAccessor, logger *golog.Logg
 	// Create stats updater for file tracking
 	statsColl := mongo.Coll("chat", "file_stats")
 	uploadService, err := upload.NewUploadService("CHAT", "uploads", statsColl)
+	// No else needed: early return pattern (guard clause)
 	if err != nil {
 		return fmt.Errorf("failed to create upload service: %w", err)
 	}
@@ -112,10 +119,12 @@ func Register(r *gin.Engine, config *goconfig.ConfigAccessor, logger *golog.Logg
 	if encryptionKeyStr == "" {
 		// Fall back to config file
 		encryptionKeyStr, err = config.ConfigStringWithDefault("chatbox.encryption_key", "")
+		// No else needed: early return pattern (guard clause)
 		if err != nil {
 			return fmt.Errorf("failed to get encryption key: %w", err)
 		}
 	}
+	// No else needed: optional operation (logging based on configuration state)
 	if encryptionKeyStr != "" {
 		// Convert string to bytes
 		encryptionKey = []byte(encryptionKeyStr)
@@ -125,6 +134,7 @@ func Register(r *gin.Engine, config *goconfig.ConfigAccessor, logger *golog.Logg
 	}
 
 	// Validate encryption key length before any encryption operations
+	// No else needed: early return pattern (guard clause)
 	if err := validateEncryptionKey(encryptionKey); err != nil {
 		return err
 	}
@@ -132,10 +142,12 @@ func Register(r *gin.Engine, config *goconfig.ConfigAccessor, logger *golog.Logg
 	// Load maximum message size for WebSocket connections
 	// Priority: Environment variable > Config file
 	// Default: 1MB (1048576 bytes)
-	maxMessageSize := int64(1048576) // Default 1MB
+	maxMessageSize := int64(constants.DefaultMaxMessageSize)
+	// No else needed: optional operation (configuration loading with fallback)
 	if maxSizeStr := os.Getenv("MAX_MESSAGE_SIZE"); maxSizeStr != "" {
 		// Parse from environment variable
 		var parsedSize int64
+		// No else needed: optional operation (logging based on parse result)
 		if _, err := fmt.Sscanf(maxSizeStr, "%d", &parsedSize); err == nil {
 			maxMessageSize = parsedSize
 			chatboxLogger.Info("Using MAX_MESSAGE_SIZE from environment", "size_bytes", maxMessageSize)
@@ -144,8 +156,10 @@ func Register(r *gin.Engine, config *goconfig.ConfigAccessor, logger *golog.Logg
 		}
 	} else {
 		// Try to load from config file
-		if configSizeStr, err := config.ConfigStringWithDefault("chatbox.max_message_size", "1048576"); err == nil {
+		// No else needed: optional operation (logging based on parse result)
+		if configSizeStr, err := config.ConfigStringWithDefault("chatbox.max_message_size", fmt.Sprintf("%d", constants.DefaultMaxMessageSize)); err == nil {
 			var parsedSize int64
+			// No else needed: optional operation (logging based on parse result)
 			if _, parseErr := fmt.Sscanf(configSizeStr, "%d", &parsedSize); parseErr == nil {
 				maxMessageSize = parsedSize
 				chatboxLogger.Info("Using max_message_size from config", "size_bytes", maxMessageSize)
@@ -161,8 +175,9 @@ func Register(r *gin.Engine, config *goconfig.ConfigAccessor, logger *golog.Logg
 	storageService := storage.NewStorageService(mongo, "chat", "sessions", chatboxLogger, encryptionKey)
 
 	// Ensure MongoDB indexes are created for optimal query performance
-	indexCtx, indexCancel := context.WithTimeout(context.Background(), 30*time.Second)
+	indexCtx, indexCancel := util.NewTimeoutContext(constants.MongoIndexTimeout)
 	defer indexCancel()
+	// No else needed: optional operation (non-critical index creation)
 	if err := storageService.EnsureIndexes(indexCtx); err != nil {
 		chatboxLogger.Warn("Failed to create MongoDB indexes", "error", err)
 		// Don't fail startup - indexes can be created manually if needed
@@ -170,28 +185,32 @@ func Register(r *gin.Engine, config *goconfig.ConfigAccessor, logger *golog.Logg
 
 	// Create session manager
 	sessionManager := session.NewSessionManager(reconnectTimeout, chatboxLogger)
-	
+
 	// Start cleanup goroutine for expired sessions
 	sessionManager.StartCleanup()
 
 	// Create LLM service
 	llmService, err := llm.NewLLMService(config, chatboxLogger)
+	// No else needed: early return pattern (guard clause)
 	if err != nil {
 		return fmt.Errorf("failed to create LLM service: %w", err)
 	}
 
 	// Create notification service
 	notificationService, err := notification.NewNotificationService(chatboxLogger, config, mongo)
+	// No else needed: early return pattern (guard clause)
 	if err != nil {
 		return fmt.Errorf("failed to create notification service: %w", err)
 	}
 
 	// Get LLM stream timeout from config
-	llmStreamTimeoutStr, err := config.ConfigStringWithDefault("chatbox.llm_stream_timeout", "120s")
+	llmStreamTimeoutStr, err := config.ConfigStringWithDefault("chatbox.llm_stream_timeout", constants.DefaultLLMStreamTimeout.String())
+	// No else needed: early return pattern (guard clause)
 	if err != nil {
 		return fmt.Errorf("failed to get LLM stream timeout: %w", err)
 	}
 	llmStreamTimeout, err := time.ParseDuration(llmStreamTimeoutStr)
+	// No else needed: early return pattern (guard clause)
 	if err != nil {
 		return fmt.Errorf("invalid LLM stream timeout format: %w", err)
 	}
@@ -200,22 +219,25 @@ func Register(r *gin.Engine, config *goconfig.ConfigAccessor, logger *golog.Logg
 	messageRouter := router.NewMessageRouter(sessionManager, llmService, uploadService, notificationService, storageService, llmStreamTimeout, chatboxLogger)
 
 	// Create admin rate limiter
-	adminRateLimit, err := config.ConfigIntWithDefault("chatbox.admin_rate_limit", 20)
+	adminRateLimit, err := config.ConfigIntWithDefault("chatbox.admin_rate_limit", constants.DefaultAdminRateLimit)
+	// No else needed: early return pattern (guard clause)
 	if err != nil {
 		return fmt.Errorf("failed to get admin rate limit: %w", err)
 	}
-	adminRateWindowStr, err := config.ConfigStringWithDefault("chatbox.admin_rate_window", "1m")
+	adminRateWindowStr, err := config.ConfigStringWithDefault("chatbox.admin_rate_window", constants.DefaultRateWindow.String())
+	// No else needed: early return pattern (guard clause)
 	if err != nil {
 		return fmt.Errorf("failed to get admin rate window: %w", err)
 	}
 	adminRateWindow, err := time.ParseDuration(adminRateWindowStr)
+	// No else needed: early return pattern (guard clause)
 	if err != nil {
 		return fmt.Errorf("invalid admin rate window format: %w", err)
 	}
-	
+
 	adminLimiter := ratelimit.NewMessageLimiter(adminRateWindow, adminRateLimit)
 	adminLimiter.StartCleanup()
-	
+
 	chatboxLogger.Info("Admin rate limiter configured",
 		"rate_limit", adminRateLimit,
 		"window", adminRateWindow)
@@ -225,9 +247,10 @@ func Register(r *gin.Engine, config *goconfig.ConfigAccessor, logger *golog.Logg
 
 	// Create WebSocket handler with router
 	wsHandler := websocket.NewHandler(validator, messageRouter, chatboxLogger, maxMessageSize)
-	
+
 	// Configure allowed origins for WebSocket connections
 	allowedOriginsStr, err := config.ConfigStringWithDefault("chatbox.allowed_origins", "")
+	// No else needed: optional operation (configuration with fallback logging)
 	if err == nil && allowedOriginsStr != "" {
 		origins := strings.Split(allowedOriginsStr, ",")
 		for i, origin := range origins {
@@ -250,6 +273,7 @@ func Register(r *gin.Engine, config *goconfig.ConfigAccessor, logger *golog.Logg
 	// Configure CORS middleware
 	// Load CORS configuration from config file or environment
 	corsOriginsStr, err := config.ConfigStringWithDefault("chatbox.cors_allowed_origins", "")
+	// No else needed: optional operation (CORS configuration with fallback logging)
 	if err == nil && corsOriginsStr != "" {
 		// Parse allowed origins from comma-separated string
 		allowedOrigins := strings.Split(corsOriginsStr, ",")
@@ -277,8 +301,32 @@ func Register(r *gin.Engine, config *goconfig.ConfigAccessor, logger *golog.Logg
 		chatboxLogger.Warn("No CORS origins configured, CORS middleware not enabled")
 	}
 
+	// Load HTTP path prefix configuration
+	// Priority: Environment variable > Config file > Default ("/chatbox")
+	pathPrefix := os.Getenv("CHATBOX_PATH_PREFIX")
+	if pathPrefix == "" {
+		// Fall back to config file
+		pathPrefix, err = config.ConfigStringWithDefault("chatbox.path_prefix", constants.DefaultPathPrefix)
+		// No else needed: early return pattern (guard clause)
+		if err != nil {
+			return fmt.Errorf("failed to get path prefix: %w", err)
+		}
+	}
+
+	// Validate path prefix format
+	// No else needed: early return pattern (guard clause)
+	if pathPrefix == "" {
+		return fmt.Errorf("path prefix cannot be empty")
+	}
+	// No else needed: early return pattern (guard clause)
+	if !strings.HasPrefix(pathPrefix, "/") {
+		return fmt.Errorf("path prefix must start with '/' (got: %s)", pathPrefix)
+	}
+
+	chatboxLogger.Info("Using HTTP path prefix", "prefix", pathPrefix)
+
 	// Register routes
-	chatGroup := r.Group("/chat")
+	chatGroup := r.Group(pathPrefix)
 	{
 		// WebSocket endpoint - use Gin context adapter
 		chatGroup.GET("/ws", func(c *gin.Context) {
@@ -308,14 +356,15 @@ func Register(r *gin.Engine, config *goconfig.ConfigAccessor, logger *golog.Logg
 	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
 
 	chatboxLogger.Info("Chatbox service registered successfully",
-		"websocket_endpoint", "/chat/ws",
-		"admin_endpoints", "/chat/admin/*",
-		"health_endpoints", "/chat/healthz, /chat/readyz",
+		"websocket_endpoint", pathPrefix+"/ws",
+		"admin_endpoints", pathPrefix+"/admin/*",
+		"health_endpoints", pathPrefix+"/healthz, "+pathPrefix+"/readyz",
 		"metrics_endpoint", "/metrics",
 	)
 
 	return nil
 }
+
 // validateEncryptionKey checks if the encryption key is exactly 32 bytes
 // Returns error if key is provided but not 32 bytes
 // Returns nil if key is empty (encryption disabled) or exactly 32 bytes
@@ -328,31 +377,22 @@ func validateEncryptionKey(key []byte) error {
 	}
 
 	// 32 bytes is valid for AES-256
-	if keyLen == 32 {
+	if keyLen == constants.EncryptionKeyLength {
 		return nil
 	}
 
 	// Any other length is invalid
-	return fmt.Errorf("encryption key must be exactly 32 bytes for AES-256, got %d bytes. Please provide a valid 32-byte key or remove the key to disable encryption", keyLen)
+	return fmt.Errorf("encryption key must be exactly %d bytes for AES-256, got %d bytes. Please provide a valid %d-byte key or remove the key to disable encryption", constants.EncryptionKeyLength, keyLen, constants.EncryptionKeyLength)
 }
-
 
 // authMiddleware creates a Gin middleware for JWT authentication
 func authMiddleware(validator *auth.JWTValidator, logger *golog.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		// Extract token from Authorization header
 		authHeader := c.GetHeader("Authorization")
-		if authHeader == "" {
-			httperrors.RespondUnauthorized(c, httperrors.MsgInvalidAuthHeader)
-			c.Abort()
-			return
-		}
-
-		// Remove "Bearer " prefix
-		token := ""
-		if len(authHeader) > 7 && authHeader[:7] == "Bearer " {
-			token = authHeader[7:]
-		} else {
+		token, err := util.ExtractBearerToken(authHeader)
+		// No else needed: early return pattern (guard clause)
+		if err != nil {
 			httperrors.RespondUnauthorized(c, httperrors.MsgInvalidAuthHeader)
 			c.Abort()
 			return
@@ -360,6 +400,7 @@ func authMiddleware(validator *auth.JWTValidator, logger *golog.Logger) gin.Hand
 
 		// Validate token
 		claims, err := validator.ValidateToken(token)
+		// No else needed: early return pattern (guard clause)
 		if err != nil {
 			// Log detailed error server-side
 			logger.Warn("Token validation failed",
@@ -374,12 +415,14 @@ func authMiddleware(validator *auth.JWTValidator, logger *golog.Logger) gin.Hand
 		// Check for admin role
 		hasAdminRole := false
 		for _, role := range claims.Roles {
-			if role == "admin" || role == "chat_admin" {
+			// No else needed: optional operation (role checking loop)
+			if role == constants.RoleAdmin || role == constants.RoleChatAdmin {
 				hasAdminRole = true
 				break
 			}
 		}
 
+		// No else needed: early return pattern (guard clause)
 		if !hasAdminRole {
 			logger.Warn("Insufficient permissions for admin endpoint",
 				"user_id", claims.UserID,
@@ -401,6 +444,7 @@ func adminRateLimitMiddleware(limiter *ratelimit.MessageLimiter, logger *golog.L
 	return func(c *gin.Context) {
 		// Get claims from context (set by authMiddleware)
 		claimsInterface, exists := c.Get("claims")
+		// No else needed: early return pattern (guard clause - let authMiddleware handle missing claims)
 		if !exists {
 			// If no claims, let authMiddleware handle it
 			c.Next()
@@ -408,30 +452,37 @@ func adminRateLimitMiddleware(limiter *ratelimit.MessageLimiter, logger *golog.L
 		}
 
 		claims, ok := claimsInterface.(*auth.Claims)
+		// No else needed: early return pattern (guard clause)
 		if !ok {
-			logger.Error("Invalid claims type in context", "component", "admin_rate_limit")
+			util.LogError(logger, "admin_rate_limit", "validate claims type", fmt.Errorf("invalid claims type in context"))
 			httperrors.RespondInternalError(c)
 			c.Abort()
 			return
 		}
 
 		// Check rate limit
+		// No else needed: early return pattern (guard clause)
 		if !limiter.Allow(claims.UserID) {
 			retryAfter := limiter.GetRetryAfter(claims.UserID)
-			
+
 			logger.Warn("Admin rate limit exceeded",
 				"user_id", claims.UserID,
 				"endpoint", c.Request.URL.Path,
 				"retry_after_ms", retryAfter,
 				"component", "admin_rate_limit")
-			
-			// Set Retry-After header (in seconds)
-			c.Header("Retry-After", fmt.Sprintf("%d", retryAfter/1000))
-			
+
+			// CRITICAL FIX M3: Convert milliseconds to seconds properly with ceiling to avoid 0
+			retryAfterSeconds := (retryAfter + constants.MillisecondsPerSecond - 1) / constants.MillisecondsPerSecond // Round up to nearest second
+			// No else needed: optional operation (minimum retry after enforcement)
+			if retryAfterSeconds < constants.MinRetryAfterSeconds {
+				retryAfterSeconds = constants.MinRetryAfterSeconds
+			}
+			c.Header(constants.HeaderRetryAfter, fmt.Sprintf("%d", retryAfterSeconds))
+
 			// Return 429 Too Many Requests
-			c.JSON(429, gin.H{
+			c.JSON(constants.StatusTooManyRequests, gin.H{
 				"error":          "rate_limit_exceeded",
-				"message":        "Too many admin requests. Please try again later.",
+				"message":        constants.ErrMsgRateLimitExceeded,
 				"retry_after_ms": retryAfter,
 			})
 			c.Abort()
@@ -447,17 +498,9 @@ func userAuthMiddleware(validator *auth.JWTValidator, logger *golog.Logger) gin.
 	return func(c *gin.Context) {
 		// Extract token from Authorization header
 		authHeader := c.GetHeader("Authorization")
-		if authHeader == "" {
-			httperrors.RespondUnauthorized(c, httperrors.MsgInvalidAuthHeader)
-			c.Abort()
-			return
-		}
-
-		// Remove "Bearer " prefix
-		token := ""
-		if len(authHeader) > 7 && authHeader[:7] == "Bearer " {
-			token = authHeader[7:]
-		} else {
+		token, err := util.ExtractBearerToken(authHeader)
+		// No else needed: early return pattern (guard clause)
+		if err != nil {
 			httperrors.RespondUnauthorized(c, httperrors.MsgInvalidAuthHeader)
 			c.Abort()
 			return
@@ -465,6 +508,7 @@ func userAuthMiddleware(validator *auth.JWTValidator, logger *golog.Logger) gin.
 
 		// Validate token
 		claims, err := validator.ValidateToken(token)
+		// No else needed: early return pattern (guard clause)
 		if err != nil {
 			// Log detailed error server-side
 			logger.Warn("Token validation failed",
@@ -487,32 +531,32 @@ func handleUserSessions(storageService *storage.StorageService, logger *golog.Lo
 	return func(c *gin.Context) {
 		// Get claims from context
 		claimsInterface, exists := c.Get("claims")
+		// No else needed: early return pattern (guard clause)
 		if !exists {
 			httperrors.RespondUnauthorized(c, "")
 			return
 		}
 
 		claims, ok := claimsInterface.(*auth.Claims)
+		// No else needed: early return pattern (guard clause)
 		if !ok {
-			logger.Error("Invalid claims type in context", "component", "http")
+			util.LogError(logger, "http", "validate claims type", fmt.Errorf("invalid claims type in context"))
 			httperrors.RespondInternalError(c)
 			return
 		}
 
 		// Get user's sessions
 		sessions, err := storageService.ListUserSessions(claims.UserID, 0)
+		// No else needed: early return pattern (guard clause)
 		if err != nil {
 			// Log detailed error server-side
-			logger.Error("Failed to list user sessions",
-				"user_id", claims.UserID,
-				"error", err,
-				"component", "http")
+			util.LogError(logger, "http", "list user sessions", err, "user_id", claims.UserID)
 			// Send generic error to client
 			httperrors.RespondInternalError(c)
 			return
 		}
 
-		c.JSON(200, gin.H{
+		c.JSON(constants.StatusOK, gin.H{
 			"sessions": sessions,
 			"user_id":  claims.UserID,
 			"count":    len(sessions),
@@ -535,16 +579,20 @@ func handleListSessions(storageService *storage.StorageService, sessionManager *
 		startTimeToStr := c.Query("start_time_to")     // RFC3339 format
 
 		// Parse limit
-		limit := 100
+		limit := constants.DefaultSessionLimit
+		// No else needed: optional operation (limit parsing with validation)
 		if l, err := fmt.Sscanf(limitStr, "%d", &limit); err == nil && l == 1 {
-			if limit <= 0 || limit > 1000 {
-				limit = 100
+			// No else needed: optional operation (limit range validation)
+			if limit <= 0 || limit > constants.MaxSessionLimit {
+				limit = constants.DefaultSessionLimit
 			}
 		}
 
 		// Parse offset
 		offset := 0
+		// No else needed: optional operation (offset parsing with validation)
 		if o, err := fmt.Sscanf(offsetStr, "%d", &offset); err == nil && o == 1 {
+			// No else needed: optional operation (offset range validation)
 			if offset < 0 {
 				offset = 0
 			}
@@ -552,6 +600,7 @@ func handleListSessions(storageService *storage.StorageService, sessionManager *
 
 		// Parse admin_assisted filter
 		var adminAssisted *bool
+		// No else needed: optional operation (filter parsing)
 		if adminAssistedStr != "" {
 			val := adminAssistedStr == "true"
 			adminAssisted = &val
@@ -559,7 +608,9 @@ func handleListSessions(storageService *storage.StorageService, sessionManager *
 
 		// Parse active status filter
 		var active *bool
+		// No else needed: optional operation (filter parsing)
 		if status != "" {
+			// No else needed: optional operation (status value parsing)
 			if status == "active" {
 				val := true
 				active = &val
@@ -571,8 +622,10 @@ func handleListSessions(storageService *storage.StorageService, sessionManager *
 
 		// Parse time range filters
 		var startTimeFrom, startTimeTo *time.Time
+		// No else needed: optional operation (time filter parsing)
 		if startTimeFromStr != "" {
 			t, err := time.Parse(time.RFC3339, startTimeFromStr)
+			// No else needed: early return pattern (guard clause)
 			if err != nil {
 				logger.Warn("Invalid start_time_from parameter",
 					"value", startTimeFromStr,
@@ -583,8 +636,10 @@ func handleListSessions(storageService *storage.StorageService, sessionManager *
 			}
 			startTimeFrom = &t
 		}
+		// No else needed: optional operation (time filter parsing)
 		if startTimeToStr != "" {
 			t, err := time.Parse(time.RFC3339, startTimeToStr)
+			// No else needed: early return pattern (guard clause)
 			if err != nil {
 				logger.Warn("Invalid start_time_to parameter",
 					"value", startTimeToStr,
@@ -611,17 +666,16 @@ func handleListSessions(storageService *storage.StorageService, sessionManager *
 
 		// List sessions with options
 		sessions, err := storageService.ListAllSessionsWithOptions(opts)
+		// No else needed: early return pattern (guard clause)
 		if err != nil {
 			// Log detailed error server-side
-			logger.Error("Failed to list sessions",
-				"error", err,
-				"component", "http")
+			util.LogError(logger, "http", "list sessions", err)
 			// Send generic error to client
 			httperrors.RespondInternalError(c)
 			return
 		}
 
-		c.JSON(200, gin.H{
+		c.JSON(constants.StatusOK, gin.H{
 			"sessions": sessions,
 			"count":    len(sessions),
 			"limit":    limit,
@@ -641,8 +695,10 @@ func handleGetMetrics(storageService *storage.StorageService, logger *golog.Logg
 		var startTime, endTime time.Time
 		var err error
 
+		// No else needed: optional operation (time range parsing with default)
 		if startTimeStr != "" {
 			startTime, err = time.Parse(time.RFC3339, startTimeStr)
+			// No else needed: early return pattern (guard clause)
 			if err != nil {
 				logger.Warn("Invalid start_time parameter",
 					"value", startTimeStr,
@@ -656,8 +712,10 @@ func handleGetMetrics(storageService *storage.StorageService, logger *golog.Logg
 			startTime = time.Now().Add(-24 * time.Hour)
 		}
 
+		// No else needed: optional operation (time range parsing with default)
 		if endTimeStr != "" {
 			endTime, err = time.Parse(time.RFC3339, endTimeStr)
+			// No else needed: early return pattern (guard clause)
 			if err != nil {
 				logger.Warn("Invalid end_time parameter",
 					"value", endTimeStr,
@@ -673,11 +731,10 @@ func handleGetMetrics(storageService *storage.StorageService, logger *golog.Logg
 
 		// Get metrics from storage
 		metrics, err := storageService.GetSessionMetrics(startTime, endTime)
+		// No else needed: early return pattern (guard clause)
 		if err != nil {
 			// Log detailed error server-side
-			logger.Error("Failed to get session metrics",
-				"error", err,
-				"component", "http")
+			util.LogError(logger, "http", "get session metrics", err)
 			// Send generic error to client
 			httperrors.RespondInternalError(c)
 			return
@@ -685,11 +742,10 @@ func handleGetMetrics(storageService *storage.StorageService, logger *golog.Logg
 
 		// Get total token usage
 		totalTokens, err := storageService.GetTokenUsage(startTime, endTime)
+		// No else needed: early return pattern (guard clause)
 		if err != nil {
 			// Log detailed error server-side
-			logger.Error("Failed to get token usage",
-				"error", err,
-				"component", "http")
+			util.LogError(logger, "http", "get token usage", err)
 			// Send generic error to client
 			httperrors.RespondInternalError(c)
 			return
@@ -698,7 +754,7 @@ func handleGetMetrics(storageService *storage.StorageService, logger *golog.Logg
 		// Update metrics with token usage
 		metrics.TotalTokens = totalTokens
 
-		c.JSON(200, gin.H{
+		c.JSON(constants.StatusOK, gin.H{
 			"metrics": metrics,
 			"time_range": gin.H{
 				"start": startTime.Format(time.RFC3339),
@@ -713,21 +769,24 @@ func handleAdminTakeover(messageRouter *router.MessageRouter, logger *golog.Logg
 	return func(c *gin.Context) {
 		sessionID := c.Param("sessionID")
 
+		// No else needed: early return pattern (guard clause)
 		if sessionID == "" {
-			httperrors.RespondBadRequest(c, "Session ID is required")
+			httperrors.RespondBadRequest(c, constants.ErrMsgSessionIDRequired)
 			return
 		}
 
 		// Get admin claims from context (set by authMiddleware)
 		claimsInterface, exists := c.Get("claims")
+		// No else needed: early return pattern (guard clause)
 		if !exists {
 			httperrors.RespondUnauthorized(c, "")
 			return
 		}
 
 		claims, ok := claimsInterface.(*auth.Claims)
+		// No else needed: early return pattern (guard clause)
 		if !ok {
-			logger.Error("Invalid claims type in context", "component", "http")
+			util.LogError(logger, "http", "validate claims type", fmt.Errorf("invalid claims type in context"))
 			httperrors.RespondInternalError(c)
 			return
 		}
@@ -739,19 +798,18 @@ func handleAdminTakeover(messageRouter *router.MessageRouter, logger *golog.Logg
 		adminConn.Name = claims.Name // Set admin name from JWT claims
 
 		// Handle admin takeover
+		// No else needed: early return pattern (guard clause)
 		if err := messageRouter.HandleAdminTakeover(adminConn, sessionID); err != nil {
 			// Log detailed error server-side
-			logger.Error("Failed to initiate admin takeover",
+			util.LogError(logger, "http", "initiate admin takeover", err,
 				"session_id", sessionID,
-				"admin_id", claims.UserID,
-				"error", err,
-				"component", "http")
+				"admin_id", claims.UserID)
 			// Send generic error to client
 			httperrors.RespondInternalError(c)
 			return
 		}
 
-		c.JSON(200, gin.H{
+		c.JSON(constants.StatusOK, gin.H{
 			"message":    "Takeover initiated successfully",
 			"session_id": sessionID,
 			"admin_id":   claims.UserID,
@@ -764,7 +822,7 @@ func handleAdminTakeover(messageRouter *router.MessageRouter, logger *golog.Logg
 // It performs minimal checks to determine if the process is running correctly.
 func handleHealthCheck(c *gin.Context) {
 	// Basic liveness check - if we can respond, we're alive
-	c.JSON(200, gin.H{
+	c.JSON(constants.StatusOK, gin.H{
 		"status":    "healthy",
 		"timestamp": time.Now().UTC().Format(time.RFC3339),
 	})
@@ -779,6 +837,7 @@ func handleReadyCheck(mongo *gomongo.Mongo, logger *golog.Logger) gin.HandlerFun
 		allReady := true
 
 		// Check MongoDB connection
+		// No else needed: optional operation (MongoDB health check)
 		if mongo == nil {
 			checks["mongodb"] = map[string]interface{}{
 				"status": "not ready",
@@ -787,19 +846,20 @@ func handleReadyCheck(mongo *gomongo.Mongo, logger *golog.Logger) gin.HandlerFun
 			allReady = false
 		} else {
 			// Verify MongoDB connection by pinging the server
-			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			ctx, cancel := util.NewTimeoutContext(constants.HealthCheckTimeout)
 			defer cancel()
-			
+
 			// Use Ping() to check MongoDB connectivity
 			// This is the recommended way to verify database health
 			testColl := mongo.Coll("admin", "system.version")
 			err := testColl.Ping(ctx)
+			// No else needed: optional operation (health check result recording)
 			if err != nil {
 				// Log detailed error server-side
 				logger.Warn("MongoDB health check failed",
 					"error", err,
 					"component", "health")
-				
+
 				// Send generic error to client
 				checks["mongodb"] = map[string]interface{}{
 					"status": "not ready",
@@ -815,10 +875,11 @@ func handleReadyCheck(mongo *gomongo.Mongo, logger *golog.Logger) gin.HandlerFun
 
 		// Determine overall status
 		status := "ready"
-		statusCode := 200
+		statusCode := constants.StatusOK
+		// No else needed: optional operation (status code adjustment based on health)
 		if !allReady {
 			status = "not ready"
-			statusCode = 503
+			statusCode = constants.StatusServiceUnavailable
 		}
 
 		c.JSON(statusCode, gin.H{
@@ -837,28 +898,35 @@ func Shutdown(ctx context.Context) error {
 	shutdownMu.Lock()
 	defer shutdownMu.Unlock()
 
+	// No else needed: optional operation (logging during shutdown)
 	if globalLogger != nil {
 		globalLogger.Info("Starting graceful shutdown of chatbox service")
 	}
 
 	// Stop session cleanup goroutine
+	// No else needed: optional operation (cleanup stop)
 	if globalSessionMgr != nil {
 		globalSessionMgr.StopCleanup()
 	}
 
 	// Stop message router cleanup goroutines
+	// No else needed: optional operation (cleanup stop)
 	if globalMessageRouter != nil {
 		globalMessageRouter.Shutdown()
 	}
 
 	// Stop admin rate limiter cleanup
+	// No else needed: optional operation (cleanup stop)
 	if globalAdminLimiter != nil {
 		globalAdminLimiter.StopCleanup()
 	}
 
 	// Close all WebSocket connections with context deadline
+	// No else needed: optional operation (WebSocket shutdown with error handling)
 	if globalWSHandler != nil {
+		// No else needed: early return pattern (guard clause)
 		if err := globalWSHandler.ShutdownWithContext(ctx); err != nil {
+			// No else needed: optional operation (error logging)
 			if globalLogger != nil {
 				globalLogger.Warn("WebSocket handler shutdown error", "error", err)
 			}
@@ -867,6 +935,7 @@ func Shutdown(ctx context.Context) error {
 	}
 
 	// Flush logs
+	// No else needed: optional operation (final logging)
 	if globalLogger != nil {
 		globalLogger.Info("Chatbox service shutdown complete")
 		// Note: Logger.Close() should be called by gomain, not here
@@ -878,27 +947,21 @@ func Shutdown(ctx context.Context) error {
 // validateJWTSecret validates the JWT secret strength
 // Returns error if secret is empty, too short, or contains weak patterns
 func validateJWTSecret(secret string) error {
-	// Common weak secrets to reject
-	weakSecrets := []string{
-		"secret", "test", "test123", "password", "admin",
-		"changeme", "default", "example", "demo", "12345",
-	}
-	
 	if secret == "" {
 		return fmt.Errorf("JWT secret is required")
 	}
-	
+
 	// Check minimum length (32 characters for strong security)
-	if len(secret) < 32 {
+	if len(secret) < constants.MinJWTSecretLength {
 		return fmt.Errorf(
-			"JWT secret must be at least 32 characters (got %d). "+
+			"JWT secret must be at least %d characters (got %d). "+
 				"Generate a strong secret with: openssl rand -base64 32",
-			len(secret))
+			constants.MinJWTSecretLength, len(secret))
 	}
-	
+
 	// Check for common weak secrets
 	lowerSecret := strings.ToLower(secret)
-	for _, weak := range weakSecrets {
+	for _, weak := range constants.WeakSecrets {
 		if strings.Contains(lowerSecret, weak) {
 			return fmt.Errorf(
 				"JWT secret appears to be weak (contains '%s'). "+
@@ -906,6 +969,6 @@ func validateJWTSecret(secret string) error {
 				weak)
 		}
 	}
-	
+
 	return nil
 }

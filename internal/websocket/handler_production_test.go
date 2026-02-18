@@ -188,4 +188,3 @@ func TestProductionIssue13_DefaultOriginBehavior(t *testing.T) {
 
 	t.Log("STATUS: Origin validation works correctly when configured")
 }
-

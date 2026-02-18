@@ -160,7 +160,7 @@ func TestProperty_ValidMessageRoutingToLLM(t *testing.T) {
 				},
 			}
 
-			err := service.RegisterProvider(modelID, mockProvider)
+			err := service.registerProviderUnsafe(modelID, mockProvider)
 			if err != nil {
 				t.Logf("Failed to register provider: %v", err)
 				return false
@@ -277,7 +277,7 @@ func TestProperty_LLMResponseDelivery(t *testing.T) {
 			}
 
 			// Register provider for this iteration (replaces previous mock)
-			err := service.RegisterProvider(modelID, mockProvider)
+			err := service.registerProviderUnsafe(modelID, mockProvider)
 			if err != nil {
 				t.Logf("Failed to register provider: %v", err)
 				return false
@@ -402,7 +402,7 @@ func TestProperty_ResponseTimeTracking(t *testing.T) {
 				},
 			}
 
-			err := service.RegisterProvider(modelID, mockProvider)
+			err := service.registerProviderUnsafe(modelID, mockProvider)
 			if err != nil {
 				t.Logf("Failed to register provider: %v", err)
 				return false
@@ -521,7 +521,7 @@ func TestProperty_LLMRequestContextInclusion(t *testing.T) {
 				},
 			}
 
-			err := service.RegisterProvider(modelID, mockProvider)
+			err := service.registerProviderUnsafe(modelID, mockProvider)
 			if err != nil {
 				t.Logf("Failed to register provider: %v", err)
 				return false
@@ -667,7 +667,7 @@ func TestProperty_StreamingResponseForwarding(t *testing.T) {
 				},
 			}
 
-			err := service.RegisterProvider(modelID, mockProvider)
+			err := service.registerProviderUnsafe(modelID, mockProvider)
 			if err != nil {
 				t.Logf("Failed to register provider: %v", err)
 				return false
@@ -810,7 +810,7 @@ func TestProperty_LLMBackendRetryLogic(t *testing.T) {
 				},
 			}
 
-			err := service.RegisterProvider(modelID, mockProvider)
+			err := service.registerProviderUnsafe(modelID, mockProvider)
 			if err != nil {
 				t.Logf("Failed to register provider: %v", err)
 				return false
@@ -940,13 +940,13 @@ func TestProperty_ModelSelectionPersistence(t *testing.T) {
 				},
 			}
 
-			err := service.RegisterProvider(modelID1, mockProvider1)
+			err := service.registerProviderUnsafe(modelID1, mockProvider1)
 			if err != nil {
 				t.Logf("Failed to register provider 1: %v", err)
 				return false
 			}
 
-			err = service.RegisterProvider(modelID2, mockProvider2)
+			err = service.registerProviderUnsafe(modelID2, mockProvider2)
 			if err != nil {
 				t.Logf("Failed to register provider 2: %v", err)
 				return false
@@ -1082,7 +1082,7 @@ func TestProperty_TokenUsageTrackingAndStorage(t *testing.T) {
 				},
 			}
 
-			err := service.RegisterProvider(modelID, mockProvider)
+			err := service.registerProviderUnsafe(modelID, mockProvider)
 			if err != nil {
 				t.Logf("Failed to register provider: %v", err)
 				return false

@@ -102,7 +102,7 @@ func TestProductionIssue11_MemoryGrowth(t *testing.T) {
 
 	assert.Equal(t, numUsers, totalUsers, "Should have events for all users")
 	assert.Equal(t, numEvents, totalEvents, "Should have exactly 10,000 events")
-	
+
 	t.Logf("Total users tracked: %d", totalUsers)
 	t.Logf("Total events stored: %d", totalEvents)
 
@@ -112,7 +112,7 @@ func TestProductionIssue11_MemoryGrowth(t *testing.T) {
 	bytesPerEvent := 24
 	mapOverheadPerUser := 48 // approximate overhead for map entry
 	expectedMinMemory := (totalEvents * bytesPerEvent) + (totalUsers * mapOverheadPerUser)
-	
+
 	t.Logf("Estimated memory usage: ~%d bytes (%.2f KB)", expectedMinMemory, float64(expectedMinMemory)/1024)
 
 	// Document unbounded growth
@@ -172,4 +172,3 @@ func TestProductionIssue11_CleanupEffectiveness(t *testing.T) {
 	t.Log("STATUS: Cleanup correctly removes only expired events")
 	t.Log("FINDING: Active events are preserved during cleanup")
 }
-

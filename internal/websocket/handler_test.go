@@ -583,10 +583,10 @@ func TestHandler_OriginValidationIntegration(t *testing.T) {
 // TestHandler_MessageSizeLimit tests that the handler correctly configures message size limits
 func TestHandler_MessageSizeLimit(t *testing.T) {
 	tests := []struct {
-		name               string
-		maxMessageSize     int64
-		expectedLimit      int64
-		description        string
+		name           string
+		maxMessageSize int64
+		expectedLimit  int64
+		description    string
 	}{
 		{
 			name:           "default limit is 1MB",
@@ -654,10 +654,10 @@ func TestHandler_SetReadLimitCalled(t *testing.T) {
 			// Create a test JWT token
 			secret := "test-secret"
 			validator := auth.NewJWTValidator(secret)
-			
+
 			// Create mock router
 			mockRouter := newMockRouter()
-			
+
 			handler := NewHandler(validator, mockRouter, testLogger(), tt.maxMessageSize)
 
 			// Create a test server that will upgrade to WebSocket
@@ -679,7 +679,7 @@ func TestHandler_SetReadLimitCalled(t *testing.T) {
 			// Connect to the WebSocket endpoint with token
 			wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "?token=" + tokenString
 			conn, resp, err := websocket.DefaultDialer.Dial(wsURL, nil)
-			
+
 			// Connection should be established successfully
 			require.NoError(t, err, tt.description)
 			require.NotNil(t, conn)
@@ -692,7 +692,7 @@ func TestHandler_SetReadLimitCalled(t *testing.T) {
 
 			// Clean up
 			conn.Close()
-			
+
 			// Give time for cleanup
 			time.Sleep(50 * time.Millisecond)
 		})

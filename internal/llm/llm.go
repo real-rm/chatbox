@@ -252,6 +252,32 @@ func (s *LLMService) RegisterProvider(modelID string, provider LLMProvider) erro
 	return nil
 }
 
+// registerProviderUnsafe registers a provider without checking if the model exists in configuration.
+// This is intended for testing purposes only.
+func (s *LLMService) registerProviderUnsafe(modelID string, provider LLMProvider) error {
+	if modelID == "" {
+		return ErrInvalidModelID
+	}
+	if provider == nil {
+		return errors.New("provider cannot be nil")
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Add model info if it doesn't exist (for testing)
+	if _, exists := s.models[modelID]; !exists {
+		s.models[modelID] = ModelInfo{
+			ID:   modelID,
+			Name: modelID,
+			Type: "test",
+		}
+	}
+
+	s.providers[modelID] = provider
+	return nil
+}
+
 // SendMessage sends a message to the specified LLM model with retry logic and response time tracking
 func (s *LLMService) SendMessage(ctx context.Context, modelID string, messages []ChatMessage) (*LLMResponse, error) {
 	if modelID == "" {
@@ -262,7 +288,7 @@ func (s *LLMService) SendMessage(ctx context.Context, modelID string, messages [
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Get provider name for metrics
 	providerName := s.getProviderName(modelID)
 
@@ -302,7 +328,7 @@ func (s *LLMService) SendMessage(ctx context.Context, modelID string, messages [
 		startTime := time.Now()
 		resp, err := provider.SendMessage(ctx, req)
 		duration := time.Since(startTime)
-		
+
 		// Record latency metric
 		metrics.LLMLatency.WithLabelValues(providerName).Observe(duration.Seconds())
 
@@ -311,21 +337,21 @@ func (s *LLMService) SendMessage(ctx context.Context, modelID string, messages [
 			if resp.Duration == 0 {
 				resp.Duration = duration
 			}
-			
+
 			// Record token usage metric
 			if resp.TokensUsed > 0 {
 				metrics.TokensUsed.WithLabelValues(providerName).Add(float64(resp.TokensUsed))
 			}
-			
+
 			s.logger.Info("LLM request successful", "model_id", modelID, "duration", duration, "tokens", resp.TokensUsed)
 			return resp, nil
 		}
 
 		lastErr = err
-		
+
 		// Increment LLM errors metric
 		metrics.LLMErrors.WithLabelValues(providerName).Inc()
-		
+
 		s.logger.Warn("LLM request failed", "model_id", modelID, "attempt", attempt+1, "error", err)
 
 		// Check if error is retryable
@@ -348,7 +374,7 @@ func (s *LLMService) StreamMessage(ctx context.Context, modelID string, messages
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Get provider name for metrics
 	providerName := s.getProviderName(modelID)
 
@@ -383,7 +409,7 @@ func (s *LLMService) StreamMessage(ctx context.Context, modelID string, messages
 
 		// Increment LLM requests metric
 		metrics.LLMRequests.WithLabelValues(providerName).Inc()
-		
+
 		// Track start time for latency measurement
 		startTime := time.Now()
 
@@ -409,10 +435,10 @@ func (s *LLMService) StreamMessage(ctx context.Context, modelID string, messages
 		}
 
 		lastErr = err
-		
+
 		// Increment LLM errors metric
 		metrics.LLMErrors.WithLabelValues(providerName).Inc()
-		
+
 		s.logger.Warn("LLM stream request failed", "model_id", modelID, "attempt", attempt+1, "error", err)
 
 		// Check if error is retryable
@@ -479,6 +505,7 @@ func (s *LLMService) getProvider(modelID string) (LLMProvider, error) {
 
 	return provider, nil
 }
+
 // getProviderName returns the provider name (type) for a given model ID
 // Returns "unknown" if the model is not found
 func (s *LLMService) getProviderName(modelID string) string {
@@ -492,7 +519,6 @@ func (s *LLMService) getProviderName(modelID string) string {
 
 	return "unknown"
 }
-
 
 // isRetryableError determines if an error should trigger a retry
 func isRetryableError(err error) bool {

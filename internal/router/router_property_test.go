@@ -634,7 +634,7 @@ func TestProperty_StreamingRequestsHaveTimeout(t *testing.T) {
 
 			logger := createTestLogger()
 			sm := session.NewSessionManager(15*time.Minute, logger)
-			
+
 			// Create mock LLM that captures the context
 			var capturedCtx context.Context
 			mockLLM := &mockLLMServiceWithContext{
@@ -646,7 +646,7 @@ func TestProperty_StreamingRequestsHaveTimeout(t *testing.T) {
 					return ch, nil
 				},
 			}
-			
+
 			timeout := time.Duration(timeoutSeconds) * time.Second
 			router := NewMessageRouter(sm, mockLLM, nil, nil, nil, timeout, logger)
 
@@ -710,7 +710,7 @@ func TestProperty_TimeoutCancelsStreaming(t *testing.T) {
 
 			logger := createTestLogger()
 			sm := session.NewSessionManager(15*time.Minute, logger)
-			
+
 			// Create mock LLM that hangs longer than timeout
 			mockLLM := &mockLLMServiceWithContext{
 				onStreamMessage: func(ctx context.Context, modelID string, messages []llm.ChatMessage) (<-chan *llm.LLMChunk, error) {
@@ -730,7 +730,7 @@ func TestProperty_TimeoutCancelsStreaming(t *testing.T) {
 					return ch, nil
 				},
 			}
-			
+
 			// Set a very short timeout (100ms) to test timeout behavior
 			timeout := 100 * time.Millisecond
 			router := NewMessageRouter(sm, mockLLM, nil, nil, nil, timeout, logger)
@@ -761,7 +761,7 @@ func TestProperty_TimeoutCancelsStreaming(t *testing.T) {
 			// HandleUserMessage should complete (it handles timeout internally)
 			// The function returns nil even on timeout because it sends error to client
 			err = router.HandleUserMessage(conn, msg)
-			
+
 			// The function should complete without hanging
 			// (timeout is handled internally and error is sent to client)
 			return true

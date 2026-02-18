@@ -116,13 +116,13 @@ func TestProductionIssue02_SessionIDConsistency(t *testing.T) {
 
 	// Sub-task 2.2.3: Verify ID consistency throughout flow
 	t.Log("Verifying ID consistency across SessionManager and Storage...")
-	
+
 	// Check SessionManager has the session with generated ID
 	retrievedSess, err := sm.GetSession(sess.ID)
 	require.NoError(t, err)
 	assert.Equal(t, sess.ID, retrievedSess.ID, "Session IDs should match in SessionManager")
 	assert.Equal(t, "test-user", retrievedSess.UserID, "UserID should be preserved")
-	
+
 	// Check Storage was called with the correct session ID
 	assert.True(t, mockStorage.createCalled, "Storage CreateSession should be called")
 	assert.Equal(t, sess.ID, mockStorage.lastSession.ID,
@@ -261,7 +261,7 @@ func TestProductionIssue02_CreateNewSessionFlow(t *testing.T) {
 		// Attempt to create session (should fail)
 		t.Log("Attempting to create session with failing storage...")
 		sess, err := mr.createNewSession(conn, "client-session-id")
-		
+
 		// Verify error is returned
 		assert.Error(t, err, "createNewSession should return error on storage failure")
 		assert.Nil(t, sess, "Session should be nil on failure")
@@ -273,7 +273,7 @@ func TestProductionIssue02_CreateNewSessionFlow(t *testing.T) {
 
 		// Verify rollback behavior
 		t.Log("Verifying rollback behavior...")
-		
+
 		// The session was created in SessionManager, then storage failed
 		// The implementation calls EndSession for rollback
 		sessionID := mockStorage.lastSession.ID
@@ -281,7 +281,7 @@ func TestProductionIssue02_CreateNewSessionFlow(t *testing.T) {
 
 		// Try to get the session from SessionManager
 		rolledBackSess, err := sm.GetSession(sessionID)
-		
+
 		if err == nil && rolledBackSess != nil {
 			// Session exists but should be inactive
 			assert.False(t, rolledBackSess.IsActive,
@@ -376,7 +376,7 @@ func TestProductionIssue03_ConnectionReplacement(t *testing.T) {
 	storedConn := mr.connections[sessionID]
 	connectionCount := len(mr.connections)
 	mr.mu.RUnlock()
-	
+
 	assert.Equal(t, conn1, storedConn, "First connection should be stored")
 	assert.Equal(t, 1, connectionCount, "Should have exactly 1 connection")
 	t.Logf("✓ First connection verified in connections map (total: %d)", connectionCount)
@@ -420,14 +420,14 @@ func TestProductionIssue03_ConnectionReplacement(t *testing.T) {
 	// Sub-task 3.1.4: Document cleanup behavior
 	t.Log("")
 	t.Log("Sub-task 3.1.4: Documenting cleanup behavior...")
-	
+
 	// Give time for any cleanup to occur
 	time.Sleep(100 * time.Millisecond)
 	runtime.GC()
-	
+
 	goroutinesAfter := runtime.NumGoroutine()
 	t.Logf("Goroutines after replacement: %d", goroutinesAfter)
-	
+
 	// Check if goroutines increased (indicating potential leak)
 	goroutineDelta := goroutinesAfter - goroutinesBefore
 	if goroutineDelta > 0 {
@@ -593,11 +593,11 @@ func TestProductionIssue03_UnregisterConnection(t *testing.T) {
 	t.Log("")
 	t.Log("Additional test: Verifying idempotent unregister...")
 	mr.UnregisterConnection(sessionID) // Should not panic or error
-	
+
 	mr.mu.RLock()
 	_, stillExists := mr.connections[sessionID]
 	mr.mu.RUnlock()
-	
+
 	assert.False(t, stillExists, "Connection should still not exist after second unregister")
 	t.Log("✓ UnregisterConnection is idempotent (safe to call multiple times)")
 
@@ -704,7 +704,7 @@ func TestProductionIssue08_StreamingContext(t *testing.T) {
 		timeUntilDeadline := time.Until(deadline)
 		t.Logf("✓ Context has timeout configured")
 		t.Logf("✓ Time until deadline: %v", timeUntilDeadline)
-		
+
 		// Verify the timeout is approximately what we configured
 		// Allow some tolerance for execution time
 		assert.Greater(t, timeUntilDeadline, 110*time.Second,
@@ -825,7 +825,7 @@ func TestProductionIssue08_StreamingTimeout(t *testing.T) {
 	// Sub-task 8.2.2: Call HandleUserMessage
 	t.Log("")
 	t.Log("Sub-task 8.2.2: Calling HandleUserMessage with hanging LLM...")
-	
+
 	// Sub-task 8.2.3: Measure completion time
 	t.Log("")
 	t.Log("Sub-task 8.2.3: Measuring completion time...")
@@ -833,7 +833,7 @@ func TestProductionIssue08_StreamingTimeout(t *testing.T) {
 
 	// Handle the message - should timeout
 	err = mr.HandleUserMessage(conn, msg)
-	
+
 	duration := time.Since(start)
 	t.Logf("✓ Request completed in %v", duration)
 

@@ -106,12 +106,12 @@ func TestMultiDevice_MessageBroadcastToAllConnections(t *testing.T) {
 func TestMultiDevice_IndependentSessions(t *testing.T) {
 	testSecret := "test-secret"
 	validator := auth.NewJWTValidator(testSecret)
-	
+
 	// Create a mock router to track session registrations
 	mockRouter := &mockMessageRouter{
 		sessions: make(map[string]*Connection),
 	}
-	
+
 	handler := NewHandler(validator, mockRouter, testLogger(), 1048576)
 
 	// Create a test server
@@ -170,8 +170,8 @@ func TestMultiDevice_IndependentSessions(t *testing.T) {
 	mockRouter.mu.Lock()
 	assert.Contains(t, mockRouter.sessions, session1ID, "Session 1 should be registered")
 	assert.Contains(t, mockRouter.sessions, session2ID, "Session 2 should be registered")
-	assert.NotEqual(t, mockRouter.sessions[session1ID].ConnectionID, 
-		mockRouter.sessions[session2ID].ConnectionID, 
+	assert.NotEqual(t, mockRouter.sessions[session1ID].ConnectionID,
+		mockRouter.sessions[session2ID].ConnectionID,
 		"Each session should have a different connection")
 	mockRouter.mu.Unlock()
 
@@ -256,12 +256,12 @@ func TestMultiDevice_ConnectionFailureIsolation(t *testing.T) {
 func TestMultiDevice_ConcurrentMessageSending(t *testing.T) {
 	testSecret := "test-secret"
 	validator := auth.NewJWTValidator(testSecret)
-	
+
 	mockRouter := &mockMessageRouter{
-		sessions:       make(map[string]*Connection),
-		receivedMsgs:   make([]message.Message, 0),
+		sessions:     make(map[string]*Connection),
+		receivedMsgs: make([]message.Message, 0),
 	}
-	
+
 	handler := NewHandler(validator, mockRouter, testLogger(), 1048576)
 
 	// Create a test server
@@ -321,7 +321,7 @@ func TestMultiDevice_ConcurrentMessageSending(t *testing.T) {
 	mockRouter.mu.Unlock()
 
 	expectedTotal := numDevices * messagesPerDevice
-	assert.Equal(t, expectedTotal, totalReceived, 
+	assert.Equal(t, expectedTotal, totalReceived,
 		"Router should receive all messages from all devices")
 
 	// Clean up
@@ -447,7 +447,7 @@ func TestMultiDevice_MaxConnectionsEnforcement(t *testing.T) {
 	_, resp, err := websocket.DefaultDialer.Dial(wsURL, nil)
 	assert.Error(t, err, "11th device connection should be rejected")
 	if resp != nil {
-		assert.Equal(t, http.StatusTooManyRequests, resp.StatusCode, 
+		assert.Equal(t, http.StatusTooManyRequests, resp.StatusCode,
 			"Should return 429 Too Many Requests")
 	}
 

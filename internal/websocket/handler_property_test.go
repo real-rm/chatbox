@@ -356,14 +356,14 @@ func TestProperty_ConnectionIDUniqueness(t *testing.T) {
 			connectionIDs := make(map[string]bool)
 			for i := uint8(0); i < numConnections; i++ {
 				conn := handler.createConnection(nil, claims)
-				
+
 				// Check if connection ID already exists
 				if connectionIDs[conn.ConnectionID] {
 					return false // Duplicate found!
 				}
-				
+
 				connectionIDs[conn.ConnectionID] = true
-				
+
 				// Verify connection ID format (should contain user ID)
 				if conn.ConnectionID == "" {
 					return false
@@ -758,10 +758,10 @@ func TestProperty_OriginValidationThreadSafety(t *testing.T) {
 						if endIdx >= len(validOrigins) {
 							endIdx = len(validOrigins) - 1
 						}
-						
+
 						subset := validOrigins[startIdx : endIdx+1]
 						handler.SetAllowedOrigins(subset)
-						
+
 						// Small sleep to allow readers to interleave
 						time.Sleep(time.Microsecond)
 					}
@@ -782,9 +782,9 @@ func TestProperty_OriginValidationThreadSafety(t *testing.T) {
 				return true
 			}
 		},
-		gen.UInt8Range(1, 50),              // Number of reader goroutines
-		gen.UInt8Range(1, 10),              // Number of writer goroutines
-		gen.SliceOf(gen.Identifier()),      // List of origins
+		gen.UInt8Range(1, 50),         // Number of reader goroutines
+		gen.UInt8Range(1, 10),         // Number of writer goroutines
+		gen.SliceOf(gen.Identifier()), // List of origins
 	))
 
 	properties.TestingRun(t, gopter.ConsoleReporter(false))

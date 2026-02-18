@@ -151,7 +151,7 @@ func TestRouteMessage_UserMessage(t *testing.T) {
 	// Route message
 	err = router.RouteMessage(conn, msg)
 	assert.NoError(t, err)
-	
+
 	// Verify LLM service was called with streaming
 	assert.True(t, mockLLM.streamCalled, "StreamMessage should be called")
 	assert.False(t, mockLLM.sendMessageCalled, "SendMessage should not be called")
@@ -370,7 +370,7 @@ func TestBroadcastToSession(t *testing.T) {
 				Timestamp: time.Now(),
 			},
 			wantErr: true,
-			errCode: chaterrors.ErrCodeMissingField,
+			errCode: chaterrors.ErrCodeNotFound,
 		},
 	}
 
@@ -591,7 +591,7 @@ func TestHandleModelSelection_NonExistentSession(t *testing.T) {
 
 	var chatErr *chaterrors.ChatError
 	if assert.ErrorAs(t, err, &chatErr) {
-		assert.Equal(t, chaterrors.ErrCodeMissingField, chatErr.Code)
+		assert.Equal(t, chaterrors.ErrCodeNotFound, chatErr.Code)
 	}
 }
 

@@ -271,10 +271,10 @@ func TestProductionIssue10_SerializationAccuracy(t *testing.T) {
 		startTime := time.Now()
 		endTime := startTime.Add(1 * time.Hour)
 		sess := &session.Session{
-			ID:       "test-session",
-			UserID:   "test-user",
-			Name:     "Test Session",
-			ModelID:  "gpt-4",
+			ID:      "test-session",
+			UserID:  "test-user",
+			Name:    "Test Session",
+			ModelID: "gpt-4",
 			Messages: []*session.Message{
 				{
 					Content:   "Hello",
@@ -287,10 +287,10 @@ func TestProductionIssue10_SerializationAccuracy(t *testing.T) {
 					Sender:    "ai",
 				},
 			},
-			StartTime:    startTime,
-			EndTime:      &endTime,
-			IsActive:     false,
-			TotalTokens:  100,
+			StartTime:   startTime,
+			EndTime:     &endTime,
+			IsActive:    false,
+			TotalTokens: 100,
 			ResponseTimes: []time.Duration{
 				100 * time.Millisecond,
 				200 * time.Millisecond,
@@ -352,10 +352,10 @@ func TestProductionIssue10_SerializationAccuracy(t *testing.T) {
 		// Create a session with initial data
 		startTime := time.Now()
 		sess := &session.Session{
-			ID:       "test-session",
-			UserID:   "test-user",
-			Name:     "Test Session",
-			ModelID:  "gpt-4",
+			ID:      "test-session",
+			UserID:  "test-user",
+			Name:    "Test Session",
+			ModelID: "gpt-4",
 			Messages: []*session.Message{
 				{
 					Content:   "Initial message",
@@ -429,7 +429,7 @@ func TestProductionIssue10_SerializationAccuracy(t *testing.T) {
 
 		t.Logf("Successful serializations: %d/%d", successCount, len(serializedDocs))
 		assert.Equal(t, len(serializedDocs), successCount, "All serializations should complete successfully with proper locking")
-		
+
 		if panicCount > 0 {
 			t.Logf("Panics detected: %d", panicCount)
 			t.Error("No panics should occur with proper locking")
@@ -517,4 +517,3 @@ func TestProductionIssue10_SerializationAccuracy(t *testing.T) {
 	t.Log("FINDING: Concurrent modifications are now properly synchronized with locking")
 	t.Log("RECOMMENDATION: Thread-safe serialization is now implemented and working correctly")
 }
-

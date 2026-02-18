@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/real-rm/chatbox/internal/constants"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -127,6 +128,7 @@ func TestValidate_ValidConfig(t *testing.T) {
 			MaxConnections:   10000,
 			RateLimit:        100,
 			JWTSecret:        "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6", // 36 chars, strong secret
+			PathPrefix:       constants.DefaultPathPrefix,
 		},
 		Database: DatabaseConfig{
 			URI:        "mongodb://localhost:27017",
@@ -691,7 +693,8 @@ func validConfig() *Config {
 			ReconnectTimeout: 15 * time.Minute,
 			MaxConnections:   10000,
 			RateLimit:        100,
-			JWTSecret:        "test-secret",
+			JWTSecret:        "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6", // 36 chars, strong secret
+			PathPrefix:       constants.DefaultPathPrefix,
 		},
 		Database: DatabaseConfig{
 			URI:        "mongodb://localhost:27017",

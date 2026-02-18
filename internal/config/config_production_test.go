@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/real-rm/chatbox/internal/constants"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -405,6 +406,7 @@ func createValidConfig() *Config {
 			RateLimit:        100,
 			JWTSecret:        "a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6", // 36 chars, strong secret
 			LLMStreamTimeout: 120 * time.Second,
+			PathPrefix:       constants.DefaultPathPrefix,
 		},
 		Database: DatabaseConfig{
 			URI:            "mongodb://localhost:27017",
@@ -446,7 +448,6 @@ func createValidConfig() *Config {
 		},
 	}
 }
-
 
 // TestLLMStreamTimeout_DefaultValue verifies the default timeout is set correctly
 //

@@ -7,6 +7,7 @@ import (
 	"github.com/leanovate/gopter"
 	"github.com/leanovate/gopter/gen"
 	"github.com/leanovate/gopter/prop"
+	"github.com/real-rm/chatbox/internal/constants"
 )
 
 // Feature: production-readiness-fixes, Property 17: Weak secrets are rejected
@@ -110,7 +111,7 @@ func TestProperty_StrongSecretsAreAccepted(t *testing.T) {
 			// Generate a strong secret using random characters
 			// Use a prefix that doesn't match weak patterns
 			prefix := "strong_"
-			
+
 			// Calculate how many characters we need to add
 			neededLength := secretLength - len(prefix) - len(randomSuffix)
 			if neededLength < 0 {
@@ -122,7 +123,7 @@ func TestProperty_StrongSecretsAreAccepted(t *testing.T) {
 					neededLength = 0
 				}
 			}
-			
+
 			secret := prefix + randomSuffix + strings.Repeat("x", neededLength)
 
 			// Ensure it doesn't contain weak patterns
@@ -146,6 +147,7 @@ func TestProperty_StrongSecretsAreAccepted(t *testing.T) {
 					ReconnectTimeout: 15 * 60 * 1000000000, // 15 minutes in nanoseconds
 					MaxConnections:   1000,
 					RateLimit:        100,
+					PathPrefix:       constants.DefaultPathPrefix,
 				},
 				Database: DatabaseConfig{
 					URI:        "mongodb://localhost:27017",

@@ -135,11 +135,11 @@ func TestStreamingResponseForwarding(t *testing.T) {
 				if msg.Type == message.TypeAIResponse {
 					chunkCount++
 					fullContent += msg.Content
-					
+
 					// Verify metadata
 					assert.Equal(t, "true", msg.Metadata["streaming"])
 					assert.NotEmpty(t, msg.Metadata["done"])
-					
+
 					// Last chunk should have done=true
 					if i == len(receivedMessages)-1 {
 						assert.Equal(t, "true", msg.Metadata["done"])
@@ -360,7 +360,7 @@ collectLoop:
 			err := json.Unmarshal(data, &msg)
 			require.NoError(t, err)
 			receivedMessages = append(receivedMessages, &msg)
-			
+
 			// Check if we got the final chunk
 			if msg.Type == message.TypeAIResponse && msg.Metadata["done"] == "true" {
 				break collectLoop
@@ -373,7 +373,7 @@ collectLoop:
 	// Should receive loading indicator and at least some chunks
 	assert.GreaterOrEqual(t, len(receivedMessages), 2)
 	assert.Equal(t, message.TypeLoading, receivedMessages[0].Type)
-	
+
 	// Verify we got some content
 	var fullContent string
 	for i := 1; i < len(receivedMessages); i++ {
@@ -441,10 +441,10 @@ collectLoop:
 	// Verify error message doesn't contain internal details
 	require.NotNil(t, errorMsg)
 	require.NotNil(t, errorMsg.Error)
-	
+
 	// Error message should be generic
 	assert.Equal(t, "AI service is temporarily unavailable", errorMsg.Error.Message)
-	
+
 	// Should not contain internal details
 	assert.NotContains(t, errorMsg.Error.Message, "database")
 	assert.NotContains(t, errorMsg.Error.Message, "192.168")

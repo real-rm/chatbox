@@ -63,7 +63,7 @@ type MessageLimiter struct {
 	window time.Duration
 	limit  int
 	mu     sync.RWMutex
-	
+
 	// Cleanup goroutine management
 	cleanupInterval time.Duration
 	stopCleanup     chan struct{}
@@ -192,7 +192,7 @@ func (ml *MessageLimiter) StartCleanup() {
 		defer ml.cleanupWg.Done()
 		ticker := time.NewTicker(ml.cleanupInterval)
 		defer ticker.Stop()
-		
+
 		for {
 			select {
 			case <-ticker.C:
@@ -215,7 +215,7 @@ func (ml *MessageLimiter) StartCleanup() {
 func (ml *MessageLimiter) getEventCount() int {
 	ml.mu.RLock()
 	defer ml.mu.RUnlock()
-	
+
 	count := 0
 	for _, events := range ml.events {
 		count += len(events)
@@ -224,9 +224,23 @@ func (ml *MessageLimiter) getEventCount() int {
 }
 
 // StopCleanup stops the cleanup goroutine and waits for it to finish
+// CRITICAL FIX C3: Use sync.Once to prevent double-close panic
 func (ml *MessageLimiter) StopCleanup() {
+	ml.mu.Lock()
+	defer ml.mu.Unlock()
+
+	// Only close if channel is not nil and not already closed
 	if ml.stopCleanup != nil {
-		close(ml.stopCleanup)
-		ml.cleanupWg.Wait()
+		select {
+		case <-ml.stopCleanup:
+			// Already closed, do nothing
+		default:
+			close(ml.stopCleanup)
+		}
 	}
+
+	// Wait for cleanup goroutine to finish (outside the lock)
+	ml.mu.Unlock()
+	ml.cleanupWg.Wait()
+	ml.mu.Lock()
 }

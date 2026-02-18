@@ -17,7 +17,7 @@ func TestRespondUnauthorized(t *testing.T) {
 	RespondUnauthorized(c, "")
 
 	assert.Equal(t, 401, w.Code)
-	
+
 	var response ErrorResponse
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
@@ -33,7 +33,7 @@ func TestRespondInvalidToken(t *testing.T) {
 	RespondInvalidToken(c)
 
 	assert.Equal(t, 401, w.Code)
-	
+
 	var response ErrorResponse
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
@@ -49,7 +49,7 @@ func TestRespondForbidden(t *testing.T) {
 	RespondForbidden(c)
 
 	assert.Equal(t, 403, w.Code)
-	
+
 	var response ErrorResponse
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
@@ -65,7 +65,7 @@ func TestRespondBadRequest(t *testing.T) {
 	RespondBadRequest(c, "Custom message")
 
 	assert.Equal(t, 400, w.Code)
-	
+
 	var response ErrorResponse
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
@@ -81,7 +81,7 @@ func TestRespondInternalError(t *testing.T) {
 	RespondInternalError(c)
 
 	assert.Equal(t, 500, w.Code)
-	
+
 	var response ErrorResponse
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
@@ -97,7 +97,7 @@ func TestRespondServiceUnavailable(t *testing.T) {
 	RespondServiceUnavailable(c)
 
 	assert.Equal(t, 503, w.Code)
-	
+
 	var response ErrorResponse
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
@@ -113,7 +113,7 @@ func TestRespondNotFound(t *testing.T) {
 	RespondNotFound(c, "")
 
 	assert.Equal(t, 404, w.Code)
-	
+
 	var response ErrorResponse
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
@@ -124,7 +124,7 @@ func TestRespondNotFound(t *testing.T) {
 func TestErrorResponseDoesNotLeakInternalDetails(t *testing.T) {
 	// This test verifies that error messages are generic and don't contain
 	// internal implementation details like stack traces, database queries, etc.
-	
+
 	tests := []struct {
 		name    string
 		message string

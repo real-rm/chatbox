@@ -17,6 +17,9 @@ A production-ready real-time chat application with WebSocket backend in Go, feat
 - 🔒 Message encryption at rest
 - 🚦 Rate limiting and connection management
 - 🏥 Health checks and graceful shutdown
+- 🎯 Configurable HTTP path prefix for flexible routing
+- 🧹 Clean code architecture with no magic numbers/strings
+- ♻️ DRY principle with reusable utility functions
 
 ## Quick Start
 
@@ -46,10 +49,12 @@ chatbox/
 ├── internal/              # Internal packages
 │   ├── auth/             # JWT authentication
 │   ├── config/           # Configuration
+│   ├── constants/        # Centralized constants (no magic numbers/strings)
 │   ├── llm/              # LLM integration
 │   ├── router/           # Message routing
 │   ├── session/          # Session management
 │   ├── storage/          # MongoDB storage
+│   ├── util/             # Shared utility functions (DRY principle)
 │   ├── websocket/        # WebSocket handling
 │   └── ...               # Other packages
 ├── web/                   # Frontend assets
@@ -68,8 +73,15 @@ chatbox/
 
 ### Getting Started
 - [DEPLOYMENT.md](DEPLOYMENT.md) - Comprehensive deployment guide
+- [docs/NGINX_SETUP.md](docs/NGINX_SETUP.md) - Nginx reverse proxy configuration
 - [docs/SECRET_SETUP_QUICKSTART.md](docs/SECRET_SETUP_QUICKSTART.md) - Quick secret setup
 - [docs/TESTING.md](docs/TESTING.md) - Testing strategy
+
+### Code Quality & Architecture
+- [docs/CODE_QUALITY.md](docs/CODE_QUALITY.md) - Code quality standards and best practices
+- Clean code principles: No magic numbers/strings, DRY principle
+- High test coverage: 80%+ across all major packages
+- Comprehensive documentation of all code patterns
 
 ### Production Readiness
 - [PRODUCTION_READINESS_REVIEW.md](PRODUCTION_READINESS_REVIEW.md) - Final production assessment
@@ -106,6 +118,7 @@ The application is configured via environment variables and Kubernetes ConfigMap
 
 #### Server Configuration
 - `SERVER_PORT` - Server port (default: 8080)
+- `CHATBOX_PATH_PREFIX` - HTTP path prefix for all routes (default: /chatbox)
 - `RECONNECT_TIMEOUT` - Session reconnection timeout (default: 15m)
 - `MAX_CONNECTIONS` - Maximum concurrent connections (default: 10000)
 - `RATE_LIMIT` - Rate limit per user (default: 100)
@@ -164,6 +177,66 @@ Supported provider types: `openai`, `anthropic`, `dify`
 - `SMS_PROVIDER` - SMS provider name
 - `SMS_API_KEY` - SMS API key
 
+### HTTP Path Prefix Configuration
+
+The `CHATBOX_PATH_PREFIX` environment variable allows you to customize the base path for all chatbox routes. This is useful for:
+- Running multiple services on the same domain
+- API versioning (e.g., `/api/v1/chat`, `/api/v2/chat`)
+- Integration with existing API structures
+- Namespace separation in multi-tenant environments
+
+**Configuration**:
+- **Environment Variable**: `CHATBOX_PATH_PREFIX`
+- **Config File**: `chatbox.path_prefix` in config.toml
+- **Default**: `/chatbox`
+- **Format**: Must start with `/`
+
+**Routes Affected**:
+All chatbox routes use the configured prefix:
+```
+{path_prefix}/ws              # WebSocket endpoint
+{path_prefix}/sessions        # User sessions
+{path_prefix}/admin/*         # Admin endpoints
+{path_prefix}/healthz         # Liveness probe
+{path_prefix}/readyz          # Readiness probe
+```
+
+**Examples**:
+```bash
+# Default configuration
+CHATBOX_PATH_PREFIX="/chatbox"
+# WebSocket: ws://localhost:8080/chatbox/ws
+# Health: http://localhost:8080/chatbox/healthz
+
+# API versioning
+CHATBOX_PATH_PREFIX="/api/v1/chat"
+# WebSocket: ws://localhost:8080/api/v1/chat/ws
+# Health: http://localhost:8080/api/v1/chat/healthz
+
+# Service namespace
+CHATBOX_PATH_PREFIX="/services/chat"
+# WebSocket: ws://localhost:8080/services/chat/ws
+# Health: http://localhost:8080/services/chat/healthz
+```
+
+**Kubernetes Configuration**:
+```yaml
+# In configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: chat-config
+data:
+  CHATBOX_PATH_PREFIX: "/api/chat"
+```
+
+**Validation**:
+- Path prefix cannot be empty
+- Must start with `/`
+- Invalid configuration causes startup failure with clear error message
+
+For detailed deployment configuration including nginx setup, see [DEPLOYMENT.md](DEPLOYMENT.md#http-path-prefix-configuration).
+
 ## Development
 
 ### Prerequisites
@@ -171,6 +244,21 @@ Supported provider types: `openai`, `anthropic`, `dify`
 - MongoDB
 - AWS S3 or compatible storage
 - LLM API access (OpenAI, Anthropic, or Dify)
+
+### Code Quality
+
+The codebase follows strict code quality standards:
+
+- **No Magic Numbers/Strings**: All constants are defined in `internal/constants/` with clear documentation
+- **DRY Principle**: Common functionality extracted to `internal/util/` package
+  - Context helpers for timeout management
+  - Auth helpers for JWT token extraction
+  - JSON helpers for marshaling/unmarshaling
+  - Validation helpers for common checks
+  - Logging helpers for consistent error logging
+- **Documented Code**: All "if without else" patterns are documented with clear reasoning
+- **High Test Coverage**: 80%+ coverage across all major packages
+- **Property-Based Testing**: Universal correctness properties validated with gopter
 
 ### Running Tests
 

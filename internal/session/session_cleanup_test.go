@@ -186,7 +186,7 @@ func TestCleanupExpiredSessions_HandlesNilEndTime(t *testing.T) {
 	// Create a session and manually set it to inactive without EndTime
 	sess, err := sm.CreateSession("test-user")
 	require.NoError(t, err)
-	
+
 	sm.mu.Lock()
 	sess.IsActive = false
 	sess.EndTime = nil // Explicitly set to nil

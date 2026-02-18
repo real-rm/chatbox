@@ -11,7 +11,7 @@ import (
 // This measures the O(n log n) sort.Slice implementation that replaced the O(n²) bubble sort
 func BenchmarkSortByMessageCount(b *testing.B) {
 	sizes := []int{100, 1000, 10000}
-	
+
 	for _, size := range sizes {
 		// Create test data with random message counts to simulate real-world scenarios
 		sessions := make([]*SessionMetadata, size)
@@ -24,7 +24,7 @@ func BenchmarkSortByMessageCount(b *testing.B) {
 				TotalTokens:  i * 10,
 			}
 		}
-		
+
 		b.Run(fmt.Sprintf("Ascending_%d", size), func(b *testing.B) {
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
@@ -34,7 +34,7 @@ func BenchmarkSortByMessageCount(b *testing.B) {
 				sortByMessageCount(sessionsCopy, true)
 			}
 		})
-		
+
 		b.Run(fmt.Sprintf("Descending_%d", size), func(b *testing.B) {
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
@@ -50,7 +50,7 @@ func BenchmarkSortByMessageCount(b *testing.B) {
 // BenchmarkSortByMessageCount_WorstCase benchmarks the worst-case scenario (reverse sorted)
 func BenchmarkSortByMessageCount_WorstCase(b *testing.B) {
 	sizes := []int{100, 1000, 10000}
-	
+
 	for _, size := range sizes {
 		// Create reverse-sorted data (worst case for many algorithms)
 		sessions := make([]*SessionMetadata, size)
@@ -63,7 +63,7 @@ func BenchmarkSortByMessageCount_WorstCase(b *testing.B) {
 				TotalTokens:  i * 10,
 			}
 		}
-		
+
 		b.Run(fmt.Sprintf("ReverseSorted_%d", size), func(b *testing.B) {
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {
@@ -78,7 +78,7 @@ func BenchmarkSortByMessageCount_WorstCase(b *testing.B) {
 // BenchmarkSortByMessageCount_BestCase benchmarks the best-case scenario (already sorted)
 func BenchmarkSortByMessageCount_BestCase(b *testing.B) {
 	sizes := []int{100, 1000, 10000}
-	
+
 	for _, size := range sizes {
 		// Create already-sorted data (best case)
 		sessions := make([]*SessionMetadata, size)
@@ -91,7 +91,7 @@ func BenchmarkSortByMessageCount_BestCase(b *testing.B) {
 				TotalTokens:  i * 10,
 			}
 		}
-		
+
 		b.Run(fmt.Sprintf("AlreadySorted_%d", size), func(b *testing.B) {
 			b.ReportAllocs()
 			for i := 0; i < b.N; i++ {

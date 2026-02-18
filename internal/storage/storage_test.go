@@ -38,7 +38,7 @@ verbose = 1
 slowThreshold = 2
 
 [dbs.test_chat_db]
-uri = "%s/test_chat_db"
+uri = "%s/test_chat_db?authSource=admin"
 `, mongoURI)
 
 	// Write config to temp file
@@ -56,7 +56,7 @@ uri = "%s/test_chat_db"
 	}
 
 	// Set config file path via environment or command line flag
-	os.Setenv("CONFIG_FILE", tmpFile.Name())
+	os.Setenv("RMBASE_FILE_CFG", tmpFile.Name())
 
 	// Reset config state before loading
 	goconfig.ResetConfig()
@@ -77,7 +77,8 @@ uri = "%s/test_chat_db"
 	// Initialize logger
 	logger, err := golog.InitLog(golog.LogConfig{
 		Level:          "info",
-		StandardOutput: false,
+		StandardOutput: true,
+		Dir:            "/tmp",
 	})
 	if err != nil {
 		t.Skipf("Skipping MongoDB tests: failed to initialize logger: %v", err)
@@ -107,7 +108,7 @@ uri = "%s/test_chat_db"
 	cleanup := func() {
 		// Clean up temp config file
 		os.Remove(tmpFile.Name())
-		os.Unsetenv("CONFIG_FILE")
+		os.Unsetenv("RMBASE_FILE_CFG")
 
 		// Drop test collections
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -1682,16 +1683,16 @@ func TestListAllSessionsWithOptions_SortByMessageCount(t *testing.T) {
 	// Create sessions with different message counts
 	sessions := []*session.Session{
 		{
-			ID:       "session-1",
-			UserID:   "user-1",
-			Name:     "Session 1",
-			Messages: []*session.Message{{Content: "msg1", Timestamp: time.Now(), Sender: "user"}},
+			ID:        "session-1",
+			UserID:    "user-1",
+			Name:      "Session 1",
+			Messages:  []*session.Message{{Content: "msg1", Timestamp: time.Now(), Sender: "user"}},
 			StartTime: time.Now(),
 		},
 		{
-			ID:       "session-2",
-			UserID:   "user-1",
-			Name:     "Session 2",
+			ID:     "session-2",
+			UserID: "user-1",
+			Name:   "Session 2",
 			Messages: []*session.Message{
 				{Content: "msg1", Timestamp: time.Now(), Sender: "user"},
 				{Content: "msg2", Timestamp: time.Now(), Sender: "ai"},
@@ -1700,9 +1701,9 @@ func TestListAllSessionsWithOptions_SortByMessageCount(t *testing.T) {
 			StartTime: time.Now(),
 		},
 		{
-			ID:       "session-3",
-			UserID:   "user-1",
-			Name:     "Session 3",
+			ID:     "session-3",
+			UserID: "user-1",
+			Name:   "Session 3",
 			Messages: []*session.Message{
 				{Content: "msg1", Timestamp: time.Now(), Sender: "user"},
 				{Content: "msg2", Timestamp: time.Now(), Sender: "ai"},
@@ -2199,3 +2200,331 @@ func TestEnsureIndexesIdempotent(t *testing.T) {
 	_ = storageService.collection.Drop(ctx)
 }
 
+// Retry Logic Tests
+
+func TestRetryOperation_TransientErrorSuccess(t *testing.T) {
+	logger, err := golog.InitLog(golog.LogConfig{
+		Level:          "error",
+		StandardOutput: false,
+		Dir:            t.TempDir(),
+		InfoFile:       "info.log",
+		WarnFile:       "warn.log",
+		ErrorFile:      "error.log",
+	})
+	require.NoError(t, err)
+	defer logger.Close()
+
+	service := &StorageService{
+		logger: logger,
+	}
+
+	// Test that transient errors are retried and eventually succeed
+	attemptCount := 0
+	operation := func() error {
+		attemptCount++
+		if attemptCount < 3 {
+			return fmt.Errorf("connection timeout") // Transient error
+		}
+		return nil // Success on 3rd attempt
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	err = service.retryOperation(ctx, "TestOperation", operation)
+	assert.NoError(t, err)
+	assert.Equal(t, 3, attemptCount, "Should have attempted 3 times before success")
+}
+
+func TestRetryOperation_PermanentErrorFailsImmediately(t *testing.T) {
+	logger, err := golog.InitLog(golog.LogConfig{
+		Level:          "error",
+		StandardOutput: false,
+		Dir:            t.TempDir(),
+		InfoFile:       "info.log",
+		WarnFile:       "warn.log",
+		ErrorFile:      "error.log",
+	})
+	require.NoError(t, err)
+	defer logger.Close()
+
+	service := &StorageService{
+		logger: logger,
+	}
+
+	// Test that permanent errors fail immediately without retries
+	attemptCount := 0
+	operation := func() error {
+		attemptCount++
+		return fmt.Errorf("duplicate key error") // Non-transient error
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	err = service.retryOperation(ctx, "TestOperation", operation)
+	assert.Error(t, err)
+	assert.Equal(t, 1, attemptCount, "Should only attempt once for permanent errors")
+	assert.Contains(t, err.Error(), "duplicate key error")
+}
+
+func TestRetryOperation_RetryExhaustion(t *testing.T) {
+	logger, err := golog.InitLog(golog.LogConfig{
+		Level:          "error",
+		StandardOutput: false,
+		Dir:            t.TempDir(),
+		InfoFile:       "info.log",
+		WarnFile:       "warn.log",
+		ErrorFile:      "error.log",
+	})
+	require.NoError(t, err)
+	defer logger.Close()
+
+	service := &StorageService{
+		logger: logger,
+	}
+
+	// Test that retries are exhausted after max attempts
+	attemptCount := 0
+	operation := func() error {
+		attemptCount++
+		return fmt.Errorf("connection refused") // Always fails with transient error
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	err = service.retryOperation(ctx, "TestOperation", operation)
+	assert.Error(t, err)
+	assert.Equal(t, defaultRetryConfig.maxAttempts, attemptCount, "Should attempt exactly maxAttempts times")
+	assert.Contains(t, err.Error(), "operation failed after")
+	assert.Contains(t, err.Error(), "connection refused")
+}
+
+func TestRetryOperation_ExponentialBackoff(t *testing.T) {
+	logger, err := golog.InitLog(golog.LogConfig{
+		Level:          "error",
+		StandardOutput: false,
+		Dir:            t.TempDir(),
+		InfoFile:       "info.log",
+		WarnFile:       "warn.log",
+		ErrorFile:      "error.log",
+	})
+	require.NoError(t, err)
+	defer logger.Close()
+
+	service := &StorageService{
+		logger: logger,
+	}
+
+	// Track timing between attempts to verify exponential backoff
+	var attemptTimes []time.Time
+	operation := func() error {
+		attemptTimes = append(attemptTimes, time.Now())
+		return fmt.Errorf("timeout") // Transient error
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	err = service.retryOperation(ctx, "TestOperation", operation)
+	assert.Error(t, err)
+	assert.Len(t, attemptTimes, defaultRetryConfig.maxAttempts)
+
+	// Verify exponential backoff between attempts
+	expectedDelay := defaultRetryConfig.initialDelay
+	for i := 1; i < len(attemptTimes); i++ {
+		actualDelay := attemptTimes[i].Sub(attemptTimes[i-1])
+
+		// Allow 50ms tolerance for timing variations
+		tolerance := 50 * time.Millisecond
+		minExpected := expectedDelay - tolerance
+
+		assert.GreaterOrEqual(t, actualDelay, minExpected,
+			"Delay between attempt %d and %d should be at least %v (got %v)",
+			i, i+1, minExpected, actualDelay)
+
+		// Calculate next expected delay
+		expectedDelay = time.Duration(float64(expectedDelay) * defaultRetryConfig.multiplier)
+		if expectedDelay > defaultRetryConfig.maxDelay {
+			expectedDelay = defaultRetryConfig.maxDelay
+		}
+	}
+}
+
+func TestRetryOperation_ContextCancellation(t *testing.T) {
+	logger, err := golog.InitLog(golog.LogConfig{
+		Level:          "error",
+		StandardOutput: false,
+		Dir:            t.TempDir(),
+		InfoFile:       "info.log",
+		WarnFile:       "warn.log",
+		ErrorFile:      "error.log",
+	})
+	require.NoError(t, err)
+	defer logger.Close()
+
+	service := &StorageService{
+		logger: logger,
+	}
+
+	// Test that operation respects context cancellation
+	attemptCount := 0
+	operation := func() error {
+		attemptCount++
+		return fmt.Errorf("connection timeout") // Transient error
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	err = service.retryOperation(ctx, "TestOperation", operation)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "operation cancelled during retry")
+	// Should have attempted at least once, but not all max attempts
+	assert.Greater(t, attemptCount, 0)
+	assert.Less(t, attemptCount, defaultRetryConfig.maxAttempts)
+}
+
+func TestRetryOperation_ImmediateSuccess(t *testing.T) {
+	logger, err := golog.InitLog(golog.LogConfig{
+		Level:          "error",
+		StandardOutput: false,
+		Dir:            t.TempDir(),
+		InfoFile:       "info.log",
+		WarnFile:       "warn.log",
+		ErrorFile:      "error.log",
+	})
+	require.NoError(t, err)
+	defer logger.Close()
+
+	service := &StorageService{
+		logger: logger,
+	}
+
+	// Test that successful operations don't retry
+	attemptCount := 0
+	operation := func() error {
+		attemptCount++
+		return nil // Immediate success
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	err = service.retryOperation(ctx, "TestOperation", operation)
+	assert.NoError(t, err)
+	assert.Equal(t, 1, attemptCount, "Should only attempt once on immediate success")
+}
+
+func TestIsRetryableError_TransientErrors(t *testing.T) {
+	// Test various transient error patterns
+	transientErrors := []string{
+		"connection refused",
+		"connection reset by peer",
+		"i/o timeout",
+		"timeout exceeded",
+		"temporary failure in name resolution",
+		"EOF",
+		"server selection timeout",
+		"no reachable servers",
+		"connection pool exhausted",
+		"socket error",
+	}
+
+	for _, errMsg := range transientErrors {
+		err := fmt.Errorf("%s", errMsg)
+		assert.True(t, isRetryableError(err),
+			"Error '%s' should be retryable", errMsg)
+	}
+}
+
+func TestIsRetryableError_PermanentErrors(t *testing.T) {
+	// Test various permanent error patterns
+	permanentErrors := []string{
+		"duplicate key error",
+		"validation failed",
+		"invalid argument",
+		"not found",
+		"unauthorized",
+		"forbidden",
+		"bad request",
+	}
+
+	for _, errMsg := range permanentErrors {
+		err := fmt.Errorf("%s", errMsg)
+		assert.False(t, isRetryableError(err),
+			"Error '%s' should not be retryable", errMsg)
+	}
+}
+
+func TestIsRetryableError_NilError(t *testing.T) {
+	assert.False(t, isRetryableError(nil), "Nil error should not be retryable")
+}
+
+func TestContainsAny_MatchFound(t *testing.T) {
+	s := "connection timeout occurred"
+	substrings := []string{"timeout", "refused", "reset"}
+
+	assert.True(t, containsAny(s, substrings), "Should find 'timeout' in string")
+}
+
+func TestContainsAny_NoMatch(t *testing.T) {
+	s := "duplicate key error"
+	substrings := []string{"timeout", "refused", "reset"}
+
+	assert.False(t, containsAny(s, substrings), "Should not find any substring")
+}
+
+func TestContainsAny_EmptyString(t *testing.T) {
+	s := ""
+	substrings := []string{"timeout", "refused"}
+
+	assert.False(t, containsAny(s, substrings), "Empty string should not match")
+}
+
+func TestContainsAny_EmptySubstrings(t *testing.T) {
+	s := "some error message"
+	substrings := []string{}
+
+	assert.False(t, containsAny(s, substrings), "Empty substrings should not match")
+}
+
+func TestRetryOperation_MaxDelayCapReached(t *testing.T) {
+	logger, err := golog.InitLog(golog.LogConfig{
+		Level:          "error",
+		StandardOutput: false,
+		Dir:            t.TempDir(),
+		InfoFile:       "info.log",
+		WarnFile:       "warn.log",
+		ErrorFile:      "error.log",
+	})
+	require.NoError(t, err)
+	defer logger.Close()
+
+	service := &StorageService{
+		logger: logger,
+	}
+
+	// Test that delay is capped at maxDelay
+	var attemptTimes []time.Time
+	operation := func() error {
+		attemptTimes = append(attemptTimes, time.Now())
+		return fmt.Errorf("connection refused") // Transient error
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	err = service.retryOperation(ctx, "TestOperation", operation)
+	assert.Error(t, err)
+
+	// Verify that delays don't exceed maxDelay
+	for i := 1; i < len(attemptTimes); i++ {
+		actualDelay := attemptTimes[i].Sub(attemptTimes[i-1])
+		// Add tolerance for timing variations
+		maxAllowed := defaultRetryConfig.maxDelay + 100*time.Millisecond
+		assert.LessOrEqual(t, actualDelay, maxAllowed,
+			"Delay between attempts should not exceed maxDelay")
+	}
+}

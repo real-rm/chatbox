@@ -55,7 +55,7 @@ func TestHandler_MultipleConnectionsPerUser(t *testing.T) {
 		conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
 		require.NoError(t, err, "Failed to establish connection %d", i)
 		connections[i] = conn
-		
+
 		// Give the handler time to register the connection
 		time.Sleep(50 * time.Millisecond)
 	}
@@ -115,14 +115,14 @@ func TestHandler_ConnectionIDUniqueness(t *testing.T) {
 			UserID: userID,
 			send:   make(chan []byte, 256),
 		}
-		
+
 		// Simulate connection creation with unique ID generation (same as handler)
 		randomBytes := make([]byte, 8)
 		_, err := rand.Read(randomBytes)
 		require.NoError(t, err)
 		connectionID := fmt.Sprintf("%s-%d-%x", userID, time.Now().UnixNano(), randomBytes)
 		conn.ConnectionID = connectionID
-		
+
 		// Verify uniqueness
 		assert.False(t, connectionIDs[connectionID], "Connection ID should be unique: %s", connectionID)
 		connectionIDs[connectionID] = true
@@ -137,14 +137,14 @@ func TestHandler_MultiConnectionMessageIsolation(t *testing.T) {
 	handler := NewHandler(validator, nil, testLogger(), 1048576)
 
 	userID := "test-user"
-	
+
 	// Create two connections for the same user
 	conn1 := &Connection{
 		ConnectionID: fmt.Sprintf("%s-1", userID),
 		UserID:       userID,
 		send:         make(chan []byte, 256),
 	}
-	
+
 	conn2 := &Connection{
 		ConnectionID: fmt.Sprintf("%s-2", userID),
 		UserID:       userID,
@@ -192,7 +192,7 @@ func TestHandler_RateLimitPerUser(t *testing.T) {
 	handler := NewHandler(validator, nil, testLogger(), 1048576)
 
 	userID := "test-user"
-	
+
 	// Create first connection - should succeed
 	conn1 := &Connection{
 		ConnectionID: fmt.Sprintf("%s-1", userID),
@@ -305,7 +305,7 @@ func TestHandler_ConnectionLimitGracefulHandling(t *testing.T) {
 		conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
 		require.NoError(t, err, "Failed to establish connection %d", i)
 		connections[i] = conn
-		
+
 		// Give the handler time to register the connection
 		time.Sleep(50 * time.Millisecond)
 	}
@@ -469,7 +469,7 @@ func TestHandler_NotifyConnectionLimit(t *testing.T) {
 		conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
 		require.NoError(t, err, "Failed to establish connection %d", i)
 		connections[i] = conn
-		
+
 		// Give the handler time to register the connection
 		time.Sleep(50 * time.Millisecond)
 	}
@@ -496,7 +496,7 @@ func TestHandler_NotifyConnectionLimit(t *testing.T) {
 	// We'll check the first connection
 	conn := connections[0]
 	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
-	
+
 	messageReceived := false
 	for i := 0; i < 5; i++ { // Try reading a few messages
 		_, message, err := conn.ReadMessage()
@@ -554,14 +554,14 @@ func TestHandler_NotifyConnectionLimit_MessageFormat(t *testing.T) {
 	handler := NewHandler(validator, nil, testLogger(), 1048576)
 
 	userID := "test-user"
-	
+
 	// Create a connection for the user
 	conn := &Connection{
 		ConnectionID: fmt.Sprintf("%s-1", userID),
 		UserID:       userID,
 		send:         make(chan []byte, 256),
 	}
-	
+
 	handler.registerConnection(conn)
 
 	// Call notifyConnectionLimit
@@ -577,7 +577,7 @@ func TestHandler_NotifyConnectionLimit_MessageFormat(t *testing.T) {
 		// Verify message structure
 		assert.Equal(t, "notification", msg["type"], "Message type should be notification")
 		assert.Equal(t, "system", msg["sender"], "Sender should be system")
-		
+
 		content, ok := msg["content"].(string)
 		require.True(t, ok, "Content should be a string")
 		assert.Contains(t, content, "Connection limit reached", "Content should mention connection limit")

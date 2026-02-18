@@ -10,10 +10,11 @@ This guide covers deployment of the chatbox WebSocket service to Kubernetes (K8s
 4. [Kubernetes Deployment](#kubernetes-deployment)
 5. [K3s Deployment](#k3s-deployment)
 6. [Configuration](#configuration)
-7. [Monitoring and Troubleshooting](#monitoring-and-troubleshooting)
-8. [Scaling](#scaling)
-9. [Security](#security)
-10. [Backup and Recovery](#backup-and-recovery)
+7. [Nginx Reverse Proxy Setup](#nginx-reverse-proxy-setup)
+8. [Monitoring and Troubleshooting](#monitoring-and-troubleshooting)
+9. [Scaling](#scaling)
+10. [Security](#security)
+11. [Backup and Recovery](#backup-and-recovery)
 
 ## Prerequisites
 
@@ -376,6 +377,7 @@ The service can be configured using environment variables or config.toml file:
 | `RATE_LIMIT` | Requests per second limit | `100` |
 | `MAX_MESSAGE_SIZE` | Maximum WebSocket message size in bytes | `1048576` (1MB) |
 | `ENCRYPTION_KEY` | 32-byte AES-256 encryption key (base64 encoded) | Optional |
+| `CHATBOX_PATH_PREFIX` | HTTP path prefix for all routes | `/chatbox` |
 
 #### Production Readiness Configuration
 
@@ -509,6 +511,102 @@ ENCRYPTION_KEY="short_key" ./chatbox-server
 ENCRYPTION_KEY=$(openssl rand -base64 32) ./chatbox-server
 ```
 
+### HTTP Path Prefix Configuration
+
+The `CHATBOX_PATH_PREFIX` environment variable (or `chatbox.path_prefix` config key) controls the base path for all chatbox routes. This allows you to run multiple services on the same domain or integrate the chatbox service into an existing API structure.
+
+**Configuration**:
+- **Environment Variable**: `CHATBOX_PATH_PREFIX`
+- **Config File Key**: `chatbox.path_prefix`
+- **Default Value**: `/chatbox`
+- **Valid Format**: Must start with `/` (e.g., `/chatbox`, `/api/chat`, `/v1/chat`)
+
+**Routes Affected**:
+All chatbox routes are prefixed with the configured path:
+- WebSocket endpoint: `{path_prefix}/ws`
+- User sessions: `{path_prefix}/sessions`
+- Admin endpoints: `{path_prefix}/admin/*`
+- Health checks: `{path_prefix}/healthz`, `{path_prefix}/readyz`
+
+**Example Configurations**:
+
+```yaml
+# Default configuration (in configmap.yaml)
+CHATBOX_PATH_PREFIX: "/chatbox"
+# Results in:
+# - ws://your-domain/chatbox/ws
+# - http://your-domain/chatbox/healthz
+
+# API versioning
+CHATBOX_PATH_PREFIX: "/api/v1/chat"
+# Results in:
+# - ws://your-domain/api/v1/chat/ws
+# - http://your-domain/api/v1/chat/healthz
+
+# Multiple services on same domain
+CHATBOX_PATH_PREFIX: "/services/chat"
+# Results in:
+# - ws://your-domain/services/chat/ws
+# - http://your-domain/services/chat/healthz
+```
+
+**Nginx Configuration Example**:
+
+When using a custom path prefix, update your nginx configuration accordingly:
+
+```nginx
+# For path_prefix = "/api/chat"
+location /api/chat/ {
+    proxy_pass http://chatbox-backend/api/chat/;
+    
+    # WebSocket upgrade headers
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    
+    # Standard proxy headers
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+**Kubernetes Ingress Example**:
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: chatbox-ingress
+spec:
+  rules:
+  - host: your-domain.com
+    http:
+      paths:
+      - path: /chatbox
+        pathType: Prefix
+        backend:
+          service:
+            name: chatbox-websocket
+            port:
+              number: 80
+```
+
+**Validation**:
+- The application validates the path prefix at startup
+- Empty path prefix will cause startup failure
+- Path prefix not starting with `/` will cause startup failure
+- Invalid configuration is logged with clear error messages
+
+**Migration from Default**:
+If you're changing the path prefix on an existing deployment:
+1. Update the `CHATBOX_PATH_PREFIX` environment variable or config file
+2. Update client applications to use the new path
+3. Update nginx/ingress configurations
+4. Restart the service
+5. Verify all endpoints are accessible at the new path
+
 ### CORS and Origin Validation
 
 The application provides two layers of origin validation for security:
@@ -592,6 +690,58 @@ Three types of health probes are configured:
 1. **Liveness Probe** (`/chat/healthz`): Checks if container is alive
 2. **Readiness Probe** (`/chat/readyz`): Checks if ready to serve traffic
 3. **Startup Probe** (`/chat/healthz`): Gives time for slow startup
+
+## Nginx Reverse Proxy Setup
+
+For production deployments, it's recommended to use Nginx as a reverse proxy in front of the chatbox service. Nginx provides:
+
+- SSL/TLS termination
+- Load balancing across multiple instances
+- WebSocket upgrade handling
+- Rate limiting and security headers
+- Static file serving
+
+**For comprehensive Nginx configuration documentation, see [docs/NGINX_SETUP.md](docs/NGINX_SETUP.md)**
+
+The documentation includes:
+- Basic reverse proxy configuration
+- WebSocket upgrade configuration
+- SSL/TLS setup with Let's Encrypt
+- Load balancing examples
+- Health check configuration
+- Rate limiting and security headers
+- Ready-to-use configuration templates
+
+**Quick Example:**
+
+```nginx
+# Basic reverse proxy with WebSocket support
+upstream chatbox_backend {
+    server chatbox-service:8080;
+}
+
+server {
+    listen 80;
+    server_name chat.example.com;
+
+    location /chatbox/ {
+        proxy_pass http://chatbox_backend/chatbox/;
+        
+        # WebSocket upgrade
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        
+        # Standard headers
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+See [docs/NGINX_SETUP.md](docs/NGINX_SETUP.md) for complete configuration examples and templates.
 
 ## Monitoring and Troubleshooting
 
@@ -918,6 +1068,73 @@ make delete NAMESPACE=chatbox
 - [K3s Documentation](https://docs.k3s.io/)
 - [Docker Documentation](https://docs.docker.com/)
 - [WebSocket on Kubernetes](https://kubernetes.io/blog/2019/04/23/running-websocket-servers-on-kubernetes/)
+
+## Code Quality and Architecture
+
+The chatbox application follows strict code quality standards to ensure maintainability, reliability, and ease of deployment:
+
+### Clean Code Principles
+
+**No Magic Numbers or Strings**:
+- All constants are centralized in `internal/constants/constants.go`
+- Timeouts, limits, field names, and error messages are all named constants
+- Makes configuration changes easier and reduces bugs
+
+**DRY (Don't Repeat Yourself)**:
+- Common functionality extracted to `internal/util/` package:
+  - `context.go` - Context creation helpers with timeouts
+  - `auth.go` - JWT token extraction and validation
+  - `json.go` - JSON marshaling/unmarshaling helpers
+  - `validation.go` - Common validation functions
+  - `logging.go` - Consistent error logging patterns
+- Reduces code duplication and improves consistency
+
+**Documented Patterns**:
+- All "if without else" patterns are documented with clear reasoning
+- Early return patterns (guard clauses) are explicitly noted
+- Optional operations (fire-and-forget) are clearly marked
+
+**High Test Coverage**:
+- 80%+ test coverage across all major packages
+- Unit tests for specific examples and edge cases
+- Property-based tests for universal correctness properties
+- Integration tests for end-to-end flows
+
+### Configuration Best Practices
+
+The application uses a layered configuration approach:
+1. **Default values** from `internal/constants/constants.go`
+2. **Config file** (`config.toml`) for environment-specific settings
+3. **Environment variables** for secrets and deployment-specific overrides
+
+This makes it easy to:
+- Deploy to different environments without code changes
+- Override specific settings without modifying config files
+- Keep secrets out of version control
+
+### Deployment Implications
+
+The clean code architecture provides several deployment benefits:
+
+**Easier Configuration**:
+- All configurable values are documented in constants
+- Clear separation between defaults, config, and secrets
+- Validation at startup catches configuration errors early
+
+**Better Observability**:
+- Consistent logging patterns make troubleshooting easier
+- Named constants make log messages more meaningful
+- Centralized error messages improve monitoring
+
+**Reduced Bugs**:
+- No magic numbers means fewer typos and inconsistencies
+- DRY principle reduces copy-paste errors
+- High test coverage catches regressions early
+
+**Easier Maintenance**:
+- Changes to timeouts, limits, or messages are centralized
+- Utility functions make code more readable
+- Documented patterns help new developers understand the code
 
 ## Support
 

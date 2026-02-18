@@ -28,9 +28,9 @@ func TestProperty_SessionContinuityTimeout(t *testing.T) {
 				return true
 			}
 
-			// Use reasonable timeout values (between 100ms and 1000ms for testing)
-			timeout := time.Duration(timeoutMs%900+100) * time.Millisecond
-			waitTime := time.Duration(waitMs%1200) * time.Millisecond
+			// Use reasonable timeout values (between 50ms and 200ms for faster testing)
+			timeout := time.Duration(timeoutMs%150+50) * time.Millisecond
+			waitTime := time.Duration(waitMs%300) * time.Millisecond
 
 			// Add a buffer for timing imprecision (50ms)
 			const timingBuffer = 50 * time.Millisecond

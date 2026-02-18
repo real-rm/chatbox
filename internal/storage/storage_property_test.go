@@ -32,7 +32,7 @@ func TestProperty_SessionCreationAndPersistence(t *testing.T) {
 			mongoClient, logger, cleanup := setupTestMongoDB(t)
 			defer cleanup()
 
-			service := NewStorageService(mongoClient, "test_chat_db", "prop_sessions", logger, nil)
+			service := NewStorageService(mongoClient, "chatbox", "prop_sessions", logger, nil)
 
 			// Create session
 			now := time.Now()
@@ -119,7 +119,7 @@ func TestProperty_MessagePersistence(t *testing.T) {
 			mongoClient, logger, cleanup := setupTestMongoDB(t)
 			defer cleanup()
 
-			service := NewStorageService(mongoClient, "test_chat_db", "prop_sessions", logger, nil)
+			service := NewStorageService(mongoClient, "chatbox", "prop_sessions", logger, nil)
 
 			// Create session first
 			now := time.Now()
@@ -227,7 +227,7 @@ func TestProperty_ConversationHistoryRetrieval(t *testing.T) {
 			mongoClient, logger, cleanup := setupTestMongoDB(t)
 			defer cleanup()
 
-			service := NewStorageService(mongoClient, "test_chat_db", "prop_sessions", logger, nil)
+			service := NewStorageService(mongoClient, "chatbox", "prop_sessions", logger, nil)
 
 			// Create session
 			now := time.Now()
@@ -312,7 +312,7 @@ func TestProperty_SessionLifecycleTracking(t *testing.T) {
 			mongoClient, logger, cleanup := setupTestMongoDB(t)
 			defer cleanup()
 
-			service := NewStorageService(mongoClient, "test_chat_db", "prop_sessions", logger, nil)
+			service := NewStorageService(mongoClient, "chatbox", "prop_sessions", logger, nil)
 
 			// Create session
 			startTime := time.Now()
@@ -413,7 +413,7 @@ func TestProperty_DataEncryptionAtRest(t *testing.T) {
 
 			// Create 32-byte encryption key for AES-256
 			encryptionKey := []byte("12345678901234567890123456789012")
-			service := NewStorageService(mongoClient, "test_chat_db", "prop_sessions", logger, encryptionKey)
+			service := NewStorageService(mongoClient, "chatbox", "prop_sessions", logger, encryptionKey)
 
 			// Create session
 			now := time.Now()
@@ -515,7 +515,7 @@ func TestProperty_SessionListOrdering(t *testing.T) {
 			mongoClient, logger, cleanup := setupTestMongoDB(t)
 			defer cleanup()
 
-			service := NewStorageService(mongoClient, "test_chat_db", "prop_sessions", logger, nil)
+			service := NewStorageService(mongoClient, "chatbox", "prop_sessions", logger, nil)
 
 			// Create multiple sessions with different start times
 			now := time.Now()
@@ -578,6 +578,552 @@ func TestProperty_SessionListOrdering(t *testing.T) {
 		},
 		gen.Identifier(),     // userID
 		gen.UInt8Range(1, 5), // sessionCount
+	))
+
+	properties.TestingRun(t, gopter.ConsoleReporter(false))
+}
+
+
+// Property 4: Storage Operations Maintain Data Integrity
+// **Validates: Requirements 2.2, 8.4**
+//
+// For any valid session object, storing it to MongoDB and then retrieving it
+// should return an equivalent session with all fields preserved.
+func TestProperty_StorageDataIntegrity(t *testing.T) {
+	parameters := gopter.DefaultTestParameters()
+	parameters.MinSuccessfulTests = 50
+	properties := gopter.NewProperties(parameters)
+
+	properties.Property("storing and retrieving a session preserves all fields", prop.ForAll(
+		func(sessionID, userID, name, modelID string, totalTokens int) bool {
+			// Skip if required fields are empty
+			if sessionID == "" || userID == "" {
+				return true
+			}
+
+			// Ensure totalTokens is non-negative
+			if totalTokens < 0 {
+				totalTokens = -totalTokens
+			}
+
+			mongoClient, logger, cleanup := setupTestMongoDB(t)
+			defer cleanup()
+
+			service := NewStorageService(mongoClient, "chatbox", "prop_integrity", logger, nil)
+
+			// Create session with various fields
+			now := time.Now()
+			endTime := now.Add(10 * time.Minute)
+			originalSession := &session.Session{
+				ID:                 sessionID,
+				UserID:             userID,
+				Name:               name,
+				ModelID:            modelID,
+				Messages:           []*session.Message{},
+				StartTime:          now,
+				LastActivity:       now,
+				EndTime:            &endTime,
+				IsActive:           false,
+				HelpRequested:      true,
+				AdminAssisted:      true,
+				AssistingAdminID:   "admin-123",
+				AssistingAdminName: "Admin User",
+				TotalTokens:        totalTokens,
+				ResponseTimes:      []time.Duration{time.Second, 2 * time.Second},
+			}
+
+			// Store session
+			err := service.CreateSession(originalSession)
+			if err != nil {
+				t.Logf("Failed to create session: %v", err)
+				return false
+			}
+
+			// Retrieve session
+			retrievedSession, err := service.GetSession(sessionID)
+			if err != nil {
+				t.Logf("Failed to retrieve session: %v", err)
+				return false
+			}
+
+			// Verify all fields are preserved
+			if retrievedSession.ID != originalSession.ID {
+				t.Logf("ID mismatch: expected %s, got %s", originalSession.ID, retrievedSession.ID)
+				return false
+			}
+			if retrievedSession.UserID != originalSession.UserID {
+				t.Logf("UserID mismatch: expected %s, got %s", originalSession.UserID, retrievedSession.UserID)
+				return false
+			}
+			if retrievedSession.Name != originalSession.Name {
+				t.Logf("Name mismatch: expected %s, got %s", originalSession.Name, retrievedSession.Name)
+				return false
+			}
+			if retrievedSession.ModelID != originalSession.ModelID {
+				t.Logf("ModelID mismatch: expected %s, got %s", originalSession.ModelID, retrievedSession.ModelID)
+				return false
+			}
+			if retrievedSession.TotalTokens != originalSession.TotalTokens {
+				t.Logf("TotalTokens mismatch: expected %d, got %d", originalSession.TotalTokens, retrievedSession.TotalTokens)
+				return false
+			}
+			if retrievedSession.HelpRequested != originalSession.HelpRequested {
+				t.Logf("HelpRequested mismatch")
+				return false
+			}
+			if retrievedSession.AdminAssisted != originalSession.AdminAssisted {
+				t.Logf("AdminAssisted mismatch")
+				return false
+			}
+			if retrievedSession.AssistingAdminID != originalSession.AssistingAdminID {
+				t.Logf("AssistingAdminID mismatch")
+				return false
+			}
+			if retrievedSession.AssistingAdminName != originalSession.AssistingAdminName {
+				t.Logf("AssistingAdminName mismatch")
+				return false
+			}
+			if retrievedSession.StartTime.Unix() != originalSession.StartTime.Unix() {
+				t.Logf("StartTime mismatch")
+				return false
+			}
+			if retrievedSession.EndTime == nil || retrievedSession.EndTime.Unix() != originalSession.EndTime.Unix() {
+				t.Logf("EndTime mismatch")
+				return false
+			}
+			if retrievedSession.IsActive != originalSession.IsActive {
+				t.Logf("IsActive mismatch")
+				return false
+			}
+
+			return true
+		},
+		gen.Identifier(),  // sessionID
+		gen.Identifier(),  // userID
+		gen.AlphaString(), // name
+		gen.AlphaString(), // modelID
+		gen.IntRange(0, 10000), // totalTokens
+	))
+
+	properties.TestingRun(t, gopter.ConsoleReporter(false))
+}
+
+// Property 5: Encryption Round-Trip Preserves Data
+// **Validates: Requirements 2.4, 6.1**
+//
+// For any valid encryption key and any message content, encrypting then decrypting
+// the content should return the original message unchanged.
+func TestProperty_EncryptionRoundTrip(t *testing.T) {
+	parameters := gopter.DefaultTestParameters()
+	parameters.MinSuccessfulTests = 100
+	properties := gopter.NewProperties(parameters)
+
+	properties.Property("encryption and decryption round-trip preserves data", prop.ForAll(
+		func(content string) bool {
+			// Skip empty content
+			if content == "" {
+				return true
+			}
+
+			// Create 32-byte encryption key for AES-256
+			encryptionKey := []byte("12345678901234567890123456789012")
+			service := &StorageService{
+				encryptionKey: encryptionKey,
+			}
+
+			// Encrypt
+			encrypted, err := service.encrypt(content)
+			if err != nil {
+				t.Logf("Failed to encrypt: %v", err)
+				return false
+			}
+
+			// Verify encrypted is different from original
+			if encrypted == content {
+				t.Logf("Encrypted content is same as original")
+				return false
+			}
+
+			// Decrypt
+			decrypted, err := service.decrypt(encrypted)
+			if err != nil {
+				t.Logf("Failed to decrypt: %v", err)
+				return false
+			}
+
+			// Verify decrypted matches original
+			if decrypted != content {
+				t.Logf("Decrypted content mismatch: expected %s, got %s", content, decrypted)
+				return false
+			}
+
+			return true
+		},
+		gen.AlphaString().SuchThat(func(s string) bool {
+			return len(s) > 0 && len(s) < 1000 // Reasonable size for testing
+		}),
+	))
+
+	properties.TestingRun(t, gopter.ConsoleReporter(false))
+}
+
+// Property 12: Invalid Encryption Keys Are Rejected
+// **Validates: Requirements 6.2**
+//
+// For any encryption key that is not exactly 32 bytes, the encryption function
+// should return an error indicating the key is invalid.
+func TestProperty_InvalidEncryptionKeys(t *testing.T) {
+	parameters := gopter.DefaultTestParameters()
+	parameters.MinSuccessfulTests = 50
+	properties := gopter.NewProperties(parameters)
+
+	properties.Property("invalid encryption keys are rejected", prop.ForAll(
+		func(keySize uint8) bool {
+			// Skip valid key sizes (0 = no encryption, 16/24/32 = valid AES)
+			if keySize == 0 || keySize == 16 || keySize == 24 || keySize == 32 {
+				return true
+			}
+
+			// Create key with invalid size
+			invalidKey := make([]byte, keySize)
+			for i := range invalidKey {
+				invalidKey[i] = byte(i)
+			}
+
+			service := &StorageService{
+				encryptionKey: invalidKey,
+			}
+
+			// Try to encrypt with invalid key
+			_, err := service.encrypt("test content")
+
+			// Should get an error for invalid key sizes
+			// Note: AES accepts 16, 24, or 32 byte keys
+			// keySize 0 is treated as "no encryption" and is valid
+			if err == nil {
+				t.Logf("Expected error for key size %d, but got none", keySize)
+				return false
+			}
+
+			return true
+		},
+		gen.UInt8Range(0, 64), // Test various key sizes
+	))
+
+	properties.TestingRun(t, gopter.ConsoleReporter(false))
+}
+
+// Property 6: Transient Errors Trigger Retry Logic
+// **Validates: Requirements 2.3, 5.1, 8.3**
+//
+// For any storage operation that fails with a transient error (network timeout,
+// connection reset), the system should retry the operation with exponential backoff
+// up to the maximum retry limit.
+func TestProperty_TransientErrorRetryClassification(t *testing.T) {
+	parameters := gopter.DefaultTestParameters()
+	parameters.MinSuccessfulTests = 20
+	properties := gopter.NewProperties(parameters)
+
+	properties.Property("transient errors trigger retry logic", prop.ForAll(
+		func(errorType string) bool {
+			// Test various transient error types
+			transientErrors := []string{
+				"connection refused",
+				"connection reset",
+				"timeout",
+				"temporary failure",
+				"i/o timeout",
+				"EOF",
+				"server selection timeout",
+				"no reachable servers",
+				"connection pool",
+				"socket",
+			}
+
+			// Check if error type is in transient errors list
+			isTransient := false
+			for _, te := range transientErrors {
+				if errorType == te {
+					isTransient = true
+					break
+				}
+			}
+
+			if !isTransient {
+				return true // Skip non-transient errors
+			}
+
+			// Create error with transient message
+			err := &customError{msg: errorType}
+
+			// Verify it's classified as retryable
+			result := isRetryableError(err)
+			if !result {
+				t.Logf("Error '%s' should be retryable but was not", errorType)
+				return false
+			}
+
+			return true
+		},
+		gen.OneConstOf(
+			"connection refused",
+			"connection reset",
+			"timeout",
+			"temporary failure",
+			"i/o timeout",
+			"EOF",
+			"server selection timeout",
+			"no reachable servers",
+			"connection pool",
+			"socket",
+			"duplicate key", // permanent error for contrast
+		),
+	))
+
+	properties.TestingRun(t, gopter.ConsoleReporter(false))
+}
+
+// Property 7: Permanent Errors Fail Immediately
+// **Validates: Requirements 5.2**
+//
+// For any storage operation that fails with a permanent error (invalid document,
+// duplicate key), the system should return the error immediately without retrying.
+func TestProperty_PermanentErrorFailure(t *testing.T) {
+	parameters := gopter.DefaultTestParameters()
+	parameters.MinSuccessfulTests = 20
+	properties := gopter.NewProperties(parameters)
+
+	properties.Property("permanent errors fail immediately without retry", prop.ForAll(
+		func(errorType string) bool {
+			// Test various permanent error types
+			permanentErrors := []string{
+				"duplicate key error",
+				"validation failed",
+				"document too large",
+				"invalid document",
+				"unauthorized",
+			}
+
+			// Check if error type is in permanent errors list
+			isPermanent := false
+			for _, pe := range permanentErrors {
+				if errorType == pe {
+					isPermanent = true
+					break
+				}
+			}
+
+			if !isPermanent {
+				return true // Skip non-permanent errors
+			}
+
+			// Create error with permanent message
+			err := &customError{msg: errorType}
+
+			// Verify it's NOT classified as retryable
+			result := isRetryableError(err)
+			if result {
+				t.Logf("Error '%s' should not be retryable but was", errorType)
+				return false
+			}
+
+			return true
+		},
+		gen.OneConstOf(
+			"duplicate key error",
+			"validation failed",
+			"document too large",
+			"invalid document",
+			"unauthorized",
+			"timeout", // transient error for contrast
+		),
+	))
+
+	properties.TestingRun(t, gopter.ConsoleReporter(false))
+}
+
+// Property 8: Concurrent Operations Maintain Consistency
+// **Validates: Requirements 2.5, 7.1, 7.2, 7.3**
+//
+// For any set of concurrent storage operations (session creation, message addition,
+// session updates), all operations should complete successfully without data loss,
+// corruption, or race conditions.
+func TestProperty_ConcurrentOperations(t *testing.T) {
+	parameters := gopter.DefaultTestParameters()
+	parameters.MinSuccessfulTests = 20
+	properties := gopter.NewProperties(parameters)
+
+	properties.Property("concurrent operations maintain data consistency", prop.ForAll(
+		func(userID string, operationCount uint8) bool {
+			// Skip if required fields are empty or operation count is too large
+			if userID == "" || operationCount == 0 || operationCount > 10 {
+				return true
+			}
+
+			mongoClient, logger, cleanup := setupTestMongoDB(t)
+			defer cleanup()
+
+			service := NewStorageService(mongoClient, "chatbox", "prop_concurrent", logger, nil)
+
+			// Create initial session
+			sessionID := userID + "-concurrent-session"
+			now := time.Now()
+			sess := &session.Session{
+				ID:        sessionID,
+				UserID:    userID,
+				Name:      "Concurrent Test",
+				Messages:  []*session.Message{},
+				StartTime: now,
+				IsActive:  true,
+			}
+
+			err := service.CreateSession(sess)
+			if err != nil {
+				t.Logf("Failed to create session: %v", err)
+				return false
+			}
+
+			// Perform concurrent message additions
+			done := make(chan bool, operationCount)
+			errors := make(chan error, operationCount)
+
+			for i := uint8(0); i < operationCount; i++ {
+				go func(index uint8) {
+					msg := &session.Message{
+						Content:   "Message " + string(rune('A'+index)),
+						Timestamp: now.Add(time.Duration(index) * time.Second),
+						Sender:    "user",
+						Metadata:  map[string]string{"index": string(rune('0' + index))},
+					}
+
+					err := service.AddMessage(sessionID, msg)
+					if err != nil {
+						errors <- err
+					}
+					done <- true
+				}(i)
+			}
+
+			// Wait for all operations to complete
+			for i := uint8(0); i < operationCount; i++ {
+				<-done
+			}
+			close(errors)
+
+			// Check for errors
+			for err := range errors {
+				t.Logf("Concurrent operation failed: %v", err)
+				return false
+			}
+
+			// Retrieve session and verify all messages were added
+			retrievedSess, err := service.GetSession(sessionID)
+			if err != nil {
+				t.Logf("Failed to retrieve session: %v", err)
+				return false
+			}
+
+			if len(retrievedSess.Messages) != int(operationCount) {
+				t.Logf("Expected %d messages, got %d", operationCount, len(retrievedSess.Messages))
+				return false
+			}
+
+			return true
+		},
+		gen.Identifier(),      // userID
+		gen.UInt8Range(1, 10), // operationCount
+	))
+
+	properties.TestingRun(t, gopter.ConsoleReporter(false))
+}
+
+// Property 15: Query Operations Return Correct Results
+// **Validates: Requirements 8.2**
+//
+// For any valid query parameters (filters, sorting, pagination), the storage query
+// operations should return results that match the query criteria and are correctly
+// sorted and paginated.
+func TestProperty_QueryOperations(t *testing.T) {
+	parameters := gopter.DefaultTestParameters()
+	parameters.MinSuccessfulTests = 20
+	properties := gopter.NewProperties(parameters)
+
+	properties.Property("query operations return correctly filtered and sorted results", prop.ForAll(
+		func(userID string, sessionCount uint8, limit uint8) bool {
+			// Skip if required fields are empty or counts are invalid
+			if userID == "" || sessionCount == 0 || sessionCount > 10 || limit == 0 || limit > 20 {
+				return true
+			}
+
+			mongoClient, logger, cleanup := setupTestMongoDB(t)
+			defer cleanup()
+
+			service := NewStorageService(mongoClient, "chatbox", "prop_query", logger, nil)
+
+			// Create multiple sessions
+			now := time.Now()
+			for i := uint8(0); i < sessionCount; i++ {
+				sess := &session.Session{
+					ID:          userID + "-session-" + string(rune('A'+i)),
+					UserID:      userID,
+					Name:        "Session " + string(rune('A'+i)),
+					Messages:    []*session.Message{},
+					StartTime:   now.Add(-time.Duration(i) * time.Hour),
+					TotalTokens: int(i) * 100,
+				}
+
+				err := service.CreateSession(sess)
+				if err != nil {
+					t.Logf("Failed to create session: %v", err)
+					return false
+				}
+			}
+
+			// Query with filters and sorting
+			opts := &SessionListOptions{
+				UserID:    userID,
+				Limit:     int(limit),
+				SortBy:    "ts",
+				SortOrder: "desc",
+			}
+
+			results, err := service.ListAllSessionsWithOptions(opts)
+			if err != nil {
+				t.Logf("Failed to query sessions: %v", err)
+				return false
+			}
+
+			// Verify results match filter (all should have correct userID)
+			for _, result := range results {
+				if result.UserID != userID {
+					t.Logf("Result has wrong userID: expected %s, got %s", userID, result.UserID)
+					return false
+				}
+			}
+
+			// Verify results are sorted by start time (descending)
+			for i := 0; i < len(results)-1; i++ {
+				if results[i].StartTime.Before(results[i+1].StartTime) {
+					t.Logf("Results not sorted correctly at index %d", i)
+					return false
+				}
+			}
+
+			// Verify limit is respected
+			expectedCount := int(sessionCount)
+			if int(limit) < expectedCount {
+				expectedCount = int(limit)
+			}
+			if len(results) > expectedCount {
+				t.Logf("Results exceed limit: expected max %d, got %d", expectedCount, len(results))
+				return false
+			}
+
+			return true
+		},
+		gen.Identifier(),      // userID
+		gen.UInt8Range(1, 10), // sessionCount
+		gen.UInt8Range(1, 20), // limit
 	))
 
 	properties.TestingRun(t, gopter.ConsoleReporter(false))

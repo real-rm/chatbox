@@ -13,6 +13,61 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// Main Function Testing Approach
+//
+// **Why main() is not directly tested:**
+//
+// The main() function in Go is the entry point of the application and has special
+// characteristics that make it difficult to test directly:
+//
+// 1. **No Return Value**: main() doesn't return errors or values, making it impossible
+//    to verify its behavior through return values.
+//
+// 2. **Process Termination**: main() typically calls os.Exit() or log.Fatal() on errors,
+//    which terminates the entire test process, preventing other tests from running.
+//
+// 3. **Global State**: main() often modifies global state and sets up signal handlers
+//    that can interfere with other tests.
+//
+// 4. **Difficult to Control**: main() runs in the main goroutine and is hard to
+//    control or timeout in tests.
+//
+// **Testing Strategy:**
+//
+// Instead of testing main() directly, we use testable wrapper functions that contain
+// all the logic of main() but can be properly tested:
+//
+// 1. **runMain()**: A testable wrapper that sets up signal handling and calls
+//    runWithSignalChannel(). This function returns errors instead of calling os.Exit().
+//
+// 2. **runWithSignalChannel()**: The core server logic that accepts a signal channel
+//    as a parameter. This allows tests to:
+//    - Control when shutdown signals are sent
+//    - Verify graceful shutdown behavior
+//    - Test error propagation from initialization steps
+//    - Run multiple tests without process termination
+//
+// 3. **loadConfiguration()**: Isolated configuration loading logic that can be tested
+//    independently with various config file scenarios.
+//
+// 4. **initializeLogger()**: Isolated logger initialization logic that can be tested
+//    with different log configurations.
+//
+// **Test Coverage:**
+//
+// By testing these wrapper functions, we achieve comprehensive coverage of all the
+// logic that would be in main(), including:
+// - Configuration loading (valid, invalid, missing files)
+// - Logger initialization (various log directories and levels)
+// - Signal handling (SIGTERM, SIGINT)
+// - Error propagation (config errors, logger errors)
+// - Graceful shutdown sequences
+//
+// This approach provides better test coverage than testing main() directly would,
+// while maintaining the same production behavior since main() simply calls runMain().
+//
+// **Validates: Requirements 1.5**
+
 // TestLoadConfiguration tests the loadConfiguration function
 //
 // **Validates: Requirements 6.5**
@@ -1156,14 +1211,20 @@ func clearEnvVars() {
 	for _, envVar := range envVars {
 		os.Unsetenv(envVar)
 	}
+	
+	// Reset goconfig state to avoid interference between tests
+	goconfig.ResetConfig()
 }
 
 func setupConfigFile() {
+	// Reset goconfig state before setting up new config
+	goconfig.ResetConfig()
 	os.Setenv("RMBASE_FILE_CFG", "../../config.toml")
 }
 
 func cleanupConfigFile() {
 	os.Unsetenv("RMBASE_FILE_CFG")
+	goconfig.ResetConfig()
 }
 
 // TestSignalHandling tests signal handling for graceful shutdown

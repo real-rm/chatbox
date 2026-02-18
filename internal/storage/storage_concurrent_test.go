@@ -17,7 +17,7 @@ func TestConcurrentSessionCreation(t *testing.T) {
 	mongoClient, logger, cleanup := setupTestMongoDB(t)
 	defer cleanup()
 
-	service := NewStorageService(mongoClient, "test_chat_db", "sessions", logger, nil)
+	service := NewStorageService(mongoClient, "chatbox", "sessions", logger, nil)
 
 	// Number of concurrent operations
 	numSessions := 50
@@ -88,7 +88,7 @@ func TestConcurrentMessageAddition(t *testing.T) {
 	mongoClient, logger, cleanup := setupTestMongoDB(t)
 	defer cleanup()
 
-	service := NewStorageService(mongoClient, "test_chat_db", "sessions", logger, nil)
+	service := NewStorageService(mongoClient, "chatbox", "sessions", logger, nil)
 
 	// Create a single session
 	now := time.Now()
@@ -166,7 +166,7 @@ func TestConcurrentSessionUpdates(t *testing.T) {
 	mongoClient, logger, cleanup := setupTestMongoDB(t)
 	defer cleanup()
 
-	service := NewStorageService(mongoClient, "test_chat_db", "sessions", logger, nil)
+	service := NewStorageService(mongoClient, "chatbox", "sessions", logger, nil)
 
 	// Create a session
 	now := time.Now()
@@ -249,7 +249,7 @@ func TestConcurrentMixedOperations(t *testing.T) {
 	mongoClient, logger, cleanup := setupTestMongoDB(t)
 	defer cleanup()
 
-	service := NewStorageService(mongoClient, "test_chat_db", "sessions", logger, nil)
+	service := NewStorageService(mongoClient, "chatbox", "sessions", logger, nil)
 
 	now := time.Now()
 
@@ -387,7 +387,7 @@ func TestConcurrentSessionCreationWithEncryption(t *testing.T) {
 
 	// Create 32-byte encryption key for AES-256
 	encryptionKey := []byte("12345678901234567890123456789012")
-	service := NewStorageService(mongoClient, "test_chat_db", "sessions", logger, encryptionKey)
+	service := NewStorageService(mongoClient, "chatbox", "sessions", logger, encryptionKey)
 
 	// Number of concurrent operations
 	numSessions := 30
@@ -469,7 +469,7 @@ func TestConcurrentListOperations(t *testing.T) {
 	mongoClient, logger, cleanup := setupTestMongoDB(t)
 	defer cleanup()
 
-	service := NewStorageService(mongoClient, "test_chat_db", "sessions", logger, nil)
+	service := NewStorageService(mongoClient, "chatbox", "sessions", logger, nil)
 
 	now := time.Now()
 

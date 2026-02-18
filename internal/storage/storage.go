@@ -606,8 +606,14 @@ func (s *StorageService) EndSession(sessionID string, endTime time.Time) error {
 
 // encrypt encrypts data using AES-256-GCM
 func (s *StorageService) encrypt(plaintext string) (string, error) {
-	// No else needed: early return pattern (guard clause)
-	if len(s.encryptionKey) == 0 {
+	// Validate key size (AES supports 16, 24, or 32 bytes)
+	keyLen := len(s.encryptionKey)
+	if keyLen != 0 && keyLen != 16 && keyLen != 24 && keyLen != 32 {
+		return "", fmt.Errorf("invalid encryption key size: %d bytes (must be 16, 24, or 32)", keyLen)
+	}
+	
+	// If no key is set (0 bytes), treat as "no encryption"
+	if keyLen == 0 {
 		return plaintext, nil
 	}
 

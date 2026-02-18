@@ -27,9 +27,13 @@ func setupTestMongoDB(t *testing.T) (*gomongo.Mongo, *golog.Logger, func()) {
 	}
 
 	// Create a test config file
-	mongoURI := os.Getenv("MONGO_TEST_URI")
+	// Use MONGO_URI from environment (documented in test.md)
+	// Default: mongodb://chatbox:ChatBox123@127.0.0.1:27017/chatbox?authSource=admin
+	mongoURI := os.Getenv("MONGO_URI")
 	if mongoURI == "" {
-		mongoURI = "mongodb://localhost:27017"
+		// Fallback to documented test configuration from test.md
+		// Use 127.0.0.1 instead of localhost to avoid IPv6 issues
+		mongoURI = "mongodb://chatbox:ChatBox123@127.0.0.1:27017/chatbox?authSource=admin"
 	}
 
 	configContent := fmt.Sprintf(`
@@ -37,8 +41,8 @@ func setupTestMongoDB(t *testing.T) (*gomongo.Mongo, *golog.Logger, func()) {
 verbose = 1
 slowThreshold = 2
 
-[dbs.test_chat_db]
-uri = "%s/test_chat_db?authSource=admin"
+[dbs.chatbox]
+uri = "%s"
 `, mongoURI)
 
 	// Write config to temp file
@@ -93,7 +97,7 @@ uri = "%s/test_chat_db?authSource=admin"
 	}
 
 	// Test connection by getting a collection
-	testColl := mongoClient.Coll("test_chat_db", "test_connection")
+	testColl := mongoClient.Coll("chatbox", "test_connection")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -115,7 +119,7 @@ uri = "%s/test_chat_db?authSource=admin"
 		defer cancel()
 
 		// Get the underlying database to drop collections
-		db, _ := mongoClient.Database("test_chat_db")
+		db, _ := mongoClient.Database("chatbox")
 		if db != nil {
 			db.Coll("sessions").Drop(ctx)
 			db.Coll("prop_sessions").Drop(ctx)
@@ -133,7 +137,7 @@ func TestNewStorageService(t *testing.T) {
 	mongoClient, logger, cleanup := setupTestMongoDB(t)
 	defer cleanup()
 
-	service := NewStorageService(mongoClient, "test_chat_db", "sessions", logger, nil)
+	service := NewStorageService(mongoClient, "chatbox", "sessions", logger, nil)
 
 	assert.NotNil(t, service)
 	assert.NotNil(t, service.mongo)
@@ -145,7 +149,7 @@ func TestCreateSession_ValidSession(t *testing.T) {
 	mongoClient, logger, cleanup := setupTestMongoDB(t)
 	defer cleanup()
 
-	service := NewStorageService(mongoClient, "test_chat_db", "sessions", logger, nil)
+	service := NewStorageService(mongoClient, "chatbox", "sessions", logger, nil)
 
 	// Create a test session
 	sess := &session.Session{
@@ -185,7 +189,7 @@ func TestCreateSession_NilSession(t *testing.T) {
 	mongoClient, logger, cleanup := setupTestMongoDB(t)
 	defer cleanup()
 
-	service := NewStorageService(mongoClient, "test_chat_db", "sessions", logger, nil)
+	service := NewStorageService(mongoClient, "chatbox", "sessions", logger, nil)
 
 	err := service.CreateSession(nil)
 	assert.ErrorIs(t, err, ErrInvalidSession)
@@ -195,7 +199,7 @@ func TestCreateSession_EmptySessionID(t *testing.T) {
 	mongoClient, logger, cleanup := setupTestMongoDB(t)
 	defer cleanup()
 
-	service := NewStorageService(mongoClient, "test_chat_db", "sessions", logger, nil)
+	service := NewStorageService(mongoClient, "chatbox", "sessions", logger, nil)
 
 	sess := &session.Session{
 		ID:     "",
@@ -210,7 +214,7 @@ func TestUpdateSession_ValidSession(t *testing.T) {
 	mongoClient, logger, cleanup := setupTestMongoDB(t)
 	defer cleanup()
 
-	service := NewStorageService(mongoClient, "test_chat_db", "sessions", logger, nil)
+	service := NewStorageService(mongoClient, "chatbox", "sessions", logger, nil)
 
 	// Create initial session
 	sess := &session.Session{
@@ -256,7 +260,7 @@ func TestUpdateSession_NonExistentSession(t *testing.T) {
 	mongoClient, logger, cleanup := setupTestMongoDB(t)
 	defer cleanup()
 
-	service := NewStorageService(mongoClient, "test_chat_db", "sessions", logger, nil)
+	service := NewStorageService(mongoClient, "chatbox", "sessions", logger, nil)
 
 	sess := &session.Session{
 		ID:     "non-existent",
@@ -271,7 +275,7 @@ func TestGetSession_ValidSession(t *testing.T) {
 	mongoClient, logger, cleanup := setupTestMongoDB(t)
 	defer cleanup()
 
-	service := NewStorageService(mongoClient, "test_chat_db", "sessions", logger, nil)
+	service := NewStorageService(mongoClient, "chatbox", "sessions", logger, nil)
 
 	// Create session
 	now := time.Now()
@@ -321,7 +325,7 @@ func TestGetSession_NonExistentSession(t *testing.T) {
 	mongoClient, logger, cleanup := setupTestMongoDB(t)
 	defer cleanup()
 
-	service := NewStorageService(mongoClient, "test_chat_db", "sessions", logger, nil)
+	service := NewStorageService(mongoClient, "chatbox", "sessions", logger, nil)
 
 	sess, err := service.GetSession("non-existent")
 	assert.ErrorIs(t, err, ErrSessionNotFound)
@@ -332,7 +336,7 @@ func TestGetSession_EmptySessionID(t *testing.T) {
 	mongoClient, logger, cleanup := setupTestMongoDB(t)
 	defer cleanup()
 
-	service := NewStorageService(mongoClient, "test_chat_db", "sessions", logger, nil)
+	service := NewStorageService(mongoClient, "chatbox", "sessions", logger, nil)
 
 	sess, err := service.GetSession("")
 	assert.ErrorIs(t, err, ErrInvalidSessionID)
@@ -343,7 +347,7 @@ func TestSessionToDocument_WithMessages(t *testing.T) {
 	mongoClient, logger, cleanup := setupTestMongoDB(t)
 	defer cleanup()
 
-	service := NewStorageService(mongoClient, "test_chat_db", "sessions", logger, nil)
+	service := NewStorageService(mongoClient, "chatbox", "sessions", logger, nil)
 
 	now := time.Now()
 	sess := &session.Session{
@@ -395,7 +399,7 @@ func TestSessionToDocument_WithEndTime(t *testing.T) {
 	mongoClient, logger, cleanup := setupTestMongoDB(t)
 	defer cleanup()
 
-	service := NewStorageService(mongoClient, "test_chat_db", "sessions", logger, nil)
+	service := NewStorageService(mongoClient, "chatbox", "sessions", logger, nil)
 
 	now := time.Now()
 	endTime := now.Add(10 * time.Minute)
@@ -626,7 +630,7 @@ func TestAddMessage_ValidMessage(t *testing.T) {
 	mongoClient, logger, cleanup := setupTestMongoDB(t)
 	defer cleanup()
 
-	service := NewStorageService(mongoClient, "test_chat_db", "sessions", logger, nil)
+	service := NewStorageService(mongoClient, "chatbox", "sessions", logger, nil)
 
 	// Create initial session
 	now := time.Now()
@@ -668,7 +672,7 @@ func TestAddMessage_WithEncryption(t *testing.T) {
 
 	// Create 32-byte encryption key for AES-256
 	encryptionKey := []byte("12345678901234567890123456789012")
-	service := NewStorageService(mongoClient, "test_chat_db", "sessions", logger, encryptionKey)
+	service := NewStorageService(mongoClient, "chatbox", "sessions", logger, encryptionKey)
 
 	// Create initial session
 	now := time.Now()
@@ -718,7 +722,7 @@ func TestAddMessage_NonExistentSession(t *testing.T) {
 	mongoClient, logger, cleanup := setupTestMongoDB(t)
 	defer cleanup()
 
-	service := NewStorageService(mongoClient, "test_chat_db", "sessions", logger, nil)
+	service := NewStorageService(mongoClient, "chatbox", "sessions", logger, nil)
 
 	msg := &session.Message{
 		Content:   "Test",
@@ -734,7 +738,7 @@ func TestAddMessage_EmptySessionID(t *testing.T) {
 	mongoClient, logger, cleanup := setupTestMongoDB(t)
 	defer cleanup()
 
-	service := NewStorageService(mongoClient, "test_chat_db", "sessions", logger, nil)
+	service := NewStorageService(mongoClient, "chatbox", "sessions", logger, nil)
 
 	msg := &session.Message{
 		Content:   "Test",
@@ -750,7 +754,7 @@ func TestAddMessage_NilMessage(t *testing.T) {
 	mongoClient, logger, cleanup := setupTestMongoDB(t)
 	defer cleanup()
 
-	service := NewStorageService(mongoClient, "test_chat_db", "sessions", logger, nil)
+	service := NewStorageService(mongoClient, "chatbox", "sessions", logger, nil)
 
 	err := service.AddMessage("test-session", nil)
 	assert.Error(t, err)
@@ -761,7 +765,7 @@ func TestEndSession_ValidSession(t *testing.T) {
 	mongoClient, logger, cleanup := setupTestMongoDB(t)
 	defer cleanup()
 
-	service := NewStorageService(mongoClient, "test_chat_db", "sessions", logger, nil)
+	service := NewStorageService(mongoClient, "chatbox", "sessions", logger, nil)
 
 	// Create session
 	now := time.Now()
@@ -798,7 +802,7 @@ func TestEndSession_NonExistentSession(t *testing.T) {
 	mongoClient, logger, cleanup := setupTestMongoDB(t)
 	defer cleanup()
 
-	service := NewStorageService(mongoClient, "test_chat_db", "sessions", logger, nil)
+	service := NewStorageService(mongoClient, "chatbox", "sessions", logger, nil)
 
 	err := service.EndSession("non-existent", time.Now())
 	assert.ErrorIs(t, err, ErrSessionNotFound)
@@ -808,7 +812,7 @@ func TestEndSession_EmptySessionID(t *testing.T) {
 	mongoClient, logger, cleanup := setupTestMongoDB(t)
 	defer cleanup()
 
-	service := NewStorageService(mongoClient, "test_chat_db", "sessions", logger, nil)
+	service := NewStorageService(mongoClient, "chatbox", "sessions", logger, nil)
 
 	err := service.EndSession("", time.Now())
 	assert.ErrorIs(t, err, ErrInvalidSessionID)
@@ -919,7 +923,7 @@ func TestListUserSessions_ValidUser(t *testing.T) {
 	mongoClient, logger, cleanup := setupTestMongoDB(t)
 	defer cleanup()
 
-	service := NewStorageService(mongoClient, "test_chat_db", "sessions", logger, nil)
+	service := NewStorageService(mongoClient, "chatbox", "sessions", logger, nil)
 
 	// Create multiple sessions for the same user
 	now := time.Now()
@@ -994,7 +998,7 @@ func TestListUserSessions_WithLimit(t *testing.T) {
 	mongoClient, logger, cleanup := setupTestMongoDB(t)
 	defer cleanup()
 
-	service := NewStorageService(mongoClient, "test_chat_db", "sessions", logger, nil)
+	service := NewStorageService(mongoClient, "chatbox", "sessions", logger, nil)
 
 	// Create multiple sessions
 	now := time.Now()
@@ -1020,7 +1024,7 @@ func TestListUserSessions_EmptyUserID(t *testing.T) {
 	mongoClient, logger, cleanup := setupTestMongoDB(t)
 	defer cleanup()
 
-	service := NewStorageService(mongoClient, "test_chat_db", "sessions", logger, nil)
+	service := NewStorageService(mongoClient, "chatbox", "sessions", logger, nil)
 
 	metadata, err := service.ListUserSessions("", 0)
 	assert.Error(t, err)
@@ -1032,7 +1036,7 @@ func TestListUserSessions_NoSessions(t *testing.T) {
 	mongoClient, logger, cleanup := setupTestMongoDB(t)
 	defer cleanup()
 
-	service := NewStorageService(mongoClient, "test_chat_db", "sessions", logger, nil)
+	service := NewStorageService(mongoClient, "chatbox", "sessions", logger, nil)
 
 	metadata, err := service.ListUserSessions("user-no-sessions", 0)
 	assert.NoError(t, err)
@@ -1043,7 +1047,7 @@ func TestListUserSessions_LastMessageTime(t *testing.T) {
 	mongoClient, logger, cleanup := setupTestMongoDB(t)
 	defer cleanup()
 
-	service := NewStorageService(mongoClient, "test_chat_db", "sessions", logger, nil)
+	service := NewStorageService(mongoClient, "chatbox", "sessions", logger, nil)
 
 	now := time.Now()
 	lastMsgTime := now.Add(5 * time.Minute)
@@ -1072,7 +1076,7 @@ func TestGetSessionMetrics_ValidTimeRange(t *testing.T) {
 	mongoClient, logger, cleanup := setupTestMongoDB(t)
 	defer cleanup()
 
-	service := NewStorageService(mongoClient, "test_chat_db", "sessions", logger, nil)
+	service := NewStorageService(mongoClient, "chatbox", "sessions", logger, nil)
 
 	// Create sessions with different characteristics
 	now := time.Now()
@@ -1138,7 +1142,7 @@ func TestGetSessionMetrics_EmptyTimeRange(t *testing.T) {
 	mongoClient, logger, cleanup := setupTestMongoDB(t)
 	defer cleanup()
 
-	service := NewStorageService(mongoClient, "test_chat_db", "sessions", logger, nil)
+	service := NewStorageService(mongoClient, "chatbox", "sessions", logger, nil)
 
 	now := time.Now()
 	startTime := now.Add(-1 * time.Hour)
@@ -1158,7 +1162,7 @@ func TestGetSessionMetrics_InvalidTimeRange(t *testing.T) {
 	mongoClient, logger, cleanup := setupTestMongoDB(t)
 	defer cleanup()
 
-	service := NewStorageService(mongoClient, "test_chat_db", "sessions", logger, nil)
+	service := NewStorageService(mongoClient, "chatbox", "sessions", logger, nil)
 
 	now := time.Now()
 	startTime := now
@@ -1174,7 +1178,7 @@ func TestGetSessionMetrics_ConcurrentSessions(t *testing.T) {
 	mongoClient, logger, cleanup := setupTestMongoDB(t)
 	defer cleanup()
 
-	service := NewStorageService(mongoClient, "test_chat_db", "sessions", logger, nil)
+	service := NewStorageService(mongoClient, "chatbox", "sessions", logger, nil)
 
 	now := time.Now()
 	startTime := now.Add(-1 * time.Hour)
@@ -1227,7 +1231,7 @@ func TestGetTokenUsage_ValidTimeRange(t *testing.T) {
 	mongoClient, logger, cleanup := setupTestMongoDB(t)
 	defer cleanup()
 
-	service := NewStorageService(mongoClient, "test_chat_db", "sessions", logger, nil)
+	service := NewStorageService(mongoClient, "chatbox", "sessions", logger, nil)
 
 	now := time.Now()
 	startTime := now.Add(-2 * time.Hour)
@@ -1276,7 +1280,7 @@ func TestGetTokenUsage_EmptyTimeRange(t *testing.T) {
 	mongoClient, logger, cleanup := setupTestMongoDB(t)
 	defer cleanup()
 
-	service := NewStorageService(mongoClient, "test_chat_db", "sessions", logger, nil)
+	service := NewStorageService(mongoClient, "chatbox", "sessions", logger, nil)
 
 	now := time.Now()
 	startTime := now.Add(-1 * time.Hour)
@@ -1292,7 +1296,7 @@ func TestGetTokenUsage_InvalidTimeRange(t *testing.T) {
 	mongoClient, logger, cleanup := setupTestMongoDB(t)
 	defer cleanup()
 
-	service := NewStorageService(mongoClient, "test_chat_db", "sessions", logger, nil)
+	service := NewStorageService(mongoClient, "chatbox", "sessions", logger, nil)
 
 	now := time.Now()
 	startTime := now
@@ -1308,7 +1312,7 @@ func TestGetTokenUsage_PartialTimeRange(t *testing.T) {
 	mongoClient, logger, cleanup := setupTestMongoDB(t)
 	defer cleanup()
 
-	service := NewStorageService(mongoClient, "test_chat_db", "sessions", logger, nil)
+	service := NewStorageService(mongoClient, "chatbox", "sessions", logger, nil)
 
 	now := time.Now()
 
@@ -1358,7 +1362,7 @@ func TestListAllSessionsWithOptions_Pagination(t *testing.T) {
 	mongoClient, logger, cleanup := setupTestMongoDB(t)
 	defer cleanup()
 
-	service := NewStorageService(mongoClient, "test_chat_db", "sessions", logger, nil)
+	service := NewStorageService(mongoClient, "chatbox", "sessions", logger, nil)
 
 	// Create 25 sessions
 	for i := 0; i < 25; i++ {
@@ -1399,7 +1403,7 @@ func TestListAllSessionsWithOptions_FilterByUser(t *testing.T) {
 	mongoClient, logger, cleanup := setupTestMongoDB(t)
 	defer cleanup()
 
-	service := NewStorageService(mongoClient, "test_chat_db", "sessions", logger, nil)
+	service := NewStorageService(mongoClient, "chatbox", "sessions", logger, nil)
 
 	// Create sessions for different users
 	users := []string{"user-1", "user-2", "user-3"}
@@ -1434,7 +1438,7 @@ func TestListAllSessionsWithOptions_FilterByDateRange(t *testing.T) {
 	mongoClient, logger, cleanup := setupTestMongoDB(t)
 	defer cleanup()
 
-	service := NewStorageService(mongoClient, "test_chat_db", "sessions", logger, nil)
+	service := NewStorageService(mongoClient, "chatbox", "sessions", logger, nil)
 
 	now := time.Now()
 
@@ -1492,7 +1496,7 @@ func TestListAllSessionsWithOptions_FilterByAdminAssisted(t *testing.T) {
 	mongoClient, logger, cleanup := setupTestMongoDB(t)
 	defer cleanup()
 
-	service := NewStorageService(mongoClient, "test_chat_db", "sessions", logger, nil)
+	service := NewStorageService(mongoClient, "chatbox", "sessions", logger, nil)
 
 	// Create sessions with and without admin assistance
 	sessions := []*session.Session{
@@ -1553,7 +1557,7 @@ func TestListAllSessionsWithOptions_FilterByActiveStatus(t *testing.T) {
 	mongoClient, logger, cleanup := setupTestMongoDB(t)
 	defer cleanup()
 
-	service := NewStorageService(mongoClient, "test_chat_db", "sessions", logger, nil)
+	service := NewStorageService(mongoClient, "chatbox", "sessions", logger, nil)
 
 	now := time.Now()
 	endTime := now.Add(-1 * time.Hour)
@@ -1617,7 +1621,7 @@ func TestListAllSessionsWithOptions_SortByStartTime(t *testing.T) {
 	mongoClient, logger, cleanup := setupTestMongoDB(t)
 	defer cleanup()
 
-	service := NewStorageService(mongoClient, "test_chat_db", "sessions", logger, nil)
+	service := NewStorageService(mongoClient, "chatbox", "sessions", logger, nil)
 
 	now := time.Now()
 
@@ -1678,7 +1682,7 @@ func TestListAllSessionsWithOptions_SortByMessageCount(t *testing.T) {
 	mongoClient, logger, cleanup := setupTestMongoDB(t)
 	defer cleanup()
 
-	service := NewStorageService(mongoClient, "test_chat_db", "sessions", logger, nil)
+	service := NewStorageService(mongoClient, "chatbox", "sessions", logger, nil)
 
 	// Create sessions with different message counts
 	sessions := []*session.Session{
@@ -1747,7 +1751,7 @@ func TestListAllSessionsWithOptions_SortByTotalTokens(t *testing.T) {
 	mongoClient, logger, cleanup := setupTestMongoDB(t)
 	defer cleanup()
 
-	service := NewStorageService(mongoClient, "test_chat_db", "sessions", logger, nil)
+	service := NewStorageService(mongoClient, "chatbox", "sessions", logger, nil)
 
 	// Create sessions with different token counts
 	sessions := []*session.Session{
@@ -1803,7 +1807,7 @@ func TestListAllSessionsWithOptions_DefaultValues(t *testing.T) {
 	mongoClient, logger, cleanup := setupTestMongoDB(t)
 	defer cleanup()
 
-	service := NewStorageService(mongoClient, "test_chat_db", "sessions", logger, nil)
+	service := NewStorageService(mongoClient, "chatbox", "sessions", logger, nil)
 
 	// Create a few sessions
 	for i := 0; i < 5; i++ {
@@ -1836,7 +1840,7 @@ func TestListAllSessionsWithOptions_LimitCap(t *testing.T) {
 	mongoClient, logger, cleanup := setupTestMongoDB(t)
 	defer cleanup()
 
-	service := NewStorageService(mongoClient, "test_chat_db", "sessions", logger, nil)
+	service := NewStorageService(mongoClient, "chatbox", "sessions", logger, nil)
 
 	// Create a session
 	sess := &session.Session{
@@ -1862,7 +1866,7 @@ func TestListAllSessionsWithOptions_CombinedFilters(t *testing.T) {
 	mongoClient, logger, cleanup := setupTestMongoDB(t)
 	defer cleanup()
 
-	service := NewStorageService(mongoClient, "test_chat_db", "sessions", logger, nil)
+	service := NewStorageService(mongoClient, "chatbox", "sessions", logger, nil)
 
 	now := time.Now()
 	endTime := now.Add(-1 * time.Hour)
@@ -2142,7 +2146,7 @@ func TestEnsureIndexes(t *testing.T) {
 
 	// Create a test collection
 	testCollName := fmt.Sprintf("test_indexes_%d", time.Now().Unix())
-	storageService := NewStorageService(mongo, "test_chat_db", testCollName, logger, nil)
+	storageService := NewStorageService(mongo, "chatbox", testCollName, logger, nil)
 
 	// Ensure indexes
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -2181,7 +2185,7 @@ func TestEnsureIndexesIdempotent(t *testing.T) {
 
 	// Create a test collection
 	testCollName := fmt.Sprintf("test_indexes_idempotent_%d", time.Now().Unix())
-	storageService := NewStorageService(mongo, "test_chat_db", testCollName, logger, nil)
+	storageService := NewStorageService(mongo, "chatbox", testCollName, logger, nil)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

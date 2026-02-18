@@ -3,6 +3,7 @@
 stages:
   - build
   - test
+  - coverage
 
 variables:
   DOCKER_DRIVER: overlay2
@@ -59,3 +60,131 @@ docker-build-push:
   tags:
     - docker
   when: manual
+
+# Test job with race detector
+test:
+  stage: test
+  image: golang:1.21
+  services:
+    - mongo:latest
+  variables:
+    MONGO_INITDB_ROOT_USERNAME: admin
+    MONGO_INITDB_ROOT_PASSWORD: admin
+    MONGO_URI: "mongodb://chatbox:ChatBox123@mongo:27017/chatbox?authSource=admin"
+  before_script:
+    # Wait for MongoDB to be ready
+    - apt-get update && apt-get install -y netcat-openbsd
+    - until nc -z mongo 27017; do echo "Waiting for MongoDB..."; sleep 1; done
+    # Create test user in MongoDB
+    - |
+      apt-get install -y wget gnupg
+      wget -qO - https://www.mongodb.org/static/pgp/server-6.0.asc | apt-key add -
+      echo "deb http://repo.mongodb.org/apt/debian bullseye/mongodb-org/6.0 main" | tee /etc/apt/sources.list.d/mongodb-org-6.0.list
+      apt-get update
+      apt-get install -y mongodb-mongosh
+      mongosh "mongodb://admin:admin@mongo:27017/admin" --eval 'db.createUser({user: "chatbox", pwd: "ChatBox123", roles: [{role: "readWrite", db: "chatbox"}, {role: "dbAdmin", db: "chatbox"}]})'
+  script:
+    # Run all tests with race detector
+    - go test -race -v ./...
+  only:
+    - main
+    - master
+    - develop
+    - merge_requests
+  tags:
+    - docker
+
+# Coverage measurement job
+coverage:
+  stage: coverage
+  image: golang:1.21
+  services:
+    - mongo:latest
+  variables:
+    MONGO_INITDB_ROOT_USERNAME: admin
+    MONGO_INITDB_ROOT_PASSWORD: admin
+    MONGO_URI: "mongodb://chatbox:ChatBox123@mongo:27017/chatbox?authSource=admin"
+  before_script:
+    # Wait for MongoDB to be ready
+    - apt-get update && apt-get install -y netcat-openbsd
+    - until nc -z mongo 27017; do echo "Waiting for MongoDB..."; sleep 1; done
+    # Create test user in MongoDB
+    - |
+      apt-get install -y wget gnupg
+      wget -qO - https://www.mongodb.org/static/pgp/server-6.0.asc | apt-key add -
+      echo "deb http://repo.mongodb.org/apt/debian bullseye/mongodb-org/6.0 main" | tee /etc/apt/sources.list.d/mongodb-org-6.0.list
+      apt-get update
+      apt-get install -y mongodb-mongosh
+      mongosh "mongodb://admin:admin@mongo:27017/admin" --eval 'db.createUser({user: "chatbox", pwd: "ChatBox123", roles: [{role: "readWrite", db: "chatbox"}, {role: "dbAdmin", db: "chatbox"}]})'
+  script:
+    # Run tests with coverage for cmd/server
+    - echo "Testing cmd/server coverage..."
+    - go test -cover -coverprofile=cmd_server_coverage.out ./cmd/server
+    - go tool cover -func=cmd_server_coverage.out | grep total | awk '{print "cmd/server coverage: " $3}'
+    
+    # Run tests with coverage for internal/storage
+    - echo "Testing internal/storage coverage..."
+    - go test -cover -coverprofile=storage_coverage.out ./internal/storage
+    - go tool cover -func=storage_coverage.out | grep total | awk '{print "internal/storage coverage: " $3}'
+    
+    # Run tests with coverage for chatbox.go
+    - echo "Testing chatbox.go coverage..."
+    - go test -cover -coverprofile=chatbox_coverage.out .
+    - go tool cover -func=chatbox_coverage.out | grep total | awk '{print "chatbox.go coverage: " $3}'
+    
+    # Check coverage thresholds (80% minimum)
+    - |
+      echo "Checking coverage thresholds..."
+      
+      # Check cmd/server coverage
+      CMD_SERVER_COV=$(go tool cover -func=cmd_server_coverage.out | grep total | awk '{print $3}' | sed 's/%//')
+      echo "cmd/server coverage: ${CMD_SERVER_COV}%"
+      if (( $(echo "$CMD_SERVER_COV < 80" | bc -l) )); then
+        echo "ERROR: cmd/server coverage ${CMD_SERVER_COV}% is below 80% threshold"
+        exit 1
+      fi
+      
+      # Check internal/storage coverage
+      STORAGE_COV=$(go tool cover -func=storage_coverage.out | grep total | awk '{print $3}' | sed 's/%//')
+      echo "internal/storage coverage: ${STORAGE_COV}%"
+      if (( $(echo "$STORAGE_COV < 80" | bc -l) )); then
+        echo "ERROR: internal/storage coverage ${STORAGE_COV}% is below 80% threshold"
+        exit 1
+      fi
+      
+      # Check chatbox.go coverage
+      CHATBOX_COV=$(go tool cover -func=chatbox_coverage.out | grep chatbox.go | awk '{print $3}' | sed 's/%//')
+      echo "chatbox.go coverage: ${CHATBOX_COV}%"
+      if (( $(echo "$CHATBOX_COV < 80" | bc -l) )); then
+        echo "ERROR: chatbox.go coverage ${CHATBOX_COV}% is below 80% threshold"
+        exit 1
+      fi
+      
+      echo "All coverage thresholds met!"
+    
+    # Generate HTML coverage reports
+    - go tool cover -html=cmd_server_coverage.out -o cmd_server_coverage.html
+    - go tool cover -html=storage_coverage.out -o storage_coverage.html
+    - go tool cover -html=chatbox_coverage.out -o chatbox_coverage.html
+  artifacts:
+    paths:
+      - cmd_server_coverage.out
+      - storage_coverage.out
+      - chatbox_coverage.out
+      - cmd_server_coverage.html
+      - storage_coverage.html
+      - chatbox_coverage.html
+    reports:
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage.xml
+    expire_in: 30 days
+  coverage: '/total:\s+\(statements\)\s+(\d+\.\d+)%/'
+  only:
+    - main
+    - master
+    - develop
+    - merge_requests
+  tags:
+    - docker
+

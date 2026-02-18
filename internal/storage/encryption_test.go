@@ -94,7 +94,7 @@ func TestEncryption_KeySizes(t *testing.T) {
 
 			if tc.shouldErr {
 				assert.Error(t, err, "Encryption with %s key should fail", tc.aesType)
-				assert.Contains(t, err.Error(), "failed to create cipher", "Error should mention cipher creation failure")
+				assert.Contains(t, err.Error(), "invalid encryption key size", "Error should mention invalid key size")
 			} else {
 				require.NoError(t, err, "Encryption with %s key should succeed", tc.aesType)
 				assert.NotEqual(t, plaintext, encrypted, "Encrypted text should differ from plaintext")

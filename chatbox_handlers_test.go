@@ -33,8 +33,8 @@ func setupTestStorage(t *testing.T) (*storage.StorageService, func()) {
 	t.Helper()
 
 	// Check if we should skip MongoDB tests
-	if os.Getenv("SKIP_MONGO_TESTS") != "" {
-		t.Skip("Skipping MongoDB tests (SKIP_MONGO_TESTS is set)")
+	if testing.Short() || os.Getenv("SKIP_MONGO_TESTS") != "" {
+		t.Skip("Skipping MongoDB-dependent test")
 	}
 
 	// Get MongoDB URI from environment or use default test configuration

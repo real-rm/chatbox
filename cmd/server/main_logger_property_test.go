@@ -28,6 +28,9 @@ func TestProperty_LoggerInitializationHandlesAllInputs(t *testing.T) {
 			clearEnvVars()
 			defer clearEnvVars()
 
+			// Create temp dir first so all generated log paths are contained within it
+			tmpDir := t.TempDir()
+
 			// Generate a directory path from components
 			if len(pathComponents) == 0 {
 				pathComponents = []string{"logs"}
@@ -45,10 +48,10 @@ func TestProperty_LoggerInitializationHandlesAllInputs(t *testing.T) {
 				validComponents = []string{"logs"}
 			}
 
-			logDir := filepath.Join(validComponents...)
+			// Always root log dir inside tmpDir to avoid leaving stale directories
+			logDir := filepath.Join(append([]string{tmpDir}, validComponents...)...)
 
 			// Create a config file with the generated log directory
-			tmpDir := t.TempDir()
 			configPath := filepath.Join(tmpDir, "config.toml")
 			configContent := `
 [log]

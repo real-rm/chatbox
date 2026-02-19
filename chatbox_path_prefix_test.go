@@ -17,6 +17,11 @@ import (
 
 // TestPathPrefixRouteRegistration verifies that routes are registered with the configured path prefix
 func TestPathPrefixRouteRegistration(t *testing.T) {
+	// Skip when MongoDB is not available to avoid hanging on connection timeout
+	if testing.Short() || os.Getenv("SKIP_MONGO_TESTS") != "" {
+		t.Skip("Skipping MongoDB-dependent integration tests")
+	}
+
 	tests := []struct {
 		name       string
 		pathPrefix string
@@ -69,9 +74,9 @@ func TestPathPrefixRouteRegistration(t *testing.T) {
 				t.Skipf("Failed to get default config: %v", err)
 			}
 
-			// Create test logger
+			// Create test logger (use temp dir to avoid leaving stale log directories)
 			logger, err := golog.InitLog(golog.LogConfig{
-				Dir:            "logs",
+				Dir:            t.TempDir(),
 				Level:          "error",
 				StandardOutput: false,
 			})
@@ -117,6 +122,11 @@ func TestPathPrefixRouteRegistration(t *testing.T) {
 
 // TestPathPrefixValidation verifies that invalid path prefixes are rejected
 func TestPathPrefixValidation(t *testing.T) {
+	// Skip when MongoDB is not available to avoid hanging on connection timeout
+	if testing.Short() || os.Getenv("SKIP_MONGO_TESTS") != "" {
+		t.Skip("Skipping MongoDB-dependent integration tests")
+	}
+
 	tests := []struct {
 		name        string
 		pathPrefix  string
@@ -162,9 +172,9 @@ func TestPathPrefixValidation(t *testing.T) {
 				t.Skipf("Failed to get default config: %v", err)
 			}
 
-			// Create test logger
+			// Create test logger (use temp dir to avoid leaving stale log directories)
 			logger, err := golog.InitLog(golog.LogConfig{
-				Dir:            "logs",
+				Dir:            t.TempDir(),
 				Level:          "error",
 				StandardOutput: false,
 			})

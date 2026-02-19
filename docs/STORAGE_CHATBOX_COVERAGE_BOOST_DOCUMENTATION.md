@@ -357,22 +357,16 @@ uri = "mongodb://chatbox:ChatBox123@127.0.0.1:27017/chatbox?authSource=admin"
 
 ## Known Issues
 
-### 1. Sorting Order Bug (Low Priority)
+### 1. Sorting Order Bug (Fixed)
 
-**Issue:** `ListUserSessions` returns sessions in ascending order (oldest first) instead of descending order (newest first).
+**Status:** Fixed 2026-02-19
 
-**Location:** `internal/storage/storage.go` - `ListUserSessions` function
+**Root Cause:** `storage.go` used `*options.FindOptions` (standard driver) with `gomongo.Find()`,
+which expects `gomongo.QueryOptions`. The type mismatch caused sort/limit/skip to be silently
+ignored. Fixed by using `gomongo.QueryOptions{Sort: ..., Limit: ..., Skip: ...}` in all three
+list functions.
 
-**Impact:** 
-- Sessions are sorted consistently, just in the wrong direction
-- Does not affect functionality, only user experience
-- Documented in test comments
-
-**Workaround:** Tests verify ascending order for now
-
-**Fix Required:** Update MongoDB sort order from `1` to `-1` for `start_time` field
-
-**Test Evidence:** `TestListUserSessions_Unit_SortedByTimestamp` in `storage_unit_test.go`
+**Test Evidence:** `TestListUserSessions_Unit_SortedByTimestamp` now passes with descending order.
 
 ### 2. Handler Coverage Verification Timeout
 

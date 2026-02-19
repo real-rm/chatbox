@@ -103,6 +103,11 @@ func setupTestLogger(t *testing.T) *golog.Logger {
 func setupTestMongo(t *testing.T) *gomongo.Mongo {
 	t.Helper()
 
+	// Skip MongoDB tests in short mode or when explicitly disabled
+	if testing.Short() || os.Getenv("SKIP_MONGO_TESTS") != "" {
+		t.Skip("Skipping MongoDB-dependent test")
+	}
+
 	// Load config first
 	if err := goconfig.LoadConfig(); err != nil {
 		t.Skipf("MongoDB not available: failed to load config: %v", err)

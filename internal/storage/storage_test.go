@@ -792,7 +792,8 @@ func TestEndSession_ValidSession(t *testing.T) {
 	err = service.collection.FindOne(ctx, bson.M{"_id": "test-end-session-1"}).Decode(&doc)
 	assert.NoError(t, err)
 	assert.NotNil(t, doc.EndTime)
-	assert.Equal(t, endTime, *doc.EndTime)
+	// MongoDB stores times as UTC with millisecond precision; truncate for comparison
+	assert.Equal(t, endTime.UTC().Truncate(time.Millisecond), doc.EndTime.UTC().Truncate(time.Millisecond))
 	assert.Equal(t, int64(300), doc.Duration) // 5 minutes = 300 seconds
 }
 
@@ -1770,9 +1771,9 @@ func TestListAllSessionsWithOptions_SortByTotalTokens(t *testing.T) {
 		}
 	}()
 
-	// Sort by total_tokens descending
+	// Sort by totalTokens descending
 	opts := &SessionListOptions{
-		SortBy:    "total_tokens",
+		SortBy:    "totalTokens",
 		SortOrder: "desc",
 		Limit:     100,
 		UserID:    testID + "-user-1", // Filter to only our test user
@@ -2027,8 +2028,9 @@ func TestListAllSessionsWithOptions_LargeDataset(t *testing.T) {
 
 	// Test 2: Filter by user with large dataset
 	t.Run("FilterByUser", func(t *testing.T) {
+		targetUser := testID + "-user-0"
 		opts := &SessionListOptions{
-			UserID:    "user-0",
+			UserID:    targetUser,
 			Limit:     100,
 			SortBy:    "start_time",
 			SortOrder: "desc",
@@ -2037,7 +2039,7 @@ func TestListAllSessionsWithOptions_LargeDataset(t *testing.T) {
 		assert.NoError(t, err)
 		assert.Equal(t, 10, len(result)) // 1000 sessions / 100 users = 10 per user
 		for _, sess := range result {
-			assert.Equal(t, "user-0", sess.UserID)
+			assert.Equal(t, targetUser, sess.UserID)
 		}
 	})
 
@@ -2081,7 +2083,7 @@ func TestListAllSessionsWithOptions_LargeDataset(t *testing.T) {
 	t.Run("SortByTotalTokens", func(t *testing.T) {
 		opts := &SessionListOptions{
 			Limit:     100,
-			SortBy:    "total_tokens",
+			SortBy:    "totalTokens",
 			SortOrder: "desc",
 		}
 		result, err := service.ListAllSessionsWithOptions(opts)
@@ -2113,8 +2115,10 @@ func TestListAllSessionsWithOptions_LargeDataset(t *testing.T) {
 	t.Run("CombinedFilters", func(t *testing.T) {
 		adminAssisted := true
 		active := false
-		startTimeFrom := now.Add(-600 * time.Minute)
-		startTimeTo := now.Add(-400 * time.Minute)
+		// Truncate to millisecond precision to match MongoDB's storage precision,
+		// avoiding boundary assertion failures for sessions created at the exact boundary.
+		startTimeFrom := now.Add(-600 * time.Minute).Truncate(time.Millisecond)
+		startTimeTo := now.Add(-400 * time.Minute).Truncate(time.Millisecond)
 		opts := &SessionListOptions{
 			AdminAssisted: &adminAssisted,
 			Active:        &active,

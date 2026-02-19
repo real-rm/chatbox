@@ -326,6 +326,9 @@ func (s *StorageService) UpdateSession(sess *session.Session) error {
 
 	// Remove _id field from update as it cannot be changed
 	delete(updateFields, "_id")
+	// Remove msgs field - messages are managed exclusively via AddMessage ($push)
+	// to prevent overwriting concurrent message additions
+	delete(updateFields, "msgs")
 
 	// Update document with retry logic for transient errors
 	filter := bson.M{constants.MongoFieldID: sess.ID}
@@ -720,15 +723,16 @@ func (s *StorageService) ListUserSessions(userID string, limit int) ([]*SessionM
 	filter := bson.M{constants.MongoFieldUserID: userID}
 
 	// Build find options with sorting by ts (descending)
-	findOptions := options.Find()
-	findOptions.SetSort(bson.D{{Key: constants.MongoFieldTimestamp, Value: -1}})
+	queryOpts := gomongo.QueryOptions{
+		Sort: bson.D{{Key: constants.MongoFieldTimestamp, Value: -1}},
+	}
 
 	if limit > 0 {
-		findOptions.SetLimit(int64(limit))
+		queryOpts.Limit = int64(limit)
 	}
 
 	// Execute query using gomongo
-	cursor, err := s.collection.Find(ctx, filter, findOptions)
+	cursor, err := s.collection.Find(ctx, filter, queryOpts)
 	// No else needed: early return pattern (guard clause)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list user sessions: %w", err)
@@ -736,7 +740,7 @@ func (s *StorageService) ListUserSessions(userID string, limit int) ([]*SessionM
 	defer cursor.Close(ctx)
 
 	// Decode results
-	var sessions []*SessionMetadata
+	sessions := make([]*SessionMetadata, 0)
 	for cursor.Next(ctx) {
 		var doc SessionDocument
 		if err := cursor.Decode(&doc); err != nil {
@@ -781,16 +785,17 @@ func (s *StorageService) ListAllSessions(limit int) ([]*SessionMetadata, error) 
 	defer cancel()
 
 	// Build find options with sorting by ts (descending)
-	findOptions := options.Find()
-	findOptions.SetSort(bson.D{{Key: constants.MongoFieldTimestamp, Value: -1}})
+	queryOpts := gomongo.QueryOptions{
+		Sort: bson.D{{Key: constants.MongoFieldTimestamp, Value: -1}},
+	}
 
 	// No else needed: optional operation (only set limit if specified)
 	if limit > 0 {
-		findOptions.SetLimit(int64(limit))
+		queryOpts.Limit = int64(limit)
 	}
 
 	// Execute query using gomongo (no filter = all documents)
-	cursor, err := s.collection.Find(ctx, bson.M{}, findOptions)
+	cursor, err := s.collection.Find(ctx, bson.M{}, queryOpts)
 	// No else needed: early return pattern (guard clause)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list all sessions: %w", err)
@@ -798,7 +803,7 @@ func (s *StorageService) ListAllSessions(limit int) ([]*SessionMetadata, error) 
 	defer cursor.Close(ctx)
 
 	// Decode results
-	var sessions []*SessionMetadata
+	sessions := make([]*SessionMetadata, 0)
 	for cursor.Next(ctx) {
 		var doc SessionDocument
 		// No else needed: early return pattern (guard clause)
@@ -925,13 +930,14 @@ func (s *StorageService) ListAllSessionsWithOptions(opts *SessionListOptions) ([
 	}
 
 	// Build find options
-	findOptions := options.Find()
-	findOptions.SetSort(bson.D{{Key: sortField, Value: sortOrder}})
-	findOptions.SetLimit(int64(opts.Limit))
-	findOptions.SetSkip(int64(opts.Offset))
+	queryOpts := gomongo.QueryOptions{
+		Sort:  bson.D{{Key: sortField, Value: sortOrder}},
+		Limit: int64(opts.Limit),
+		Skip:  int64(opts.Offset),
+	}
 
 	// Execute query
-	cursor, err := s.collection.Find(ctx, filter, findOptions)
+	cursor, err := s.collection.Find(ctx, filter, queryOpts)
 	// No else needed: early return pattern (guard clause)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list sessions with options: %w", err)
@@ -939,7 +945,7 @@ func (s *StorageService) ListAllSessionsWithOptions(opts *SessionListOptions) ([
 	defer cursor.Close(ctx)
 
 	// Decode results
-	var sessions []*SessionMetadata
+	sessions := make([]*SessionMetadata, 0)
 	for cursor.Next(ctx) {
 		var doc SessionDocument
 		// No else needed: early return pattern (guard clause)

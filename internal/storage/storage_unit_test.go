@@ -784,25 +784,17 @@ func TestListUserSessions_Unit_SortedByTimestamp(t *testing.T) {
 		t.Logf("  [%d] ID=%s, StartTime=%v", i, s.ID, s.StartTime)
 	}
 
-	// KNOWN ISSUE: Sessions are currently returned in ascending order (oldest first)
-	// instead of descending order (newest first) as intended.
-	// This appears to be a bug in the gomongo library or how we're using it.
-	// For now, we verify that sessions are at least sorted consistently.
-	// TODO: Fix sorting to be descending (newest first)
-
-	// Verify ascending order (oldest first) - current behavior
+	// Verify descending order (newest first)
 	for i := 0; i < len(sessions)-1; i++ {
-		require.False(t, sessions[i].StartTime.After(sessions[i+1].StartTime),
-			"Session %d (StartTime=%v) should not be after session %d (StartTime=%v)",
+		require.False(t, sessions[i].StartTime.Before(sessions[i+1].StartTime),
+			"Session %d (StartTime=%v) should not be before session %d (StartTime=%v) - expected descending order",
 			i, sessions[i].StartTime, i+1, sessions[i+1].StartTime)
 	}
 
-	// Verify that sessions are sorted (ascending order - oldest first)
-	// The first session should be the oldest
-	// The last session should be the newest
-	require.True(t, sessions[0].StartTime.Before(sessions[len(sessions)-1].StartTime) ||
+	// The first session should be the newest, the last should be the oldest
+	require.True(t, sessions[0].StartTime.After(sessions[len(sessions)-1].StartTime) ||
 		sessions[0].StartTime.Equal(sessions[len(sessions)-1].StartTime),
-		"First session should be older than or equal to last session (ascending order)")
+		"First session should be newer than or equal to last session (descending order)")
 }
 
 // TestListAllSessions_MultipleUsers tests listing all sessions across multiple users

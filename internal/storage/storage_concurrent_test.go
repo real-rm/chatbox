@@ -355,7 +355,10 @@ func TestConcurrentMixedOperations(t *testing.T) {
 	}
 	assert.Empty(t, errors, "Expected no errors during concurrent mixed operations")
 
-	// Verify initial sessions still exist and have been modified
+	// Verify initial sessions still exist and have been modified.
+	// Operations are distributed by (index % 4):
+	//   case 2 (UpdateSession): accesses sessions with index%numInitialSessions == {0,2,4,6,8}
+	//   case 3 (AddMessage):    accesses sessions with index%numInitialSessions == {1,3,5,7,9}
 	for i := 0; i < numInitialSessions; i++ {
 		sessionID := fmt.Sprintf("mixed-session-%d", i)
 		sess, err := service.GetSession(sessionID)
@@ -363,10 +366,12 @@ func TestConcurrentMixedOperations(t *testing.T) {
 		assert.NotNil(t, sess)
 		if sess != nil {
 			assert.Equal(t, sessionID, sess.ID)
-			// TotalTokens should have increased from updates
+			// TotalTokens should be at least the initial value for all sessions
 			assert.GreaterOrEqual(t, sess.TotalTokens, 100, "TotalTokens should be at least initial value")
-			// Messages should have been added
-			assert.Greater(t, len(sess.Messages), 0, "Messages should have been added")
+			// Only odd-indexed sessions (1, 3, 5, 7, 9) receive AddMessage operations
+			if i%2 == 1 {
+				assert.Greater(t, len(sess.Messages), 0, "Messages should have been added to odd-indexed sessions")
+			}
 		}
 	}
 }

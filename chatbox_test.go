@@ -216,8 +216,8 @@ func TestReadyCheckWithMongoDB(t *testing.T) {
 
 	t.Run("returns 503 when MongoDB connection fails", func(t *testing.T) {
 		// Skip if we should skip MongoDB tests
-		if os.Getenv("SKIP_MONGO_TESTS") != "" {
-			t.Skip("Skipping MongoDB test")
+		if testing.Short() || os.Getenv("SKIP_MONGO_TESTS") != "" {
+			t.Skip("Skipping MongoDB-dependent test")
 		}
 
 		// Set config file path for testing
@@ -279,8 +279,8 @@ func TestReadyCheckWithMongoDB(t *testing.T) {
 
 	t.Run("returns 200 when MongoDB is healthy", func(t *testing.T) {
 		// Skip if we should skip MongoDB tests
-		if os.Getenv("SKIP_MONGO_TESTS") != "" {
-			t.Skip("Skipping MongoDB test")
+		if testing.Short() || os.Getenv("SKIP_MONGO_TESTS") != "" {
+			t.Skip("Skipping MongoDB-dependent test")
 		}
 
 		// Set config file path for testing

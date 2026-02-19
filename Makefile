@@ -1,6 +1,6 @@
 # Makefile for Chat Application WebSocket Service
 
-.PHONY: help build test test-unit test-integration test-property test-coverage clean run docker-build docker-run docker-compose-up docker-compose-down lint fmt vet deps tidy check install deploy k8s-deploy k8s-delete k8s-logs k8s-status
+.PHONY: help build test test-unit test-integration test-property test-coverage cleantest clean run docker-build docker-run docker-compose-up docker-compose-down lint fmt vet deps tidy check install deploy k8s-deploy k8s-delete k8s-logs k8s-status
 
 # Variables
 APP_NAME := chatbox
@@ -113,6 +113,12 @@ test-coverage: ## Run tests with coverage report
 test-verbose: ## Run tests with verbose output
 	@echo "$(COLOR_GREEN)Running tests (verbose)...$(COLOR_RESET)"
 	$(GOTEST) -v -timeout $(TEST_TIMEOUT) -count=1 ./...
+
+cleantest: ## Clear test cache then run all tests
+	@echo "$(COLOR_YELLOW)Clearing test cache...$(COLOR_RESET)"
+	$(GOCLEAN) -testcache
+	@echo "$(COLOR_GREEN)Running all tests...$(COLOR_RESET)"
+	$(GOTEST) -v -timeout $(TEST_TIMEOUT) ./...
 
 ##@ Running
 

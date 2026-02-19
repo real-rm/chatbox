@@ -112,14 +112,14 @@ func TestProperty_ConfigurationLoadingHandlesAllInputs(t *testing.T) {
 
 			// Generate various types of malformed TOML
 			malformedPatterns := []string{
-				"[server\nport = 8080",                    // Unclosed section
-				"[server]\nport = ",                       // Missing value
-				"[server]\nport = \"not a number\"",       // Wrong type
-				"[server]\nport = 8080\nport = 9090",      // Duplicate keys
-				"invalid syntax here",                     // Invalid syntax
-				"[server]\n\x00invalid",                   // Null byte
-				"",                                        // Empty file
-				"# Only comments\n# No actual config",    // Only comments
+				"[server\nport = 8080",                // Unclosed section
+				"[server]\nport = ",                   // Missing value
+				"[server]\nport = \"not a number\"",   // Wrong type
+				"[server]\nport = 8080\nport = 9090",  // Duplicate keys
+				"invalid syntax here",                 // Invalid syntax
+				"[server]\n\x00invalid",               // Null byte
+				"",                                    // Empty file
+				"# Only comments\n# No actual config", // Only comments
 			}
 
 			// Use one of the malformed patterns

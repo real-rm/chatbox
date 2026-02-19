@@ -23,12 +23,12 @@ import (
 // it sends a shutdown signal.
 func runWithSignalChannelAndTimeout(t *testing.T, sigChan chan os.Signal, timeout time.Duration) error {
 	t.Helper()
-	
+
 	errChan := make(chan error, 1)
 	go func() {
 		errChan <- runWithSignalChannel(sigChan)
 	}()
-	
+
 	select {
 	case err := <-errChan:
 		return err
@@ -42,26 +42,26 @@ func runWithSignalChannelAndTimeout(t *testing.T, sigChan chan os.Signal, timeou
 // createTempConfigFile creates a temporary config file for testing
 func createTempConfigFile(t *testing.T, content string) string {
 	t.Helper()
-	
+
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "config.toml")
-	
+
 	err := os.WriteFile(configPath, []byte(content), 0644)
 	require.NoError(t, err, "Failed to create temp config file")
-	
+
 	return configPath
 }
 
 // setupTestConfig sets up a test configuration with the given config file path
 func setupTestConfig(t *testing.T, configPath string) {
 	t.Helper()
-	
+
 	// Reset goconfig state to avoid interference between tests
 	goconfig.ResetConfig()
-	
+
 	// Clear any existing environment variables
 	clearTestEnvVars(t)
-	
+
 	// Set the config file path
 	os.Setenv("RMBASE_FILE_CFG", configPath)
 	t.Cleanup(func() {
@@ -73,7 +73,7 @@ func setupTestConfig(t *testing.T, configPath string) {
 // clearTestEnvVars clears all test-related environment variables
 func clearTestEnvVars(t *testing.T) {
 	t.Helper()
-	
+
 	envVars := []string{
 		"SERVER_PORT",
 		"LOG_LEVEL",
@@ -89,14 +89,14 @@ func clearTestEnvVars(t *testing.T) {
 		"CHATBOX_PATH_PREFIX",
 		"RMBASE_FILE_CFG",
 	}
-	
+
 	for _, envVar := range envVars {
 		os.Unsetenv(envVar)
 	}
-	
+
 	// Reset goconfig state
 	goconfig.ResetConfig()
-	
+
 	t.Cleanup(func() {
 		for _, envVar := range envVars {
 			os.Unsetenv(envVar)
@@ -131,11 +131,11 @@ dir =
 // setupTestLogger creates a test logger configuration
 func setupTestLogger(t *testing.T) (*goconfig.ConfigAccessor, error) {
 	t.Helper()
-	
+
 	configContent := getValidConfigContent()
 	configPath := createTempConfigFile(t, configContent)
 	setupTestConfig(t, configPath)
-	
+
 	return loadConfiguration()
 }
 
@@ -159,53 +159,53 @@ func TestHelperFunctions(t *testing.T) {
 	t.Run("CreateTempConfigFile", func(t *testing.T) {
 		content := getValidConfigContent()
 		configPath := createTempConfigFile(t, content)
-		
+
 		assert.NotEmpty(t, configPath, "Config path should not be empty")
-		
+
 		// Verify file exists
 		_, err := os.Stat(configPath)
 		assert.NoError(t, err, "Config file should exist")
-		
+
 		// Verify content
 		data, err := os.ReadFile(configPath)
 		assert.NoError(t, err, "Should be able to read config file")
 		assert.Equal(t, content, string(data), "Config content should match")
 	})
-	
+
 	t.Run("ClearTestEnvVars", func(t *testing.T) {
 		// Set some environment variables
 		os.Setenv("SERVER_PORT", "9090")
 		os.Setenv("LOG_LEVEL", "debug")
-		
+
 		// Clear them
 		clearTestEnvVars(t)
-		
+
 		// Verify they are cleared
 		assert.Empty(t, os.Getenv("SERVER_PORT"), "SERVER_PORT should be cleared")
 		assert.Empty(t, os.Getenv("LOG_LEVEL"), "LOG_LEVEL should be cleared")
 	})
-	
+
 	t.Run("GetValidConfigContent", func(t *testing.T) {
 		content := getValidConfigContent()
 		assert.NotEmpty(t, content, "Valid config content should not be empty")
 		assert.Contains(t, content, "[server]", "Should contain server section")
 		assert.Contains(t, content, "[log]", "Should contain log section")
 	})
-	
+
 	t.Run("GetInvalidConfigContent", func(t *testing.T) {
 		content := getInvalidConfigContent()
 		assert.NotEmpty(t, content, "Invalid config content should not be empty")
 		// Invalid content should have malformed TOML
 		assert.Contains(t, content, "[server", "Should contain malformed section")
 	})
-	
+
 	t.Run("AssertValidPort", func(t *testing.T) {
 		// Test with valid port
 		assertValidPort(t, 8080)
 		assertValidPort(t, 1)
 		assertValidPort(t, 65535)
 	})
-	
+
 	t.Run("AssertValidLogLevel", func(t *testing.T) {
 		// Test with valid log levels
 		assertValidLogLevel(t, "debug")
@@ -222,21 +222,21 @@ func TestConfigurationCoverage(t *testing.T) {
 		configContent := getValidConfigContent()
 		configPath := createTempConfigFile(t, configContent)
 		setupTestConfig(t, configPath)
-		
+
 		cfg, err := loadConfiguration()
 		require.NoError(t, err, "Should load valid configuration")
 		require.NotNil(t, cfg, "Config accessor should not be nil")
 	})
-	
+
 	t.Run("LoadConfigurationWithMissingFile", func(t *testing.T) {
 		clearTestEnvVars(t)
-		
+
 		// Set path to non-existent file
 		os.Setenv("RMBASE_FILE_CFG", "/nonexistent/path/config.toml")
 		t.Cleanup(func() {
 			os.Unsetenv("RMBASE_FILE_CFG")
 		})
-		
+
 		cfg, err := loadConfiguration()
 		// goconfig may or may not error on missing file
 		if err != nil {
@@ -246,17 +246,17 @@ func TestConfigurationCoverage(t *testing.T) {
 			t.Log("goconfig allows missing config file")
 		}
 	})
-	
+
 	t.Run("LoadConfigurationWithInvalidPath", func(t *testing.T) {
 		clearTestEnvVars(t)
-		
+
 		// Set invalid path (directory instead of file)
 		tmpDir := t.TempDir()
 		os.Setenv("RMBASE_FILE_CFG", tmpDir)
 		t.Cleanup(func() {
 			os.Unsetenv("RMBASE_FILE_CFG")
 		})
-		
+
 		cfg, err := loadConfiguration()
 		// Should handle error gracefully
 		if err != nil {
@@ -273,13 +273,13 @@ func TestConfigurationCoverage(t *testing.T) {
 func TestLoadConfiguration_InvalidConfigFilePaths(t *testing.T) {
 	t.Run("InvalidPath_NonExistentDirectory", func(t *testing.T) {
 		clearTestEnvVars(t)
-		
+
 		// Set path to non-existent directory
 		os.Setenv("RMBASE_FILE_CFG", "/nonexistent/directory/config.toml")
 		t.Cleanup(func() {
 			os.Unsetenv("RMBASE_FILE_CFG")
 		})
-		
+
 		cfg, err := loadConfiguration()
 		// goconfig may handle this gracefully or return error
 		if err != nil {
@@ -289,17 +289,17 @@ func TestLoadConfiguration_InvalidConfigFilePaths(t *testing.T) {
 			assert.NotNil(t, cfg, "Config should be usable even with missing file")
 		}
 	})
-	
+
 	t.Run("InvalidPath_DirectoryInsteadOfFile", func(t *testing.T) {
 		clearTestEnvVars(t)
-		
+
 		// Create a directory and try to use it as config file
 		tmpDir := t.TempDir()
 		os.Setenv("RMBASE_FILE_CFG", tmpDir)
 		t.Cleanup(func() {
 			os.Unsetenv("RMBASE_FILE_CFG")
 		})
-		
+
 		cfg, err := loadConfiguration()
 		// Should handle directory as config path
 		if err != nil {
@@ -309,16 +309,16 @@ func TestLoadConfiguration_InvalidConfigFilePaths(t *testing.T) {
 			t.Log("goconfig handles directory as config path gracefully")
 		}
 	})
-	
+
 	t.Run("InvalidPath_EmptyString", func(t *testing.T) {
 		clearTestEnvVars(t)
-		
+
 		// Set empty config path
 		os.Setenv("RMBASE_FILE_CFG", "")
 		t.Cleanup(func() {
 			os.Unsetenv("RMBASE_FILE_CFG")
 		})
-		
+
 		cfg, err := loadConfiguration()
 		// Should handle empty path gracefully
 		if err != nil {
@@ -327,16 +327,16 @@ func TestLoadConfiguration_InvalidConfigFilePaths(t *testing.T) {
 			assert.NotNil(t, cfg, "Config should be created with empty path")
 		}
 	})
-	
+
 	t.Run("InvalidPath_SpecialCharacters", func(t *testing.T) {
 		clearTestEnvVars(t)
-		
+
 		// Set path with special characters
 		os.Setenv("RMBASE_FILE_CFG", "/tmp/config\x00invalid.toml")
 		t.Cleanup(func() {
 			os.Unsetenv("RMBASE_FILE_CFG")
 		})
-		
+
 		cfg, err := loadConfiguration()
 		// Should handle special characters in path
 		if err != nil {
@@ -353,7 +353,7 @@ func TestLoadConfiguration_InvalidConfigFilePaths(t *testing.T) {
 func TestLoadConfiguration_MissingConfigFiles(t *testing.T) {
 	t.Run("MissingFile_NoEnvironmentVariable", func(t *testing.T) {
 		clearTestEnvVars(t)
-		
+
 		// Don't set RMBASE_FILE_CFG at all
 		cfg, err := loadConfiguration()
 		// Should use default config or handle gracefully
@@ -363,16 +363,16 @@ func TestLoadConfiguration_MissingConfigFiles(t *testing.T) {
 			assert.NotNil(t, cfg, "Config should be created with defaults")
 		}
 	})
-	
+
 	t.Run("MissingFile_ExplicitNonExistentPath", func(t *testing.T) {
 		clearTestEnvVars(t)
-		
+
 		// Set explicit non-existent path
 		os.Setenv("RMBASE_FILE_CFG", "/tmp/nonexistent-config-file-12345.toml")
 		t.Cleanup(func() {
 			os.Unsetenv("RMBASE_FILE_CFG")
 		})
-		
+
 		cfg, err := loadConfiguration()
 		// Should handle missing file
 		if err != nil {
@@ -382,24 +382,24 @@ func TestLoadConfiguration_MissingConfigFiles(t *testing.T) {
 			assert.NotNil(t, cfg, "Config should be usable")
 		}
 	})
-	
+
 	t.Run("MissingFile_DeletedAfterCreation", func(t *testing.T) {
 		clearTestEnvVars(t)
-		
+
 		// Create a config file then delete it
 		configContent := getValidConfigContent()
 		configPath := createTempConfigFile(t, configContent)
-		
+
 		// Delete the file
 		err := os.Remove(configPath)
 		require.NoError(t, err, "Should delete temp config file")
-		
+
 		// Try to load configuration
 		os.Setenv("RMBASE_FILE_CFG", configPath)
 		t.Cleanup(func() {
 			os.Unsetenv("RMBASE_FILE_CFG")
 		})
-		
+
 		cfg, err := loadConfiguration()
 		// Should handle deleted file
 		if err != nil {
@@ -416,7 +416,7 @@ func TestLoadConfiguration_MissingConfigFiles(t *testing.T) {
 func TestLoadConfiguration_EnvironmentVariablePrecedence(t *testing.T) {
 	t.Run("EnvironmentOverride_ServerPort", func(t *testing.T) {
 		clearTestEnvVars(t)
-		
+
 		// Create config with port 8080
 		configContent := `
 [server]
@@ -424,26 +424,26 @@ port = 8080
 `
 		configPath := createTempConfigFile(t, configContent)
 		setupTestConfig(t, configPath)
-		
+
 		// Override with environment variable
 		os.Setenv("SERVER_PORT", "9999")
 		t.Cleanup(func() {
 			os.Unsetenv("SERVER_PORT")
 		})
-		
+
 		cfg, err := loadConfiguration()
 		require.NoError(t, err, "Should load configuration")
 		require.NotNil(t, cfg, "Config should not be nil")
-		
+
 		// Verify environment variable takes precedence
 		port, _ := cfg.ConfigIntWithDefault("server.port", 8080)
 		t.Logf("Port from config: %d", port)
 		// Note: goconfig behavior depends on implementation
 	})
-	
+
 	t.Run("EnvironmentOverride_LogLevel", func(t *testing.T) {
 		clearTestEnvVars(t)
-		
+
 		// Create config with log level "info"
 		configContent := `
 [log]
@@ -451,25 +451,25 @@ level = "info"
 `
 		configPath := createTempConfigFile(t, configContent)
 		setupTestConfig(t, configPath)
-		
+
 		// Override with environment variable
 		os.Setenv("LOG_LEVEL", "debug")
 		t.Cleanup(func() {
 			os.Unsetenv("LOG_LEVEL")
 		})
-		
+
 		cfg, err := loadConfiguration()
 		require.NoError(t, err, "Should load configuration")
 		require.NotNil(t, cfg, "Config should not be nil")
-		
+
 		// Verify environment variable takes precedence
 		logLevel, _ := cfg.ConfigStringWithDefault("log.level", "info")
 		t.Logf("Log level from config: %s", logLevel)
 	})
-	
+
 	t.Run("EnvironmentOverride_MultipleValues", func(t *testing.T) {
 		clearTestEnvVars(t)
-		
+
 		// Create config with multiple values
 		configContent := `
 [server]
@@ -481,7 +481,7 @@ dir = "/tmp/logs"
 `
 		configPath := createTempConfigFile(t, configContent)
 		setupTestConfig(t, configPath)
-		
+
 		// Override multiple values with environment variables
 		os.Setenv("SERVER_PORT", "7777")
 		os.Setenv("LOG_LEVEL", "warn")
@@ -491,18 +491,18 @@ dir = "/tmp/logs"
 			os.Unsetenv("LOG_LEVEL")
 			os.Unsetenv("LOG_DIR")
 		})
-		
+
 		cfg, err := loadConfiguration()
 		require.NoError(t, err, "Should load configuration")
 		require.NotNil(t, cfg, "Config should not be nil")
-		
+
 		// Verify all environment variables are accessible
 		t.Log("Multiple environment overrides loaded successfully")
 	})
-	
+
 	t.Run("EnvironmentOverride_NoConfigFile", func(t *testing.T) {
 		clearTestEnvVars(t)
-		
+
 		// Don't set config file, only environment variables
 		os.Setenv("SERVER_PORT", "8888")
 		os.Setenv("LOG_LEVEL", "error")
@@ -510,7 +510,7 @@ dir = "/tmp/logs"
 			os.Unsetenv("SERVER_PORT")
 			os.Unsetenv("LOG_LEVEL")
 		})
-		
+
 		cfg, err := loadConfiguration()
 		// Should work with only environment variables
 		if err != nil {
@@ -526,7 +526,7 @@ dir = "/tmp/logs"
 func TestLoadConfiguration_EmptyConfigurationValues(t *testing.T) {
 	t.Run("EmptyValue_ServerPort", func(t *testing.T) {
 		clearTestEnvVars(t)
-		
+
 		// Create config with empty port value
 		configContent := `
 [server]
@@ -534,7 +534,7 @@ port = ""
 `
 		configPath := createTempConfigFile(t, configContent)
 		setupTestConfig(t, configPath)
-		
+
 		cfg, err := loadConfiguration()
 		// Should handle empty port value
 		if err != nil {
@@ -546,10 +546,10 @@ port = ""
 			t.Logf("Port with empty value: %d", port)
 		}
 	})
-	
+
 	t.Run("EmptyValue_LogLevel", func(t *testing.T) {
 		clearTestEnvVars(t)
-		
+
 		// Create config with empty log level
 		configContent := `
 [log]
@@ -557,7 +557,7 @@ level = ""
 `
 		configPath := createTempConfigFile(t, configContent)
 		setupTestConfig(t, configPath)
-		
+
 		cfg, err := loadConfiguration()
 		// Should handle empty log level
 		if err != nil {
@@ -568,10 +568,10 @@ level = ""
 			t.Logf("Log level with empty value: %s", logLevel)
 		}
 	})
-	
+
 	t.Run("EmptyValue_LogDir", func(t *testing.T) {
 		clearTestEnvVars(t)
-		
+
 		// Create config with empty log directory
 		configContent := `
 [log]
@@ -579,7 +579,7 @@ dir = ""
 `
 		configPath := createTempConfigFile(t, configContent)
 		setupTestConfig(t, configPath)
-		
+
 		cfg, err := loadConfiguration()
 		// Should handle empty log directory
 		if err != nil {
@@ -590,10 +590,10 @@ dir = ""
 			t.Logf("Log dir with empty value: %s", logDir)
 		}
 	})
-	
+
 	t.Run("EmptyValue_AllFields", func(t *testing.T) {
 		clearTestEnvVars(t)
-		
+
 		// Create config with all empty values
 		configContent := `
 [server]
@@ -605,7 +605,7 @@ dir = ""
 `
 		configPath := createTempConfigFile(t, configContent)
 		setupTestConfig(t, configPath)
-		
+
 		cfg, err := loadConfiguration()
 		// Should handle all empty values
 		if err != nil {
@@ -615,10 +615,10 @@ dir = ""
 			t.Log("Config with all empty values loaded successfully")
 		}
 	})
-	
+
 	t.Run("EmptyValue_EnvironmentVariable", func(t *testing.T) {
 		clearTestEnvVars(t)
-		
+
 		// Set empty environment variable
 		os.Setenv("SERVER_PORT", "")
 		os.Setenv("LOG_LEVEL", "")
@@ -626,7 +626,7 @@ dir = ""
 			os.Unsetenv("SERVER_PORT")
 			os.Unsetenv("LOG_LEVEL")
 		})
-		
+
 		cfg, err := loadConfiguration()
 		// Should handle empty environment variables
 		if err != nil {
@@ -643,7 +643,7 @@ dir = ""
 func TestLoadConfiguration_MalformedConfigurationValues(t *testing.T) {
 	t.Run("MalformedTOML_UnclosedSection", func(t *testing.T) {
 		clearTestEnvVars(t)
-		
+
 		// Create config with unclosed section
 		configContent := `
 [server
@@ -651,7 +651,7 @@ port = 8080
 `
 		configPath := createTempConfigFile(t, configContent)
 		setupTestConfig(t, configPath)
-		
+
 		cfg, err := loadConfiguration()
 		// Should return error for malformed TOML
 		if err != nil {
@@ -662,10 +662,10 @@ port = 8080
 			t.Log("goconfig handles unclosed section gracefully")
 		}
 	})
-	
+
 	t.Run("MalformedTOML_InvalidSyntax", func(t *testing.T) {
 		clearTestEnvVars(t)
-		
+
 		// Create config with invalid syntax
 		configContent := `
 [server]
@@ -674,7 +674,7 @@ level =
 `
 		configPath := createTempConfigFile(t, configContent)
 		setupTestConfig(t, configPath)
-		
+
 		cfg, err := loadConfiguration()
 		// Should handle invalid syntax
 		if err != nil {
@@ -685,10 +685,10 @@ level =
 			t.Log("goconfig handles invalid syntax gracefully")
 		}
 	})
-	
+
 	t.Run("MalformedTOML_MissingValue", func(t *testing.T) {
 		clearTestEnvVars(t)
-		
+
 		// Create config with missing value
 		configContent := `
 [server]
@@ -699,7 +699,7 @@ level = "info"
 `
 		configPath := createTempConfigFile(t, configContent)
 		setupTestConfig(t, configPath)
-		
+
 		cfg, err := loadConfiguration()
 		// Should handle missing value
 		if err != nil {
@@ -709,10 +709,10 @@ level = "info"
 			t.Log("goconfig handles missing value gracefully")
 		}
 	})
-	
+
 	t.Run("MalformedTOML_WrongType", func(t *testing.T) {
 		clearTestEnvVars(t)
-		
+
 		// Create config with wrong type (string instead of int)
 		configContent := `
 [server]
@@ -720,7 +720,7 @@ port = "eight thousand eighty"
 `
 		configPath := createTempConfigFile(t, configContent)
 		setupTestConfig(t, configPath)
-		
+
 		cfg, err := loadConfiguration()
 		// Should handle wrong type
 		if err != nil {
@@ -736,10 +736,10 @@ port = "eight thousand eighty"
 			}
 		}
 	})
-	
+
 	t.Run("MalformedTOML_DuplicateKeys", func(t *testing.T) {
 		clearTestEnvVars(t)
-		
+
 		// Create config with duplicate keys
 		configContent := `
 [server]
@@ -748,7 +748,7 @@ port = 9090
 `
 		configPath := createTempConfigFile(t, configContent)
 		setupTestConfig(t, configPath)
-		
+
 		cfg, err := loadConfiguration()
 		// Should handle duplicate keys
 		if err != nil {
@@ -758,10 +758,10 @@ port = 9090
 			t.Log("goconfig handles duplicate keys (uses last value)")
 		}
 	})
-	
+
 	t.Run("MalformedTOML_InvalidCharacters", func(t *testing.T) {
 		clearTestEnvVars(t)
-		
+
 		// Create config with invalid characters
 		configContent := `
 [server]
@@ -770,7 +770,7 @@ invalid\x00character = "test"
 `
 		configPath := createTempConfigFile(t, configContent)
 		setupTestConfig(t, configPath)
-		
+
 		cfg, err := loadConfiguration()
 		// Should handle invalid characters
 		if err != nil {
@@ -780,15 +780,15 @@ invalid\x00character = "test"
 			t.Log("goconfig handles invalid characters")
 		}
 	})
-	
+
 	t.Run("MalformedTOML_EmptyFile", func(t *testing.T) {
 		clearTestEnvVars(t)
-		
+
 		// Create empty config file
 		configContent := ""
 		configPath := createTempConfigFile(t, configContent)
 		setupTestConfig(t, configPath)
-		
+
 		cfg, err := loadConfiguration()
 		// Should handle empty file
 		if err != nil {
@@ -798,10 +798,10 @@ invalid\x00character = "test"
 			t.Log("Empty config file loaded successfully")
 		}
 	})
-	
+
 	t.Run("MalformedTOML_OnlyComments", func(t *testing.T) {
 		clearTestEnvVars(t)
-		
+
 		// Create config with only comments
 		configContent := `
 # This is a comment
@@ -811,7 +811,7 @@ invalid\x00character = "test"
 `
 		configPath := createTempConfigFile(t, configContent)
 		setupTestConfig(t, configPath)
-		
+
 		cfg, err := loadConfiguration()
 		// Should handle file with only comments
 		if err != nil {
@@ -829,25 +829,25 @@ func TestLoggerInitializationCoverage(t *testing.T) {
 	t.Run("InitializeLoggerWithValidConfig", func(t *testing.T) {
 		cfg, err := setupTestLogger(t)
 		require.NoError(t, err, "Should set up test logger")
-		
+
 		logger, err := initializeLogger(cfg)
 		require.NoError(t, err, "Should initialize logger successfully")
 		require.NotNil(t, logger, "Logger should not be nil")
 		defer logger.Close()
 	})
-	
+
 	t.Run("InitializeLoggerWithCustomLogDir", func(t *testing.T) {
 		clearTestEnvVars(t)
-		
+
 		customLogDir := filepath.Join(t.TempDir(), "custom-logs")
 		os.Setenv("LOG_DIR", customLogDir)
 		t.Cleanup(func() {
 			os.Unsetenv("LOG_DIR")
 		})
-		
+
 		cfg, err := setupTestLogger(t)
 		require.NoError(t, err)
-		
+
 		logger, err := initializeLogger(cfg)
 		if err != nil {
 			t.Logf("Logger initialization failed with custom log dir: %v", err)
@@ -856,18 +856,18 @@ func TestLoggerInitializationCoverage(t *testing.T) {
 			defer logger.Close()
 		}
 	})
-	
+
 	t.Run("InitializeLoggerWithEmptyLogDir", func(t *testing.T) {
 		clearTestEnvVars(t)
-		
+
 		os.Setenv("LOG_DIR", "")
 		t.Cleanup(func() {
 			os.Unsetenv("LOG_DIR")
 		})
-		
+
 		cfg, err := setupTestLogger(t)
 		require.NoError(t, err)
-		
+
 		logger, err := initializeLogger(cfg)
 		// Should fall back to default log directory
 		if err != nil {
@@ -884,13 +884,13 @@ func TestLoggerInitializationCoverage(t *testing.T) {
 func TestInitializeLogger_FileAsLogDirectory(t *testing.T) {
 	t.Run("FileAsLogDirectory", func(t *testing.T) {
 		clearTestEnvVars(t)
-		
+
 		// Create a file instead of a directory
 		tmpDir := t.TempDir()
 		filePath := filepath.Join(tmpDir, "logfile.txt")
 		err := os.WriteFile(filePath, []byte("test"), 0644)
 		require.NoError(t, err, "Should create test file")
-		
+
 		// Create config with file path as log directory
 		configContent := `
 [log]
@@ -900,10 +900,10 @@ standardOutput = true
 `
 		configPath := createTempConfigFile(t, configContent)
 		setupTestConfig(t, configPath)
-		
+
 		cfg, err := loadConfiguration()
 		require.NoError(t, err, "Should load configuration")
-		
+
 		// Try to initialize logger with file as directory
 		logger, err := initializeLogger(cfg)
 		if err != nil {
@@ -918,19 +918,19 @@ standardOutput = true
 			t.Log("Logger handles file as directory gracefully")
 		}
 	})
-	
+
 	t.Run("FileAsLogDirectory_NestedPath", func(t *testing.T) {
 		clearTestEnvVars(t)
-		
+
 		// Create a file in a nested path
 		tmpDir := t.TempDir()
 		filePath := filepath.Join(tmpDir, "parent.txt")
 		err := os.WriteFile(filePath, []byte("test"), 0644)
 		require.NoError(t, err)
-		
+
 		// Try to use a path under the file
 		logDir := filepath.Join(filePath, "logs")
-		
+
 		configContent := `
 [log]
 dir = "` + logDir + `"
@@ -939,10 +939,10 @@ standardOutput = true
 `
 		configPath := createTempConfigFile(t, configContent)
 		setupTestConfig(t, configPath)
-		
+
 		cfg, err := loadConfiguration()
 		require.NoError(t, err)
-		
+
 		logger, err := initializeLogger(cfg)
 		if err != nil {
 			assert.Error(t, err, "Should return error for nested path under file")
@@ -962,21 +962,21 @@ func TestInitializeLogger_PermissionDenied(t *testing.T) {
 	if os.Getenv("GOOS") == "windows" {
 		t.Skip("Skipping permission tests on Windows")
 	}
-	
+
 	t.Run("PermissionDenied_ReadOnlyDirectory", func(t *testing.T) {
 		clearTestEnvVars(t)
-		
+
 		// Create a read-only directory
 		tmpDir := t.TempDir()
 		readOnlyDir := filepath.Join(tmpDir, "readonly")
 		err := os.Mkdir(readOnlyDir, 0444) // Read-only permissions
 		require.NoError(t, err)
-		
+
 		// Ensure cleanup can remove the directory
 		t.Cleanup(func() {
 			os.Chmod(readOnlyDir, 0755)
 		})
-		
+
 		configContent := `
 [log]
 dir = "` + readOnlyDir + `"
@@ -985,10 +985,10 @@ standardOutput = true
 `
 		configPath := createTempConfigFile(t, configContent)
 		setupTestConfig(t, configPath)
-		
+
 		cfg, err := loadConfiguration()
 		require.NoError(t, err)
-		
+
 		logger, err := initializeLogger(cfg)
 		if err != nil {
 			// Expected: should return error for read-only directory
@@ -1001,20 +1001,20 @@ standardOutput = true
 			t.Log("Logger handles read-only directory gracefully")
 		}
 	})
-	
+
 	t.Run("PermissionDenied_NoWritePermission", func(t *testing.T) {
 		clearTestEnvVars(t)
-		
+
 		// Create a directory with no write permission
 		tmpDir := t.TempDir()
 		noWriteDir := filepath.Join(tmpDir, "nowrite")
 		err := os.Mkdir(noWriteDir, 0555) // Read and execute only
 		require.NoError(t, err)
-		
+
 		t.Cleanup(func() {
 			os.Chmod(noWriteDir, 0755)
 		})
-		
+
 		configContent := `
 [log]
 dir = "` + noWriteDir + `"
@@ -1023,10 +1023,10 @@ standardOutput = true
 `
 		configPath := createTempConfigFile(t, configContent)
 		setupTestConfig(t, configPath)
-		
+
 		cfg, err := loadConfiguration()
 		require.NoError(t, err)
-		
+
 		logger, err := initializeLogger(cfg)
 		if err != nil {
 			assert.Error(t, err, "Should return error for no write permission")
@@ -1037,23 +1037,23 @@ standardOutput = true
 			t.Log("Logger handles no write permission gracefully")
 		}
 	})
-	
+
 	t.Run("PermissionDenied_ParentDirectoryNoPermission", func(t *testing.T) {
 		clearTestEnvVars(t)
-		
+
 		// Create a parent directory with no permissions
 		tmpDir := t.TempDir()
 		noPermDir := filepath.Join(tmpDir, "noperm")
 		err := os.Mkdir(noPermDir, 0000) // No permissions
 		require.NoError(t, err)
-		
+
 		t.Cleanup(func() {
 			os.Chmod(noPermDir, 0755)
 		})
-		
+
 		// Try to create log directory inside no-permission directory
 		logDir := filepath.Join(noPermDir, "logs")
-		
+
 		configContent := `
 [log]
 dir = "` + logDir + `"
@@ -1062,10 +1062,10 @@ standardOutput = true
 `
 		configPath := createTempConfigFile(t, configContent)
 		setupTestConfig(t, configPath)
-		
+
 		cfg, err := loadConfiguration()
 		require.NoError(t, err)
-		
+
 		logger, err := initializeLogger(cfg)
 		if err != nil {
 			assert.Error(t, err, "Should return error when parent directory has no permission")
@@ -1083,7 +1083,7 @@ standardOutput = true
 func TestInitializeLogger_EmptyLogConfigurationValues(t *testing.T) {
 	t.Run("EmptyLogDir", func(t *testing.T) {
 		clearTestEnvVars(t)
-		
+
 		configContent := `
 [log]
 dir = ""
@@ -1092,10 +1092,10 @@ standardOutput = true
 `
 		configPath := createTempConfigFile(t, configContent)
 		setupTestConfig(t, configPath)
-		
+
 		cfg, err := loadConfiguration()
 		require.NoError(t, err)
-		
+
 		logger, err := initializeLogger(cfg)
 		// Should fall back to default log directory
 		if err != nil {
@@ -1106,10 +1106,10 @@ standardOutput = true
 			t.Log("Logger uses default directory when log dir is empty")
 		}
 	})
-	
+
 	t.Run("EmptyLogLevel", func(t *testing.T) {
 		clearTestEnvVars(t)
-		
+
 		tmpDir := t.TempDir()
 		configContent := `
 [log]
@@ -1119,10 +1119,10 @@ standardOutput = true
 `
 		configPath := createTempConfigFile(t, configContent)
 		setupTestConfig(t, configPath)
-		
+
 		cfg, err := loadConfiguration()
 		require.NoError(t, err)
-		
+
 		logger, err := initializeLogger(cfg)
 		// Should fall back to default log level
 		if err != nil {
@@ -1133,10 +1133,10 @@ standardOutput = true
 			t.Log("Logger uses default level when log level is empty")
 		}
 	})
-	
+
 	t.Run("EmptyStandardOutput", func(t *testing.T) {
 		clearTestEnvVars(t)
-		
+
 		tmpDir := t.TempDir()
 		configContent := `
 [log]
@@ -1145,10 +1145,10 @@ level = "info"
 `
 		configPath := createTempConfigFile(t, configContent)
 		setupTestConfig(t, configPath)
-		
+
 		cfg, err := loadConfiguration()
 		require.NoError(t, err)
-		
+
 		logger, err := initializeLogger(cfg)
 		// Should use default value for standardOutput
 		if err != nil {
@@ -1159,10 +1159,10 @@ level = "info"
 			t.Log("Logger uses default standardOutput when not specified")
 		}
 	})
-	
+
 	t.Run("AllEmptyValues", func(t *testing.T) {
 		clearTestEnvVars(t)
-		
+
 		configContent := `
 [log]
 dir = ""
@@ -1170,10 +1170,10 @@ level = ""
 `
 		configPath := createTempConfigFile(t, configContent)
 		setupTestConfig(t, configPath)
-		
+
 		cfg, err := loadConfiguration()
 		require.NoError(t, err)
-		
+
 		logger, err := initializeLogger(cfg)
 		// Should use all default values
 		if err != nil {
@@ -1184,20 +1184,20 @@ level = ""
 			t.Log("Logger uses all defaults when all values are empty")
 		}
 	})
-	
+
 	t.Run("NoLogSection", func(t *testing.T) {
 		clearTestEnvVars(t)
-		
+
 		configContent := `
 [server]
 port = 8080
 `
 		configPath := createTempConfigFile(t, configContent)
 		setupTestConfig(t, configPath)
-		
+
 		cfg, err := loadConfiguration()
 		require.NoError(t, err)
-		
+
 		logger, err := initializeLogger(cfg)
 		// Should use all default values when log section is missing
 		if err != nil {
@@ -1215,7 +1215,7 @@ port = 8080
 func TestInitializeLogger_InvalidLogLevelValues(t *testing.T) {
 	t.Run("InvalidLogLevel_Uppercase", func(t *testing.T) {
 		clearTestEnvVars(t)
-		
+
 		tmpDir := t.TempDir()
 		configContent := `
 [log]
@@ -1225,10 +1225,10 @@ standardOutput = true
 `
 		configPath := createTempConfigFile(t, configContent)
 		setupTestConfig(t, configPath)
-		
+
 		cfg, err := loadConfiguration()
 		require.NoError(t, err)
-		
+
 		logger, err := initializeLogger(cfg)
 		// Logger might accept uppercase or normalize it
 		if err != nil {
@@ -1239,10 +1239,10 @@ standardOutput = true
 			t.Log("Logger handles uppercase log level")
 		}
 	})
-	
+
 	t.Run("InvalidLogLevel_Unknown", func(t *testing.T) {
 		clearTestEnvVars(t)
-		
+
 		tmpDir := t.TempDir()
 		configContent := `
 [log]
@@ -1252,10 +1252,10 @@ standardOutput = true
 `
 		configPath := createTempConfigFile(t, configContent)
 		setupTestConfig(t, configPath)
-		
+
 		cfg, err := loadConfiguration()
 		require.NoError(t, err)
-		
+
 		logger, err := initializeLogger(cfg)
 		// Should handle invalid log level
 		if err != nil {
@@ -1267,10 +1267,10 @@ standardOutput = true
 			t.Log("Logger handles invalid log level by using default")
 		}
 	})
-	
+
 	t.Run("InvalidLogLevel_Numeric", func(t *testing.T) {
 		clearTestEnvVars(t)
-		
+
 		tmpDir := t.TempDir()
 		configContent := `
 [log]
@@ -1280,10 +1280,10 @@ standardOutput = true
 `
 		configPath := createTempConfigFile(t, configContent)
 		setupTestConfig(t, configPath)
-		
+
 		cfg, err := loadConfiguration()
 		require.NoError(t, err)
-		
+
 		logger, err := initializeLogger(cfg)
 		// Should handle numeric log level
 		if err != nil {
@@ -1294,10 +1294,10 @@ standardOutput = true
 			t.Log("Logger handles numeric log level")
 		}
 	})
-	
+
 	t.Run("InvalidLogLevel_SpecialCharacters", func(t *testing.T) {
 		clearTestEnvVars(t)
-		
+
 		tmpDir := t.TempDir()
 		configContent := `
 [log]
@@ -1307,10 +1307,10 @@ standardOutput = true
 `
 		configPath := createTempConfigFile(t, configContent)
 		setupTestConfig(t, configPath)
-		
+
 		cfg, err := loadConfiguration()
 		require.NoError(t, err)
-		
+
 		logger, err := initializeLogger(cfg)
 		// Should handle log level with special characters
 		if err != nil {
@@ -1321,17 +1321,17 @@ standardOutput = true
 			t.Log("Logger handles special characters in log level")
 		}
 	})
-	
+
 	t.Run("InvalidLogLevel_VeryLongString", func(t *testing.T) {
 		clearTestEnvVars(t)
-		
+
 		tmpDir := t.TempDir()
 		// Create a very long string for log level
 		longLevel := ""
 		for i := 0; i < 1000; i++ {
 			longLevel += "a"
 		}
-		
+
 		configContent := `
 [log]
 dir = "` + tmpDir + `"
@@ -1340,10 +1340,10 @@ standardOutput = true
 `
 		configPath := createTempConfigFile(t, configContent)
 		setupTestConfig(t, configPath)
-		
+
 		cfg, err := loadConfiguration()
 		require.NoError(t, err)
-		
+
 		logger, err := initializeLogger(cfg)
 		// Should handle very long log level string
 		if err != nil {
@@ -1354,10 +1354,10 @@ standardOutput = true
 			t.Log("Logger handles very long log level string")
 		}
 	})
-	
+
 	t.Run("InvalidLogLevel_MixedCase", func(t *testing.T) {
 		clearTestEnvVars(t)
-		
+
 		tmpDir := t.TempDir()
 		configContent := `
 [log]
@@ -1367,10 +1367,10 @@ standardOutput = true
 `
 		configPath := createTempConfigFile(t, configContent)
 		setupTestConfig(t, configPath)
-		
+
 		cfg, err := loadConfiguration()
 		require.NoError(t, err)
-		
+
 		logger, err := initializeLogger(cfg)
 		// Should handle mixed case log level
 		if err != nil {
@@ -1381,10 +1381,10 @@ standardOutput = true
 			t.Log("Logger handles mixed case log level")
 		}
 	})
-	
+
 	t.Run("InvalidLogLevel_WithWhitespace", func(t *testing.T) {
 		clearTestEnvVars(t)
-		
+
 		tmpDir := t.TempDir()
 		configContent := `
 [log]
@@ -1394,10 +1394,10 @@ standardOutput = true
 `
 		configPath := createTempConfigFile(t, configContent)
 		setupTestConfig(t, configPath)
-		
+
 		cfg, err := loadConfiguration()
 		require.NoError(t, err)
-		
+
 		logger, err := initializeLogger(cfg)
 		// Should handle log level with whitespace
 		if err != nil {
@@ -1416,30 +1416,30 @@ func TestServerPortCoverage(t *testing.T) {
 	t.Run("GetServerPortFromConfig", func(t *testing.T) {
 		cfg, err := setupTestLogger(t)
 		require.NoError(t, err)
-		
+
 		logger, err := initializeLogger(cfg)
 		require.NoError(t, err)
 		defer logger.Close()
-		
+
 		port := getServerPort(cfg, logger)
 		assertValidPort(t, port)
 	})
-	
+
 	t.Run("GetServerPortWithEnvironmentOverride", func(t *testing.T) {
 		clearTestEnvVars(t)
-		
+
 		os.Setenv("SERVER_PORT", "9999")
 		t.Cleanup(func() {
 			os.Unsetenv("SERVER_PORT")
 		})
-		
+
 		cfg, err := setupTestLogger(t)
 		require.NoError(t, err)
-		
+
 		logger, err := initializeLogger(cfg)
 		require.NoError(t, err)
 		defer logger.Close()
-		
+
 		port := getServerPort(cfg, logger)
 		assertValidPort(t, port)
 	})
@@ -1450,7 +1450,7 @@ func TestServerPortCoverage(t *testing.T) {
 func TestRunWithSignalChannel_ConfigurationError(t *testing.T) {
 	t.Run("ConfigError_InvalidTOML", func(t *testing.T) {
 		clearTestEnvVars(t)
-		
+
 		// Create invalid TOML config
 		configContent := `
 [server
@@ -1458,10 +1458,10 @@ port = "invalid"
 `
 		configPath := createTempConfigFile(t, configContent)
 		setupTestConfig(t, configPath)
-		
+
 		// Create signal channel
 		sigChan := make(chan os.Signal, 1)
-		
+
 		// Run with timeout to avoid hanging
 		err := runWithSignalChannelAndTimeout(t, sigChan, 100*time.Millisecond)
 		if err != nil {
@@ -1471,19 +1471,19 @@ port = "invalid"
 			t.Log("Configuration loaded successfully (goconfig may handle invalid TOML)")
 		}
 	})
-	
+
 	t.Run("ConfigError_MissingRequiredValues", func(t *testing.T) {
 		clearTestEnvVars(t)
-		
+
 		// Create config with missing required values
 		configContent := `
 # Empty config
 `
 		configPath := createTempConfigFile(t, configContent)
 		setupTestConfig(t, configPath)
-		
+
 		sigChan := make(chan os.Signal, 1)
-		
+
 		err := runWithSignalChannelAndTimeout(t, sigChan, 100*time.Millisecond)
 		if err != nil {
 			t.Logf("Missing values error propagated: %v", err)
@@ -1491,18 +1491,18 @@ port = "invalid"
 			t.Log("Empty config handled successfully (uses defaults)")
 		}
 	})
-	
+
 	t.Run("ConfigError_NonExistentFile", func(t *testing.T) {
 		clearTestEnvVars(t)
-		
+
 		// Set non-existent config file
 		os.Setenv("RMBASE_FILE_CFG", "/nonexistent/config.toml")
 		t.Cleanup(func() {
 			os.Unsetenv("RMBASE_FILE_CFG")
 		})
-		
+
 		sigChan := make(chan os.Signal, 1)
-		
+
 		err := runWithSignalChannelAndTimeout(t, sigChan, 100*time.Millisecond)
 		if err != nil {
 			t.Logf("Non-existent file error propagated: %v", err)
@@ -1520,16 +1520,16 @@ func TestRunWithSignalChannel_LoggerError(t *testing.T) {
 	if os.Getenv("GOOS") == "windows" {
 		t.Skip("Skipping permission tests on Windows")
 	}
-	
+
 	t.Run("LoggerError_InvalidLogDirectory", func(t *testing.T) {
 		clearTestEnvVars(t)
-		
+
 		// Create a file instead of directory for log path
 		tmpDir := t.TempDir()
 		filePath := filepath.Join(tmpDir, "logfile.txt")
 		err := os.WriteFile(filePath, []byte("test"), 0644)
 		require.NoError(t, err)
-		
+
 		configContent := `
 [log]
 dir = "` + filePath + `"
@@ -1538,9 +1538,9 @@ standardOutput = true
 `
 		configPath := createTempConfigFile(t, configContent)
 		setupTestConfig(t, configPath)
-		
+
 		sigChan := make(chan os.Signal, 1)
-		
+
 		err = runWithSignalChannelAndTimeout(t, sigChan, 100*time.Millisecond)
 		if err != nil {
 			t.Logf("Logger error propagated: %v", err)
@@ -1549,20 +1549,20 @@ standardOutput = true
 			t.Log("Logger handles file as directory gracefully")
 		}
 	})
-	
+
 	t.Run("LoggerError_PermissionDenied", func(t *testing.T) {
 		clearTestEnvVars(t)
-		
+
 		// Create a read-only directory
 		tmpDir := t.TempDir()
 		readOnlyDir := filepath.Join(tmpDir, "readonly")
 		err := os.Mkdir(readOnlyDir, 0444)
 		require.NoError(t, err)
-		
+
 		t.Cleanup(func() {
 			os.Chmod(readOnlyDir, 0755)
 		})
-		
+
 		configContent := `
 [log]
 dir = "` + readOnlyDir + `"
@@ -1571,9 +1571,9 @@ standardOutput = true
 `
 		configPath := createTempConfigFile(t, configContent)
 		setupTestConfig(t, configPath)
-		
+
 		sigChan := make(chan os.Signal, 1)
-		
+
 		err = runWithSignalChannelAndTimeout(t, sigChan, 100*time.Millisecond)
 		if err != nil {
 			t.Logf("Permission denied error propagated: %v", err)
@@ -1582,10 +1582,10 @@ standardOutput = true
 			t.Log("Logger handles permission denied gracefully (uses stdout only)")
 		}
 	})
-	
+
 	t.Run("LoggerError_InvalidLogLevel", func(t *testing.T) {
 		clearTestEnvVars(t)
-		
+
 		tmpDir := t.TempDir()
 		configContent := `
 [log]
@@ -1595,9 +1595,9 @@ standardOutput = true
 `
 		configPath := createTempConfigFile(t, configContent)
 		setupTestConfig(t, configPath)
-		
+
 		sigChan := make(chan os.Signal, 1)
-		
+
 		err := runWithSignalChannelAndTimeout(t, sigChan, 100*time.Millisecond)
 		if err != nil {
 			t.Logf("Invalid log level error propagated: %v", err)
@@ -1612,7 +1612,7 @@ standardOutput = true
 func TestRunWithSignalChannel_ShutdownTimeout(t *testing.T) {
 	t.Run("ShutdownWithSIGTERM", func(t *testing.T) {
 		clearTestEnvVars(t)
-		
+
 		// Create valid config
 		tmpDir := t.TempDir()
 		configContent := `
@@ -1626,17 +1626,17 @@ standardOutput = true
 `
 		configPath := createTempConfigFile(t, configContent)
 		setupTestConfig(t, configPath)
-		
+
 		sigChan := make(chan os.Signal, 1)
-		
+
 		errChan := make(chan error, 1)
 		go func() {
 			errChan <- runWithSignalChannel(sigChan)
 		}()
-		
+
 		// Send SIGTERM signal
 		sigChan <- syscall.SIGTERM
-		
+
 		// Wait for shutdown
 		err := <-errChan
 		// May fail with config error or succeed
@@ -1646,10 +1646,10 @@ standardOutput = true
 			t.Log("Server shut down gracefully with SIGTERM")
 		}
 	})
-	
+
 	t.Run("ShutdownWithSIGINT", func(t *testing.T) {
 		clearTestEnvVars(t)
-		
+
 		// Create valid config
 		tmpDir := t.TempDir()
 		configContent := `
@@ -1663,17 +1663,17 @@ standardOutput = true
 `
 		configPath := createTempConfigFile(t, configContent)
 		setupTestConfig(t, configPath)
-		
+
 		sigChan := make(chan os.Signal, 1)
-		
+
 		errChan := make(chan error, 1)
 		go func() {
 			errChan <- runWithSignalChannel(sigChan)
 		}()
-		
+
 		// Send SIGINT signal
 		sigChan <- syscall.SIGINT
-		
+
 		// Wait for shutdown
 		err := <-errChan
 		// May fail with config error or succeed
@@ -1683,10 +1683,10 @@ standardOutput = true
 			t.Log("Server shut down gracefully with SIGINT")
 		}
 	})
-	
+
 	t.Run("ShutdownImmediately", func(t *testing.T) {
 		clearTestEnvVars(t)
-		
+
 		// Create valid config
 		tmpDir := t.TempDir()
 		configContent := `
@@ -1700,17 +1700,17 @@ standardOutput = true
 `
 		configPath := createTempConfigFile(t, configContent)
 		setupTestConfig(t, configPath)
-		
+
 		sigChan := make(chan os.Signal, 1)
-		
+
 		// Send signal immediately before starting
 		sigChan <- syscall.SIGTERM
-		
+
 		errChan := make(chan error, 1)
 		go func() {
 			errChan <- runWithSignalChannel(sigChan)
 		}()
-		
+
 		// Wait for shutdown
 		err := <-errChan
 		// May fail with config error or succeed
@@ -1720,10 +1720,10 @@ standardOutput = true
 			t.Log("Server shut down immediately")
 		}
 	})
-	
+
 	t.Run("ShutdownMultipleSignals", func(t *testing.T) {
 		clearTestEnvVars(t)
-		
+
 		// Create valid config
 		tmpDir := t.TempDir()
 		configContent := `
@@ -1737,18 +1737,18 @@ standardOutput = true
 `
 		configPath := createTempConfigFile(t, configContent)
 		setupTestConfig(t, configPath)
-		
+
 		sigChan := make(chan os.Signal, 2) // Buffer for 2 signals
-		
+
 		errChan := make(chan error, 1)
 		go func() {
 			errChan <- runWithSignalChannel(sigChan)
 		}()
-		
+
 		// Send multiple signals (only first should be processed)
 		sigChan <- syscall.SIGTERM
 		sigChan <- syscall.SIGINT
-		
+
 		// Wait for shutdown
 		err := <-errChan
 		// May fail with config error or succeed
@@ -1758,10 +1758,10 @@ standardOutput = true
 			t.Log("Server shut down with first signal")
 		}
 	})
-	
+
 	t.Run("ShutdownWithValidConfiguration", func(t *testing.T) {
 		clearTestEnvVars(t)
-		
+
 		// Create valid config with all fields
 		tmpDir := t.TempDir()
 		configContent := `
@@ -1775,17 +1775,17 @@ standardOutput = true
 `
 		configPath := createTempConfigFile(t, configContent)
 		setupTestConfig(t, configPath)
-		
+
 		sigChan := make(chan os.Signal, 1)
-		
+
 		errChan := make(chan error, 1)
 		go func() {
 			errChan <- runWithSignalChannel(sigChan)
 		}()
-		
+
 		// Send shutdown signal
 		sigChan <- syscall.SIGTERM
-		
+
 		// Wait for shutdown
 		err := <-errChan
 		// May fail with config error or succeed

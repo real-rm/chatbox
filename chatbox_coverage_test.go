@@ -35,7 +35,7 @@ func setupTestRouter() *gin.Engine {
 // setupTestConfig creates a test configuration accessor
 func setupTestConfig(t *testing.T) *goconfig.ConfigAccessor {
 	t.Helper()
-	
+
 	// Create a temporary config file
 	configContent := `
 [chatbox]
@@ -50,7 +50,7 @@ allowed_origins = "http://localhost:3000"
 cors_allowed_origins = "http://localhost:3000"
 path_prefix = "/chatbox"
 `
-	
+
 	tmpFile, err := os.CreateTemp("", "config-*.toml")
 	if err != nil {
 		t.Fatalf("Failed to create temp config file: %v", err)
@@ -58,35 +58,35 @@ path_prefix = "/chatbox"
 	t.Cleanup(func() {
 		os.Remove(tmpFile.Name())
 	})
-	
+
 	if _, err := tmpFile.WriteString(configContent); err != nil {
 		t.Fatalf("Failed to write config file: %v", err)
 	}
 	tmpFile.Close()
-	
+
 	// Set config file path
 	os.Setenv("RMBASE_FILE_CFG", tmpFile.Name())
 	t.Cleanup(func() {
 		os.Unsetenv("RMBASE_FILE_CFG")
 	})
-	
+
 	// Load config
 	if err := goconfig.LoadConfig(); err != nil {
 		t.Fatalf("Failed to load config: %v", err)
 	}
-	
+
 	config, err := goconfig.Default()
 	if err != nil {
 		t.Fatalf("Failed to get default config: %v", err)
 	}
-	
+
 	return config
 }
 
 // setupTestLogger creates a test logger
 func setupTestLogger(t *testing.T) *golog.Logger {
 	t.Helper()
-	
+
 	logger, err := golog.InitLog(golog.LogConfig{
 		Dir:            t.TempDir(),
 		Level:          "error",
@@ -95,31 +95,31 @@ func setupTestLogger(t *testing.T) *golog.Logger {
 	if err != nil {
 		t.Fatalf("Failed to create logger: %v", err)
 	}
-	
+
 	return logger
 }
 
 // setupTestMongo creates a test MongoDB connection
 func setupTestMongo(t *testing.T) *gomongo.Mongo {
 	t.Helper()
-	
+
 	// Load config first
 	if err := goconfig.LoadConfig(); err != nil {
 		t.Skipf("MongoDB not available: failed to load config: %v", err)
 	}
-	
+
 	config, err := goconfig.Default()
 	if err != nil {
 		t.Skipf("MongoDB not available: failed to get config: %v", err)
 	}
-	
+
 	logger := setupTestLogger(t)
-	
+
 	mongo, err := gomongo.InitMongoDB(logger, config)
 	if err != nil {
 		t.Skipf("MongoDB not available: %v", err)
 	}
-	
+
 	// Clean up test data
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -127,14 +127,14 @@ func setupTestMongo(t *testing.T) *gomongo.Mongo {
 		mongo.Coll("chat", "sessions").Drop(ctx)
 		mongo.Coll("chat", "file_stats").Drop(ctx)
 	})
-	
+
 	return mongo
 }
 
 // createTestJWT creates a test JWT token
 func createTestJWT(t *testing.T, secret string, userID string, roles []string) string {
 	t.Helper()
-	
+
 	claims := jwt.MapClaims{
 		"exp":     time.Now().Add(1 * time.Hour).Unix(),
 		"iat":     time.Now().Unix(),
@@ -142,13 +142,13 @@ func createTestJWT(t *testing.T, secret string, userID string, roles []string) s
 		"name":    "Test User",
 		"roles":   roles,
 	}
-	
+
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	tokenString, err := token.SignedString([]byte(secret))
 	if err != nil {
 		t.Fatalf("Failed to generate test JWT: %v", err)
 	}
-	
+
 	return tokenString
 }
 
@@ -161,26 +161,25 @@ func makeAuthRequest(method, path, token string) *http.Request {
 	return req
 }
 
-
 // TestRegister_RouteSetup tests that Register function sets up routes correctly
 func TestRegister_RouteSetup(t *testing.T) {
 	router := setupTestRouter()
 	config := setupTestConfig(t)
 	logger := setupTestLogger(t)
 	mongo := setupTestMongo(t)
-	
+
 	// Set JWT secret in environment
 	os.Setenv("JWT_SECRET", "test-secret-that-is-at-least-32-characters-long")
 	defer os.Unsetenv("JWT_SECRET")
-	
+
 	err := Register(router, config, logger, mongo)
 	if err != nil {
 		t.Fatalf("Register failed: %v", err)
 	}
-	
+
 	// Verify routes are registered by checking the routes list
 	routes := router.Routes()
-	
+
 	// Check for key endpoints
 	expectedRoutes := []string{
 		"/chatbox/ws",
@@ -192,12 +191,12 @@ func TestRegister_RouteSetup(t *testing.T) {
 		"/chatbox/readyz",
 		"/metrics",
 	}
-	
+
 	routeMap := make(map[string]bool)
 	for _, route := range routes {
 		routeMap[route.Path] = true
 	}
-	
+
 	for _, expected := range expectedRoutes {
 		if !routeMap[expected] {
 			t.Errorf("Expected route %s not found", expected)
@@ -211,10 +210,10 @@ func TestRegister_MissingJWTSecret(t *testing.T) {
 	config := setupTestConfig(t)
 	logger := setupTestLogger(t)
 	mongo := setupTestMongo(t)
-	
+
 	// Clear JWT secret from environment and config
 	os.Unsetenv("JWT_SECRET")
-	
+
 	// Create config without JWT secret
 	configContent := `
 [chatbox]
@@ -225,31 +224,31 @@ reconnect_timeout = "30s"
 		t.Fatalf("Failed to create temp config file: %v", err)
 	}
 	defer os.Remove(tmpFile.Name())
-	
+
 	if _, err := tmpFile.WriteString(configContent); err != nil {
 		t.Fatalf("Failed to write config file: %v", err)
 	}
 	tmpFile.Close()
-	
+
 	// Set config file path
 	os.Setenv("RMBASE_FILE_CFG", tmpFile.Name())
 	defer os.Unsetenv("RMBASE_FILE_CFG")
-	
+
 	// Load config
 	if err := goconfig.LoadConfig(); err != nil {
 		t.Fatalf("Failed to load config: %v", err)
 	}
-	
+
 	config, err = goconfig.Default()
 	if err != nil {
 		t.Fatalf("Failed to get default config: %v", err)
 	}
-	
+
 	err = Register(router, config, logger, mongo)
 	if err == nil {
 		t.Fatal("Expected error when JWT secret is missing, got nil")
 	}
-	
+
 	if !strings.Contains(err.Error(), "JWT secret") {
 		t.Errorf("Expected error about JWT secret, got: %v", err)
 	}
@@ -261,16 +260,16 @@ func TestRegister_WeakJWTSecret(t *testing.T) {
 	config := setupTestConfig(t)
 	logger := setupTestLogger(t)
 	mongo := setupTestMongo(t)
-	
+
 	// Set weak JWT secret
 	os.Setenv("JWT_SECRET", "password123")
 	defer os.Unsetenv("JWT_SECRET")
-	
+
 	err := Register(router, config, logger, mongo)
 	if err == nil {
 		t.Fatal("Expected error with weak JWT secret, got nil")
 	}
-	
+
 	if !strings.Contains(err.Error(), "weak") || !strings.Contains(err.Error(), "password") {
 		t.Errorf("Expected error about weak secret, got: %v", err)
 	}
@@ -282,16 +281,16 @@ func TestRegister_ShortJWTSecret(t *testing.T) {
 	config := setupTestConfig(t)
 	logger := setupTestLogger(t)
 	mongo := setupTestMongo(t)
-	
+
 	// Set short JWT secret
 	os.Setenv("JWT_SECRET", "short")
 	defer os.Unsetenv("JWT_SECRET")
-	
+
 	err := Register(router, config, logger, mongo)
 	if err == nil {
 		t.Fatal("Expected error with short JWT secret, got nil")
 	}
-	
+
 	if !strings.Contains(err.Error(), "at least") {
 		t.Errorf("Expected error about minimum length, got: %v", err)
 	}
@@ -303,20 +302,20 @@ func TestRegister_InvalidEncryptionKey(t *testing.T) {
 	config := setupTestConfig(t)
 	logger := setupTestLogger(t)
 	mongo := setupTestMongo(t)
-	
+
 	// Set valid JWT secret
 	os.Setenv("JWT_SECRET", "test-secret-that-is-at-least-32-characters-long")
 	defer os.Unsetenv("JWT_SECRET")
-	
+
 	// Set invalid encryption key (not 32 bytes)
 	os.Setenv("ENCRYPTION_KEY", "short-key")
 	defer os.Unsetenv("ENCRYPTION_KEY")
-	
+
 	err := Register(router, config, logger, mongo)
 	if err == nil {
 		t.Fatal("Expected error with invalid encryption key, got nil")
 	}
-	
+
 	if !strings.Contains(err.Error(), "32 bytes") {
 		t.Errorf("Expected error about 32 bytes, got: %v", err)
 	}
@@ -328,15 +327,15 @@ func TestRegister_ValidEncryptionKey(t *testing.T) {
 	config := setupTestConfig(t)
 	logger := setupTestLogger(t)
 	mongo := setupTestMongo(t)
-	
+
 	// Set valid JWT secret
 	os.Setenv("JWT_SECRET", "test-secret-that-is-at-least-32-characters-long")
 	defer os.Unsetenv("JWT_SECRET")
-	
+
 	// Set valid 32-byte encryption key
 	os.Setenv("ENCRYPTION_KEY", "12345678901234567890123456789012") // Exactly 32 bytes
 	defer os.Unsetenv("ENCRYPTION_KEY")
-	
+
 	err := Register(router, config, logger, mongo)
 	if err != nil {
 		t.Fatalf("Register failed with valid encryption key: %v", err)
@@ -348,15 +347,15 @@ func TestRegister_InvalidPathPrefix(t *testing.T) {
 	router := setupTestRouter()
 	logger := setupTestLogger(t)
 	mongo := setupTestMongo(t)
-	
+
 	// Set valid JWT secret
 	os.Setenv("JWT_SECRET", "test-secret-that-is-at-least-32-characters-long")
 	defer os.Unsetenv("JWT_SECRET")
-	
+
 	// Set invalid path prefix (doesn't start with /)
 	os.Setenv("CHATBOX_PATH_PREFIX", "chatbox")
 	defer os.Unsetenv("CHATBOX_PATH_PREFIX")
-	
+
 	// Create config with invalid path prefix
 	configContent := `
 [chatbox]
@@ -369,56 +368,55 @@ path_prefix = "chatbox"
 		t.Fatalf("Failed to create temp config file: %v", err)
 	}
 	defer os.Remove(tmpFile.Name())
-	
+
 	if _, err := tmpFile.WriteString(configContent); err != nil {
 		t.Fatalf("Failed to write config file: %v", err)
 	}
 	tmpFile.Close()
-	
+
 	// Set config file path
 	os.Setenv("RMBASE_FILE_CFG", tmpFile.Name())
 	defer os.Unsetenv("RMBASE_FILE_CFG")
-	
+
 	// Load config
 	if err := goconfig.LoadConfig(); err != nil {
 		t.Fatalf("Failed to load config: %v", err)
 	}
-	
+
 	config, err := goconfig.Default()
 	if err != nil {
 		t.Fatalf("Failed to get default config: %v", err)
 	}
-	
+
 	err = Register(router, config, logger, mongo)
 	if err == nil {
 		t.Fatal("Expected error with invalid path prefix, got nil")
 	}
-	
+
 	if !strings.Contains(err.Error(), "must start with") {
 		t.Errorf("Expected error about path prefix format, got: %v", err)
 	}
 }
-
 
 // TestAuthMiddleware_MissingToken tests authentication middleware with missing token
 func TestAuthMiddleware_MissingToken(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	logger := setupTestLogger(t)
-	
+
 	secret := "test-secret-that-is-at-least-32-characters-long"
 	validator := auth.NewJWTValidator(secret)
-	
+
 	// Add middleware to test endpoint
 	router.GET("/test", authMiddleware(validator, logger), func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"message": "success"})
 	})
-	
+
 	// Make request without token
 	req := httptest.NewRequest("GET", "/test", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
-	
+
 	if w.Code != http.StatusUnauthorized {
 		t.Errorf("Expected status 401, got %d", w.Code)
 	}
@@ -429,21 +427,21 @@ func TestAuthMiddleware_InvalidToken(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	logger := setupTestLogger(t)
-	
+
 	secret := "test-secret-that-is-at-least-32-characters-long"
 	validator := auth.NewJWTValidator(secret)
-	
+
 	// Add middleware to test endpoint
 	router.GET("/test", authMiddleware(validator, logger), func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"message": "success"})
 	})
-	
+
 	// Make request with invalid token
 	req := httptest.NewRequest("GET", "/test", nil)
 	req.Header.Set("Authorization", "Bearer invalid-token")
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
-	
+
 	if w.Code != http.StatusUnauthorized {
 		t.Errorf("Expected status 401, got %d", w.Code)
 	}
@@ -454,15 +452,15 @@ func TestAuthMiddleware_ExpiredToken_Coverage(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	logger := setupTestLogger(t)
-	
+
 	secret := "test-secret-that-is-at-least-32-characters-long"
 	validator := auth.NewJWTValidator(secret)
-	
+
 	// Add middleware to test endpoint
 	router.GET("/test", authMiddleware(validator, logger), func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"message": "success"})
 	})
-	
+
 	// Create expired token
 	claims := jwt.MapClaims{
 		"exp":     time.Now().Add(-1 * time.Hour).Unix(), // Expired 1 hour ago
@@ -476,13 +474,13 @@ func TestAuthMiddleware_ExpiredToken_Coverage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to generate expired token: %v", err)
 	}
-	
+
 	// Make request with expired token
 	req := httptest.NewRequest("GET", "/test", nil)
 	req.Header.Set("Authorization", "Bearer "+tokenString)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
-	
+
 	if w.Code != http.StatusUnauthorized {
 		t.Errorf("Expected status 401, got %d", w.Code)
 	}
@@ -493,24 +491,24 @@ func TestAuthMiddleware_ValidTokenNoAdminRole(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	logger := setupTestLogger(t)
-	
+
 	secret := "test-secret-that-is-at-least-32-characters-long"
 	validator := auth.NewJWTValidator(secret)
-	
+
 	// Add middleware to test endpoint
 	router.GET("/test", authMiddleware(validator, logger), func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"message": "success"})
 	})
-	
+
 	// Create token without admin role
 	token := createTestJWT(t, secret, "test-user", []string{"user"})
-	
+
 	// Make request with non-admin token
 	req := httptest.NewRequest("GET", "/test", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
-	
+
 	if w.Code != http.StatusForbidden {
 		t.Errorf("Expected status 403, got %d", w.Code)
 	}
@@ -521,24 +519,24 @@ func TestAuthMiddleware_ValidTokenWithAdminRole(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	logger := setupTestLogger(t)
-	
+
 	secret := "test-secret-that-is-at-least-32-characters-long"
 	validator := auth.NewJWTValidator(secret)
-	
+
 	// Add middleware to test endpoint
 	router.GET("/test", authMiddleware(validator, logger), func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"message": "success"})
 	})
-	
+
 	// Create token with admin role
 	token := createTestJWT(t, secret, "admin-user", []string{constants.RoleAdmin})
-	
+
 	// Make request with admin token
 	req := httptest.NewRequest("GET", "/test", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
-	
+
 	if w.Code != http.StatusOK {
 		t.Errorf("Expected status 200, got %d", w.Code)
 	}
@@ -549,24 +547,24 @@ func TestAuthMiddleware_ValidTokenWithChatAdminRole(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	logger := setupTestLogger(t)
-	
+
 	secret := "test-secret-that-is-at-least-32-characters-long"
 	validator := auth.NewJWTValidator(secret)
-	
+
 	// Add middleware to test endpoint
 	router.GET("/test", authMiddleware(validator, logger), func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"message": "success"})
 	})
-	
+
 	// Create token with chat_admin role
 	token := createTestJWT(t, secret, "chat-admin-user", []string{constants.RoleChatAdmin})
-	
+
 	// Make request with chat_admin token
 	req := httptest.NewRequest("GET", "/test", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
-	
+
 	if w.Code != http.StatusOK {
 		t.Errorf("Expected status 200, got %d", w.Code)
 	}
@@ -577,24 +575,24 @@ func TestUserAuthMiddleware_ValidToken_Coverage(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	logger := setupTestLogger(t)
-	
+
 	secret := "test-secret-that-is-at-least-32-characters-long"
 	validator := auth.NewJWTValidator(secret)
-	
+
 	// Add middleware to test endpoint
 	router.GET("/test", userAuthMiddleware(validator, logger), func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"message": "success"})
 	})
-	
+
 	// Create token with regular user role
 	token := createTestJWT(t, secret, "regular-user", []string{"user"})
-	
+
 	// Make request with user token
 	req := httptest.NewRequest("GET", "/test", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
-	
+
 	if w.Code != http.StatusOK {
 		t.Errorf("Expected status 200, got %d", w.Code)
 	}
@@ -605,25 +603,24 @@ func TestUserAuthMiddleware_MissingToken(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	logger := setupTestLogger(t)
-	
+
 	secret := "test-secret-that-is-at-least-32-characters-long"
 	validator := auth.NewJWTValidator(secret)
-	
+
 	// Add middleware to test endpoint
 	router.GET("/test", userAuthMiddleware(validator, logger), func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"message": "success"})
 	})
-	
+
 	// Make request without token
 	req := httptest.NewRequest("GET", "/test", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
-	
+
 	if w.Code != http.StatusUnauthorized {
 		t.Errorf("Expected status 401, got %d", w.Code)
 	}
 }
-
 
 // TestProperty_AuthenticationMiddlewareEnforcesAccessControl tests Property 9
 // **Validates: Requirements 3.4, 5.3, 6.3**
@@ -635,7 +632,7 @@ func TestProperty_AuthenticationMiddlewareEnforcesAccessControl(t *testing.T) {
 	logger := setupTestLogger(t)
 	secret := "test-secret-that-is-at-least-32-characters-long"
 	validator := auth.NewJWTValidator(secret)
-	
+
 	testCases := []struct {
 		name           string
 		token          string
@@ -679,22 +676,22 @@ func TestProperty_AuthenticationMiddlewareEnforcesAccessControl(t *testing.T) {
 			description:    "Request with valid user token (no admin role) should be forbidden",
 		},
 	}
-	
+
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			router := gin.New()
 			router.GET("/test", authMiddleware(validator, logger), func(c *gin.Context) {
 				c.JSON(http.StatusOK, gin.H{"message": "success"})
 			})
-			
+
 			req := httptest.NewRequest("GET", "/test", nil)
 			if tc.token != "" {
 				req.Header.Set("Authorization", "Bearer "+tc.token)
 			}
-			
+
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, req)
-			
+
 			if w.Code != tc.expectedStatus {
 				t.Errorf("%s: Expected status %d, got %d", tc.description, tc.expectedStatus, w.Code)
 			}
@@ -702,20 +699,19 @@ func TestProperty_AuthenticationMiddlewareEnforcesAccessControl(t *testing.T) {
 	}
 }
 
-
 // TestRateLimitMiddleware_Enforcement tests rate limit enforcement
 func TestRateLimitMiddleware_Enforcement(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	logger := setupTestLogger(t)
-	
+
 	// Create rate limiter with low limit for testing
 	limiter := ratelimit.NewMessageLimiter(1*time.Minute, 3)
 	limiter.StartCleanup()
 	defer limiter.StopCleanup()
-	
+
 	secret := "test-secret-that-is-at-least-32-characters-long"
 	validator := auth.NewJWTValidator(secret)
-	
+
 	router := gin.New()
 	router.GET("/test",
 		authMiddleware(validator, logger),
@@ -723,32 +719,32 @@ func TestRateLimitMiddleware_Enforcement(t *testing.T) {
 		func(c *gin.Context) {
 			c.JSON(http.StatusOK, gin.H{"message": "success"})
 		})
-	
+
 	// Create admin token
 	token := createTestJWT(t, secret, "admin-user", []string{constants.RoleAdmin})
-	
+
 	// Make requests up to the limit
 	for i := 0; i < 3; i++ {
 		req := httptest.NewRequest("GET", "/test", nil)
 		req.Header.Set("Authorization", "Bearer "+token)
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, req)
-		
+
 		if w.Code != http.StatusOK {
 			t.Errorf("Request %d: Expected status 200, got %d", i+1, w.Code)
 		}
 	}
-	
+
 	// Next request should be rate limited
 	req := httptest.NewRequest("GET", "/test", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
-	
+
 	if w.Code != constants.StatusTooManyRequests {
 		t.Errorf("Expected status 429, got %d", w.Code)
 	}
-	
+
 	// Check for Retry-After header
 	retryAfter := w.Header().Get(constants.HeaderRetryAfter)
 	if retryAfter == "" {
@@ -760,15 +756,15 @@ func TestRateLimitMiddleware_Enforcement(t *testing.T) {
 func TestRateLimitMiddleware_ResetAfterWindow(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	logger := setupTestLogger(t)
-	
+
 	// Create rate limiter with short window for testing
 	limiter := ratelimit.NewMessageLimiter(100*time.Millisecond, 2)
 	limiter.StartCleanup()
 	defer limiter.StopCleanup()
-	
+
 	secret := "test-secret-that-is-at-least-32-characters-long"
 	validator := auth.NewJWTValidator(secret)
-	
+
 	router := gin.New()
 	router.GET("/test",
 		authMiddleware(validator, logger),
@@ -776,41 +772,41 @@ func TestRateLimitMiddleware_ResetAfterWindow(t *testing.T) {
 		func(c *gin.Context) {
 			c.JSON(http.StatusOK, gin.H{"message": "success"})
 		})
-	
+
 	// Create admin token
 	token := createTestJWT(t, secret, "admin-user", []string{constants.RoleAdmin})
-	
+
 	// Make requests up to the limit
 	for i := 0; i < 2; i++ {
 		req := httptest.NewRequest("GET", "/test", nil)
 		req.Header.Set("Authorization", "Bearer "+token)
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, req)
-		
+
 		if w.Code != http.StatusOK {
 			t.Errorf("Request %d: Expected status 200, got %d", i+1, w.Code)
 		}
 	}
-	
+
 	// Next request should be rate limited
 	req := httptest.NewRequest("GET", "/test", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
-	
+
 	if w.Code != constants.StatusTooManyRequests {
 		t.Errorf("Expected status 429, got %d", w.Code)
 	}
-	
+
 	// Wait for window to expire
 	time.Sleep(150 * time.Millisecond)
-	
+
 	// Request should now succeed
 	req = httptest.NewRequest("GET", "/test", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w = httptest.NewRecorder()
 	router.ServeHTTP(w, req)
-	
+
 	if w.Code != http.StatusOK {
 		t.Errorf("After window reset: Expected status 200, got %d", w.Code)
 	}
@@ -820,11 +816,11 @@ func TestRateLimitMiddleware_ResetAfterWindow(t *testing.T) {
 func TestRateLimitMiddleware_NoClaims(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	logger := setupTestLogger(t)
-	
+
 	limiter := ratelimit.NewMessageLimiter(1*time.Minute, 10)
 	limiter.StartCleanup()
 	defer limiter.StopCleanup()
-	
+
 	router := gin.New()
 	// Apply rate limit middleware without auth middleware
 	router.GET("/test",
@@ -832,12 +828,12 @@ func TestRateLimitMiddleware_NoClaims(t *testing.T) {
 		func(c *gin.Context) {
 			c.JSON(http.StatusOK, gin.H{"message": "success"})
 		})
-	
+
 	// Make request without claims in context
 	req := httptest.NewRequest("GET", "/test", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
-	
+
 	// Should pass through when no claims (let auth middleware handle it)
 	if w.Code != http.StatusOK {
 		t.Errorf("Expected status 200, got %d", w.Code)
@@ -848,14 +844,14 @@ func TestRateLimitMiddleware_NoClaims(t *testing.T) {
 func TestRateLimitMiddleware_DifferentUsers(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	logger := setupTestLogger(t)
-	
+
 	limiter := ratelimit.NewMessageLimiter(1*time.Minute, 2)
 	limiter.StartCleanup()
 	defer limiter.StopCleanup()
-	
+
 	secret := "test-secret-that-is-at-least-32-characters-long"
 	validator := auth.NewJWTValidator(secret)
-	
+
 	router := gin.New()
 	router.GET("/test",
 		authMiddleware(validator, logger),
@@ -863,44 +859,43 @@ func TestRateLimitMiddleware_DifferentUsers(t *testing.T) {
 		func(c *gin.Context) {
 			c.JSON(http.StatusOK, gin.H{"message": "success"})
 		})
-	
+
 	// Create tokens for two different users
 	token1 := createTestJWT(t, secret, "admin-user-1", []string{constants.RoleAdmin})
 	token2 := createTestJWT(t, secret, "admin-user-2", []string{constants.RoleAdmin})
-	
+
 	// User 1 makes requests up to limit
 	for i := 0; i < 2; i++ {
 		req := httptest.NewRequest("GET", "/test", nil)
 		req.Header.Set("Authorization", "Bearer "+token1)
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, req)
-		
+
 		if w.Code != http.StatusOK {
 			t.Errorf("User 1 request %d: Expected status 200, got %d", i+1, w.Code)
 		}
 	}
-	
+
 	// User 1 should be rate limited
 	req := httptest.NewRequest("GET", "/test", nil)
 	req.Header.Set("Authorization", "Bearer "+token1)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
-	
+
 	if w.Code != constants.StatusTooManyRequests {
 		t.Errorf("User 1: Expected status 429, got %d", w.Code)
 	}
-	
+
 	// User 2 should still be able to make requests
 	req = httptest.NewRequest("GET", "/test", nil)
 	req.Header.Set("Authorization", "Bearer "+token2)
 	w = httptest.NewRecorder()
 	router.ServeHTTP(w, req)
-	
+
 	if w.Code != http.StatusOK {
 		t.Errorf("User 2: Expected status 200, got %d", w.Code)
 	}
 }
-
 
 // TestProperty_RateLimitingMiddlewareEnforcesLimits tests Property 10
 // **Validates: Requirements 3.4, 5.4**
@@ -912,7 +907,7 @@ func TestProperty_RateLimitingMiddlewareEnforcesLimits(t *testing.T) {
 	logger := setupTestLogger(t)
 	secret := "test-secret-that-is-at-least-32-characters-long"
 	validator := auth.NewJWTValidator(secret)
-	
+
 	testCases := []struct {
 		name        string
 		limit       int
@@ -942,13 +937,13 @@ func TestProperty_RateLimitingMiddlewareEnforcesLimits(t *testing.T) {
 			description: "With limit of 10, first 10 succeed, rest are rate limited",
 		},
 	}
-	
+
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			limiter := ratelimit.NewMessageLimiter(tc.window, tc.limit)
 			limiter.StartCleanup()
 			defer limiter.StopCleanup()
-			
+
 			router := gin.New()
 			router.GET("/test",
 				authMiddleware(validator, logger),
@@ -956,23 +951,23 @@ func TestProperty_RateLimitingMiddlewareEnforcesLimits(t *testing.T) {
 				func(c *gin.Context) {
 					c.JSON(http.StatusOK, gin.H{"message": "success"})
 				})
-			
+
 			token := createTestJWT(t, secret, "test-user", []string{constants.RoleAdmin})
-			
+
 			successCount := 0
 			rateLimitedCount := 0
-			
+
 			for i := 0; i < tc.requests; i++ {
 				req := httptest.NewRequest("GET", "/test", nil)
 				req.Header.Set("Authorization", "Bearer "+token)
 				w := httptest.NewRecorder()
 				router.ServeHTTP(w, req)
-				
+
 				if w.Code == http.StatusOK {
 					successCount++
 				} else if w.Code == constants.StatusTooManyRequests {
 					rateLimitedCount++
-					
+
 					// Verify Retry-After header is present
 					retryAfter := w.Header().Get(constants.HeaderRetryAfter)
 					if retryAfter == "" {
@@ -982,12 +977,12 @@ func TestProperty_RateLimitingMiddlewareEnforcesLimits(t *testing.T) {
 					t.Errorf("Request %d: Unexpected status code %d", i+1, w.Code)
 				}
 			}
-			
+
 			// Verify exactly 'limit' requests succeeded
 			if successCount != tc.limit {
 				t.Errorf("%s: Expected %d successful requests, got %d", tc.description, tc.limit, successCount)
 			}
-			
+
 			// Verify remaining requests were rate limited
 			expectedRateLimited := tc.requests - tc.limit
 			if rateLimitedCount != expectedRateLimited {
@@ -997,27 +992,26 @@ func TestProperty_RateLimitingMiddlewareEnforcesLimits(t *testing.T) {
 	}
 }
 
-
 // TestAuthorizationMiddleware_AdminRole tests authorization with admin role
 func TestAuthorizationMiddleware_AdminRole(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	logger := setupTestLogger(t)
 	secret := "test-secret-that-is-at-least-32-characters-long"
 	validator := auth.NewJWTValidator(secret)
-	
+
 	router := gin.New()
 	router.GET("/admin", authMiddleware(validator, logger), func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"message": "admin access granted"})
 	})
-	
+
 	// Create token with admin role
 	token := createTestJWT(t, secret, "admin-user", []string{constants.RoleAdmin})
-	
+
 	req := httptest.NewRequest("GET", "/admin", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
-	
+
 	if w.Code != http.StatusOK {
 		t.Errorf("Expected status 200, got %d", w.Code)
 	}
@@ -1029,20 +1023,20 @@ func TestAuthorizationMiddleware_ChatAdminRole(t *testing.T) {
 	logger := setupTestLogger(t)
 	secret := "test-secret-that-is-at-least-32-characters-long"
 	validator := auth.NewJWTValidator(secret)
-	
+
 	router := gin.New()
 	router.GET("/admin", authMiddleware(validator, logger), func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"message": "admin access granted"})
 	})
-	
+
 	// Create token with chat_admin role
 	token := createTestJWT(t, secret, "chat-admin-user", []string{constants.RoleChatAdmin})
-	
+
 	req := httptest.NewRequest("GET", "/admin", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
-	
+
 	if w.Code != http.StatusOK {
 		t.Errorf("Expected status 200, got %d", w.Code)
 	}
@@ -1054,20 +1048,20 @@ func TestAuthorizationMiddleware_NonAdminRole(t *testing.T) {
 	logger := setupTestLogger(t)
 	secret := "test-secret-that-is-at-least-32-characters-long"
 	validator := auth.NewJWTValidator(secret)
-	
+
 	router := gin.New()
 	router.GET("/admin", authMiddleware(validator, logger), func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"message": "admin access granted"})
 	})
-	
+
 	// Create token with regular user role
 	token := createTestJWT(t, secret, "regular-user", []string{"user", "viewer"})
-	
+
 	req := httptest.NewRequest("GET", "/admin", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
-	
+
 	if w.Code != http.StatusForbidden {
 		t.Errorf("Expected status 403, got %d", w.Code)
 	}
@@ -1079,20 +1073,20 @@ func TestAuthorizationMiddleware_EmptyRoles(t *testing.T) {
 	logger := setupTestLogger(t)
 	secret := "test-secret-that-is-at-least-32-characters-long"
 	validator := auth.NewJWTValidator(secret)
-	
+
 	router := gin.New()
 	router.GET("/admin", authMiddleware(validator, logger), func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"message": "admin access granted"})
 	})
-	
+
 	// Create token with no roles
 	token := createTestJWT(t, secret, "no-role-user", []string{})
-	
+
 	req := httptest.NewRequest("GET", "/admin", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
-	
+
 	if w.Code != http.StatusForbidden {
 		t.Errorf("Expected status 403, got %d", w.Code)
 	}
@@ -1104,25 +1098,24 @@ func TestAuthorizationMiddleware_MultipleRolesWithAdmin(t *testing.T) {
 	logger := setupTestLogger(t)
 	secret := "test-secret-that-is-at-least-32-characters-long"
 	validator := auth.NewJWTValidator(secret)
-	
+
 	router := gin.New()
 	router.GET("/admin", authMiddleware(validator, logger), func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"message": "admin access granted"})
 	})
-	
+
 	// Create token with multiple roles including admin
 	token := createTestJWT(t, secret, "multi-role-user", []string{"user", constants.RoleAdmin, "viewer"})
-	
+
 	req := httptest.NewRequest("GET", "/admin", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
-	
+
 	if w.Code != http.StatusOK {
 		t.Errorf("Expected status 200, got %d", w.Code)
 	}
 }
-
 
 // TestProperty_AuthorizationMiddlewareEnforcesRoles tests Property 11
 // **Validates: Requirements 6.5**
@@ -1134,7 +1127,7 @@ func TestProperty_AuthorizationMiddlewareEnforcesRoles(t *testing.T) {
 	logger := setupTestLogger(t)
 	secret := "test-secret-that-is-at-least-32-characters-long"
 	validator := auth.NewJWTValidator(secret)
-	
+
 	testCases := []struct {
 		name           string
 		roles          []string
@@ -1190,21 +1183,21 @@ func TestProperty_AuthorizationMiddlewareEnforcesRoles(t *testing.T) {
 			description:    "Token with multiple roles but no admin should be forbidden",
 		},
 	}
-	
+
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			router := gin.New()
 			router.GET("/admin", authMiddleware(validator, logger), func(c *gin.Context) {
 				c.JSON(http.StatusOK, gin.H{"message": "admin access granted"})
 			})
-			
+
 			token := createTestJWT(t, secret, "test-user-"+tc.name, tc.roles)
-			
+
 			req := httptest.NewRequest("GET", "/admin", nil)
 			req.Header.Set("Authorization", "Bearer "+token)
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, req)
-			
+
 			if w.Code != tc.expectedStatus {
 				t.Errorf("%s: Expected status %d, got %d", tc.description, tc.expectedStatus, w.Code)
 			}
@@ -1212,30 +1205,29 @@ func TestProperty_AuthorizationMiddlewareEnforcesRoles(t *testing.T) {
 	}
 }
 
-
 // TestHandleHealthCheck_Coverage tests the health check endpoint
 func TestHandleHealthCheck_Coverage(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	router.GET("/healthz", handleHealthCheck)
-	
+
 	req := httptest.NewRequest("GET", "/healthz", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
-	
+
 	if w.Code != http.StatusOK {
 		t.Errorf("Expected status 200, got %d", w.Code)
 	}
-	
+
 	var response map[string]interface{}
 	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
 		t.Fatalf("Failed to parse response: %v", err)
 	}
-	
+
 	if response["status"] != "healthy" {
 		t.Errorf("Expected status 'healthy', got %v", response["status"])
 	}
-	
+
 	if response["timestamp"] == nil {
 		t.Error("Expected timestamp in response")
 	}
@@ -1246,23 +1238,23 @@ func TestHandleReadyCheck_Success(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	logger := setupTestLogger(t)
 	mongo := setupTestMongo(t)
-	
+
 	router := gin.New()
 	router.GET("/readyz", handleReadyCheck(mongo, logger))
-	
+
 	req := httptest.NewRequest("GET", "/readyz", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
-	
+
 	if w.Code != http.StatusOK {
 		t.Errorf("Expected status 200, got %d", w.Code)
 	}
-	
+
 	var response map[string]interface{}
 	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
 		t.Fatalf("Failed to parse response: %v", err)
 	}
-	
+
 	if response["status"] != "ready" {
 		t.Errorf("Expected status 'ready', got %v", response["status"])
 	}
@@ -1272,23 +1264,23 @@ func TestHandleReadyCheck_Success(t *testing.T) {
 func TestHandleReadyCheck_MongoNil(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	logger := setupTestLogger(t)
-	
+
 	router := gin.New()
 	router.GET("/readyz", handleReadyCheck(nil, logger))
-	
+
 	req := httptest.NewRequest("GET", "/readyz", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
-	
+
 	if w.Code != constants.StatusServiceUnavailable {
 		t.Errorf("Expected status 503, got %d", w.Code)
 	}
-	
+
 	var response map[string]interface{}
 	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
 		t.Fatalf("Failed to parse response: %v", err)
 	}
-	
+
 	if response["status"] != "not ready" {
 		t.Errorf("Expected status 'not ready', got %v", response["status"])
 	}
@@ -1301,12 +1293,12 @@ func TestHandleUserSessions_Success(t *testing.T) {
 	mongo := setupTestMongo(t)
 	secret := "test-secret-that-is-at-least-32-characters-long"
 	validator := auth.NewJWTValidator(secret)
-	
+
 	storageService := storage.NewStorageService(mongo, "chat", "sessions", logger, nil)
-	
+
 	router := gin.New()
 	router.GET("/sessions", userAuthMiddleware(validator, logger), handleUserSessions(storageService, logger))
-	
+
 	// Create test session in storage
 	testSession := &session.Session{
 		ID:        "test-session-1",
@@ -1318,24 +1310,24 @@ func TestHandleUserSessions_Success(t *testing.T) {
 	if err := storageService.CreateSession(testSession); err != nil {
 		t.Fatalf("Failed to create test session: %v", err)
 	}
-	
+
 	// Create token for user
 	token := createTestJWT(t, secret, "test-user", []string{"user"})
-	
+
 	req := httptest.NewRequest("GET", "/sessions", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
-	
+
 	if w.Code != http.StatusOK {
 		t.Errorf("Expected status 200, got %d", w.Code)
 	}
-	
+
 	var response map[string]interface{}
 	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
 		t.Fatalf("Failed to parse response: %v", err)
 	}
-	
+
 	if response["user_id"] != "test-user" {
 		t.Errorf("Expected user_id 'test-user', got %v", response["user_id"])
 	}
@@ -1346,17 +1338,17 @@ func TestHandleUserSessions_NoClaims(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	logger := setupTestLogger(t)
 	mongo := setupTestMongo(t)
-	
+
 	storageService := storage.NewStorageService(mongo, "chat", "sessions", logger, nil)
-	
+
 	router := gin.New()
 	// Skip auth middleware to test missing claims
 	router.GET("/sessions", handleUserSessions(storageService, logger))
-	
+
 	req := httptest.NewRequest("GET", "/sessions", nil)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
-	
+
 	if w.Code != http.StatusUnauthorized {
 		t.Errorf("Expected status 401, got %d", w.Code)
 	}
@@ -1369,13 +1361,13 @@ func TestHandleListSessions_WithFilters(t *testing.T) {
 	mongo := setupTestMongo(t)
 	secret := "test-secret-that-is-at-least-32-characters-long"
 	validator := auth.NewJWTValidator(secret)
-	
+
 	storageService := storage.NewStorageService(mongo, "chat", "sessions", logger, nil)
 	sessionManager := session.NewSessionManager(30*time.Second, logger)
-	
+
 	router := gin.New()
 	router.GET("/admin/sessions", authMiddleware(validator, logger), handleListSessions(storageService, sessionManager, logger))
-	
+
 	// Create test sessions in storage
 	testSession := &session.Session{
 		ID:        "test-session-2",
@@ -1387,25 +1379,25 @@ func TestHandleListSessions_WithFilters(t *testing.T) {
 	if err := storageService.CreateSession(testSession); err != nil {
 		t.Fatalf("Failed to create test session: %v", err)
 	}
-	
+
 	// Create admin token
 	token := createTestJWT(t, secret, "admin-user", []string{constants.RoleAdmin})
-	
+
 	// Test with user_id filter
 	req := httptest.NewRequest("GET", "/admin/sessions?user_id=user-1&limit=10", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
-	
+
 	if w.Code != http.StatusOK {
 		t.Errorf("Expected status 200, got %d", w.Code)
 	}
-	
+
 	var response map[string]interface{}
 	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
 		t.Fatalf("Failed to parse response: %v", err)
 	}
-	
+
 	if response["limit"] != float64(10) {
 		t.Errorf("Expected limit 10, got %v", response["limit"])
 	}
@@ -1418,22 +1410,22 @@ func TestHandleListSessions_InvalidTimeFormat(t *testing.T) {
 	mongo := setupTestMongo(t)
 	secret := "test-secret-that-is-at-least-32-characters-long"
 	validator := auth.NewJWTValidator(secret)
-	
+
 	storageService := storage.NewStorageService(mongo, "chat", "sessions", logger, nil)
 	sessionManager := session.NewSessionManager(30*time.Second, logger)
-	
+
 	router := gin.New()
 	router.GET("/admin/sessions", authMiddleware(validator, logger), handleListSessions(storageService, sessionManager, logger))
-	
+
 	// Create admin token
 	token := createTestJWT(t, secret, "admin-user", []string{constants.RoleAdmin})
-	
+
 	// Test with invalid time format
 	req := httptest.NewRequest("GET", "/admin/sessions?start_time_from=invalid-time", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
-	
+
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("Expected status 400, got %d", w.Code)
 	}
@@ -1446,33 +1438,33 @@ func TestHandleGetMetrics_Success(t *testing.T) {
 	mongo := setupTestMongo(t)
 	secret := "test-secret-that-is-at-least-32-characters-long"
 	validator := auth.NewJWTValidator(secret)
-	
+
 	storageService := storage.NewStorageService(mongo, "chat", "sessions", logger, nil)
-	
+
 	router := gin.New()
 	router.GET("/admin/metrics", authMiddleware(validator, logger), handleGetMetrics(storageService, logger))
-	
+
 	// Create admin token
 	token := createTestJWT(t, secret, "admin-user", []string{constants.RoleAdmin})
-	
+
 	req := httptest.NewRequest("GET", "/admin/metrics", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
-	
+
 	if w.Code != http.StatusOK {
 		t.Errorf("Expected status 200, got %d", w.Code)
 	}
-	
+
 	var response map[string]interface{}
 	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
 		t.Fatalf("Failed to parse response: %v", err)
 	}
-	
+
 	if response["metrics"] == nil {
 		t.Error("Expected metrics in response")
 	}
-	
+
 	if response["time_range"] == nil {
 		t.Error("Expected time_range in response")
 	}
@@ -1485,21 +1477,21 @@ func TestHandleGetMetrics_InvalidTimeFormat(t *testing.T) {
 	mongo := setupTestMongo(t)
 	secret := "test-secret-that-is-at-least-32-characters-long"
 	validator := auth.NewJWTValidator(secret)
-	
+
 	storageService := storage.NewStorageService(mongo, "chat", "sessions", logger, nil)
-	
+
 	router := gin.New()
 	router.GET("/admin/metrics", authMiddleware(validator, logger), handleGetMetrics(storageService, logger))
-	
+
 	// Create admin token
 	token := createTestJWT(t, secret, "admin-user", []string{constants.RoleAdmin})
-	
+
 	// Test with invalid start_time
 	req := httptest.NewRequest("GET", "/admin/metrics?start_time=invalid", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
-	
+
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("Expected status 400, got %d", w.Code)
 	}
@@ -1512,15 +1504,15 @@ func TestHandleAdminTakeover_Success(t *testing.T) {
 	mongo := setupTestMongo(t)
 	secret := "test-secret-that-is-at-least-32-characters-long"
 	validator := auth.NewJWTValidator(secret)
-	
+
 	// Create dependencies
 	storageService := storage.NewStorageService(mongo, "chat", "sessions", logger, nil)
 	sessionManager := session.NewSessionManager(30*time.Second, logger)
 	messageRouter := router.NewMessageRouter(sessionManager, nil, nil, nil, storageService, 30*time.Second, logger)
-	
+
 	router := gin.New()
 	router.POST("/admin/takeover/:sessionID", authMiddleware(validator, logger), handleAdminTakeover(messageRouter, logger))
-	
+
 	// Create test session in storage and session manager
 	testSession := &session.Session{
 		ID:        "takeover-session",
@@ -1532,7 +1524,7 @@ func TestHandleAdminTakeover_Success(t *testing.T) {
 	if err := storageService.CreateSession(testSession); err != nil {
 		t.Fatalf("Failed to create test session: %v", err)
 	}
-	
+
 	// Create session in session manager using CreateSession
 	sess, err := sessionManager.CreateSession("user-1")
 	if err != nil {
@@ -1540,24 +1532,24 @@ func TestHandleAdminTakeover_Success(t *testing.T) {
 	}
 	// Update the session ID to match our test session
 	testSession.ID = sess.ID
-	
+
 	// Create admin token
 	token := createTestJWT(t, secret, "admin-user", []string{constants.RoleAdmin})
-	
+
 	req := httptest.NewRequest("POST", "/admin/takeover/"+sess.ID, nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
-	
+
 	if w.Code != http.StatusOK {
 		t.Errorf("Expected status 200, got %d", w.Code)
 	}
-	
+
 	var response map[string]interface{}
 	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
 		t.Fatalf("Failed to parse response: %v", err)
 	}
-	
+
 	if response["session_id"] != sess.ID {
 		t.Errorf("Expected session_id '%s', got %v", sess.ID, response["session_id"])
 	}
@@ -1570,29 +1562,28 @@ func TestHandleAdminTakeover_MissingSessionID(t *testing.T) {
 	mongo := setupTestMongo(t)
 	secret := "test-secret-that-is-at-least-32-characters-long"
 	validator := auth.NewJWTValidator(secret)
-	
+
 	storageService := storage.NewStorageService(mongo, "chat", "sessions", logger, nil)
 	sessionManager := session.NewSessionManager(30*time.Second, logger)
 	messageRouter := router.NewMessageRouter(sessionManager, nil, nil, nil, storageService, 30*time.Second, logger)
-	
+
 	router := gin.New()
 	router.POST("/admin/takeover/:sessionID", authMiddleware(validator, logger), handleAdminTakeover(messageRouter, logger))
-	
+
 	// Create admin token
 	token := createTestJWT(t, secret, "admin-user", []string{constants.RoleAdmin})
-	
+
 	// Test with empty session ID
 	req := httptest.NewRequest("POST", "/admin/takeover/", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 	router.ServeHTTP(w, req)
-	
+
 	// Should get 404 because route doesn't match
 	if w.Code != http.StatusNotFound {
 		t.Errorf("Expected status 404, got %d", w.Code)
 	}
 }
-
 
 // TestProperty_HTTPHandlersProcessValidRequests tests Property 14
 // **Validates: Requirements 3.3, 9.3, 9.4, 9.5**
@@ -1605,11 +1596,11 @@ func TestProperty_HTTPHandlersProcessValidRequests(t *testing.T) {
 	mongo := setupTestMongo(t)
 	secret := "test-secret-that-is-at-least-32-characters-long"
 	validator := auth.NewJWTValidator(secret)
-	
+
 	storageService := storage.NewStorageService(mongo, "chat", "sessions", logger, nil)
 	sessionManager := session.NewSessionManager(30*time.Second, logger)
 	messageRouter := router.NewMessageRouter(sessionManager, nil, nil, nil, storageService, 30*time.Second, logger)
-	
+
 	testCases := []struct {
 		name           string
 		method         string
@@ -1691,16 +1682,16 @@ func TestProperty_HTTPHandlersProcessValidRequests(t *testing.T) {
 			description:    "Metrics with invalid time should return 400",
 		},
 	}
-	
+
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			router := gin.New()
-			
+
 			// Register endpoints
 			router.GET("/healthz", handleHealthCheck)
 			router.GET("/readyz", handleReadyCheck(mongo, logger))
 			router.GET("/sessions", userAuthMiddleware(validator, logger), handleUserSessions(storageService, logger))
-			
+
 			adminGroup := router.Group("/admin")
 			adminGroup.Use(authMiddleware(validator, logger))
 			{
@@ -1708,19 +1699,19 @@ func TestProperty_HTTPHandlersProcessValidRequests(t *testing.T) {
 				adminGroup.GET("/metrics", handleGetMetrics(storageService, logger))
 				adminGroup.POST("/takeover/:sessionID", handleAdminTakeover(messageRouter, logger))
 			}
-			
+
 			req := httptest.NewRequest(tc.method, tc.path, nil)
 			if tc.token != "" {
 				req.Header.Set("Authorization", "Bearer "+tc.token)
 			}
-			
+
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, req)
-			
+
 			if w.Code != tc.expectedStatus {
 				t.Errorf("%s: Expected status %d, got %d", tc.description, tc.expectedStatus, w.Code)
 			}
-			
+
 			// Verify response is valid JSON for non-404 responses
 			if w.Code != http.StatusNotFound {
 				var response map[string]interface{}
@@ -1732,14 +1723,13 @@ func TestProperty_HTTPHandlersProcessValidRequests(t *testing.T) {
 	}
 }
 
-
 // TestValidateJWTSecret_EmptySecret tests JWT secret validation with empty secret
 func TestValidateJWTSecret_EmptySecret(t *testing.T) {
 	err := validateJWTSecret("")
 	if err == nil {
 		t.Fatal("Expected error with empty secret, got nil")
 	}
-	
+
 	if !strings.Contains(err.Error(), "required") {
 		t.Errorf("Expected error about required secret, got: %v", err)
 	}
@@ -1751,7 +1741,7 @@ func TestValidateJWTSecret_ShortSecret(t *testing.T) {
 	if err == nil {
 		t.Fatal("Expected error with short secret, got nil")
 	}
-	
+
 	if !strings.Contains(err.Error(), "at least") {
 		t.Errorf("Expected error about minimum length, got: %v", err)
 	}
@@ -1766,14 +1756,14 @@ func TestValidateJWTSecret_WeakSecrets(t *testing.T) {
 		"test123456789012345678901234567890",
 		"default123456789012345678901234567890",
 	}
-	
+
 	for _, weak := range weakSecrets {
 		t.Run(weak, func(t *testing.T) {
 			err := validateJWTSecret(weak)
 			if err == nil {
 				t.Fatalf("Expected error with weak secret '%s', got nil", weak)
 			}
-			
+
 			if !strings.Contains(err.Error(), "weak") {
 				t.Errorf("Expected error about weak secret, got: %v", err)
 			}
@@ -1819,7 +1809,7 @@ func TestValidateEncryptionKey_InvalidLength(t *testing.T) {
 		{"33bytes", 33},
 		{"64bytes", 64},
 	}
-	
+
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			key := make([]byte, tc.keyLen)
@@ -1827,7 +1817,7 @@ func TestValidateEncryptionKey_InvalidLength(t *testing.T) {
 			if err == nil {
 				t.Fatalf("Expected error with %d-byte key, got nil", tc.keyLen)
 			}
-			
+
 			if !strings.Contains(err.Error(), "32 bytes") {
 				t.Errorf("Expected error about 32 bytes, got: %v", err)
 			}
@@ -1842,7 +1832,6 @@ func TestValidateEncryptionKey_NilKey(t *testing.T) {
 		t.Errorf("Expected no error with nil key (encryption disabled), got: %v", err)
 	}
 }
-
 
 // TestProperty_WeakJWTSecretsAreRejected tests Property 13
 // **Validates: Requirements 6.4**
@@ -1929,11 +1918,11 @@ func TestProperty_WeakJWTSecretsAreRejected(t *testing.T) {
 			description: "Base64-encoded secret should be accepted",
 		},
 	}
-	
+
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			err := validateJWTSecret(tc.secret)
-			
+
 			if tc.shouldFail {
 				if err == nil {
 					t.Errorf("%s: Expected error, got nil", tc.description)
@@ -1946,7 +1935,6 @@ func TestProperty_WeakJWTSecretsAreRejected(t *testing.T) {
 		})
 	}
 }
-
 
 // TestProperty_ValidationFunctionsRejectInvalidInputs tests Property 16
 // **Validates: Requirements 3.5, 4.2**
@@ -2038,11 +2026,11 @@ func TestProperty_ValidationFunctionsRejectInvalidInputs(t *testing.T) {
 			description: "Nil encryption key (disabled) should not return error",
 		},
 	}
-	
+
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			err := tc.validator()
-			
+
 			if tc.shouldFail {
 				if err == nil {
 					t.Errorf("%s: Expected error, got nil", tc.description)
@@ -2058,7 +2046,6 @@ func TestProperty_ValidationFunctionsRejectInvalidInputs(t *testing.T) {
 	}
 }
 
-
 // TestConcurrentHTTPRequests_SameEndpoint tests concurrent requests to the same endpoint
 func TestConcurrentHTTPRequests_SameEndpoint(t *testing.T) {
 	gin.SetMode(gin.TestMode)
@@ -2066,34 +2053,34 @@ func TestConcurrentHTTPRequests_SameEndpoint(t *testing.T) {
 	mongo := setupTestMongo(t)
 	secret := "test-secret-that-is-at-least-32-characters-long"
 	validator := auth.NewJWTValidator(secret)
-	
+
 	storageService := storage.NewStorageService(mongo, "chat", "sessions", logger, nil)
-	
+
 	router := gin.New()
 	router.GET("/sessions", userAuthMiddleware(validator, logger), handleUserSessions(storageService, logger))
-	
+
 	// Create test token
 	token := createTestJWT(t, secret, "concurrent-user", []string{"user"})
-	
+
 	// Run concurrent requests
 	concurrency := 10
 	done := make(chan bool, concurrency)
-	
+
 	for i := 0; i < concurrency; i++ {
 		go func(id int) {
 			req := httptest.NewRequest("GET", "/sessions", nil)
 			req.Header.Set("Authorization", "Bearer "+token)
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, req)
-			
+
 			if w.Code != http.StatusOK {
 				t.Errorf("Concurrent request %d: Expected status 200, got %d", id, w.Code)
 			}
-			
+
 			done <- true
 		}(i)
 	}
-	
+
 	// Wait for all requests to complete
 	for i := 0; i < concurrency; i++ {
 		<-done
@@ -2107,26 +2094,26 @@ func TestConcurrentHTTPRequests_DifferentEndpoints(t *testing.T) {
 	mongo := setupTestMongo(t)
 	secret := "test-secret-that-is-at-least-32-characters-long"
 	validator := auth.NewJWTValidator(secret)
-	
+
 	storageService := storage.NewStorageService(mongo, "chat", "sessions", logger, nil)
 	sessionManager := session.NewSessionManager(30*time.Second, logger)
-	
+
 	router := gin.New()
 	router.GET("/healthz", handleHealthCheck)
 	router.GET("/readyz", handleReadyCheck(mongo, logger))
 	router.GET("/sessions", userAuthMiddleware(validator, logger), handleUserSessions(storageService, logger))
-	
+
 	adminGroup := router.Group("/admin")
 	adminGroup.Use(authMiddleware(validator, logger))
 	{
 		adminGroup.GET("/sessions", handleListSessions(storageService, sessionManager, logger))
 		adminGroup.GET("/metrics", handleGetMetrics(storageService, logger))
 	}
-	
+
 	// Create tokens
 	userToken := createTestJWT(t, secret, "user", []string{"user"})
 	adminToken := createTestJWT(t, secret, "admin", []string{constants.RoleAdmin})
-	
+
 	endpoints := []struct {
 		path  string
 		token string
@@ -2137,11 +2124,11 @@ func TestConcurrentHTTPRequests_DifferentEndpoints(t *testing.T) {
 		{"/admin/sessions", adminToken},
 		{"/admin/metrics", adminToken},
 	}
-	
+
 	// Run concurrent requests to different endpoints
 	concurrency := len(endpoints) * 3
 	done := make(chan bool, concurrency)
-	
+
 	for i := 0; i < concurrency; i++ {
 		endpoint := endpoints[i%len(endpoints)]
 		go func(id int, ep struct {
@@ -2154,15 +2141,15 @@ func TestConcurrentHTTPRequests_DifferentEndpoints(t *testing.T) {
 			}
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, req)
-			
+
 			if w.Code != http.StatusOK {
 				t.Errorf("Concurrent request %d to %s: Expected status 200, got %d", id, ep.path, w.Code)
 			}
-			
+
 			done <- true
 		}(i, endpoint)
 	}
-	
+
 	// Wait for all requests to complete
 	for i := 0; i < concurrency; i++ {
 		<-done
@@ -2176,15 +2163,15 @@ func TestConcurrentHTTPRequests_WithRateLimiting(t *testing.T) {
 	mongo := setupTestMongo(t)
 	secret := "test-secret-that-is-at-least-32-characters-long"
 	validator := auth.NewJWTValidator(secret)
-	
+
 	// Create rate limiter with low limit
 	limiter := ratelimit.NewMessageLimiter(1*time.Minute, 5)
 	limiter.StartCleanup()
 	defer limiter.StopCleanup()
-	
+
 	storageService := storage.NewStorageService(mongo, "chat", "sessions", logger, nil)
 	sessionManager := session.NewSessionManager(30*time.Second, logger)
-	
+
 	router := gin.New()
 	adminGroup := router.Group("/admin")
 	adminGroup.Use(authMiddleware(validator, logger))
@@ -2192,29 +2179,29 @@ func TestConcurrentHTTPRequests_WithRateLimiting(t *testing.T) {
 	{
 		adminGroup.GET("/sessions", handleListSessions(storageService, sessionManager, logger))
 	}
-	
+
 	// Create admin token
 	token := createTestJWT(t, secret, "admin", []string{constants.RoleAdmin})
-	
+
 	// Run concurrent requests
 	concurrency := 10
 	done := make(chan int, concurrency)
-	
+
 	for i := 0; i < concurrency; i++ {
 		go func(id int) {
 			req := httptest.NewRequest("GET", "/admin/sessions", nil)
 			req.Header.Set("Authorization", "Bearer "+token)
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, req)
-			
+
 			done <- w.Code
 		}(i)
 	}
-	
+
 	// Collect results
 	successCount := 0
 	rateLimitedCount := 0
-	
+
 	for i := 0; i < concurrency; i++ {
 		code := <-done
 		if code == http.StatusOK {
@@ -2223,12 +2210,12 @@ func TestConcurrentHTTPRequests_WithRateLimiting(t *testing.T) {
 			rateLimitedCount++
 		}
 	}
-	
+
 	// Verify rate limiting worked (should have exactly 5 successes)
 	if successCount != 5 {
 		t.Errorf("Expected 5 successful requests, got %d", successCount)
 	}
-	
+
 	if rateLimitedCount != 5 {
 		t.Errorf("Expected 5 rate limited requests, got %d", rateLimitedCount)
 	}
@@ -2241,23 +2228,23 @@ func TestConcurrentHTTPRequests_MultipleUsers(t *testing.T) {
 	mongo := setupTestMongo(t)
 	secret := "test-secret-that-is-at-least-32-characters-long"
 	validator := auth.NewJWTValidator(secret)
-	
+
 	storageService := storage.NewStorageService(mongo, "chat", "sessions", logger, nil)
-	
+
 	router := gin.New()
 	router.GET("/sessions", userAuthMiddleware(validator, logger), handleUserSessions(storageService, logger))
-	
+
 	// Create tokens for multiple users
 	numUsers := 5
 	tokens := make([]string, numUsers)
 	for i := 0; i < numUsers; i++ {
 		tokens[i] = createTestJWT(t, secret, fmt.Sprintf("user-%d", i), []string{"user"})
 	}
-	
+
 	// Run concurrent requests from different users
 	concurrency := numUsers * 3
 	done := make(chan bool, concurrency)
-	
+
 	for i := 0; i < concurrency; i++ {
 		userIdx := i % numUsers
 		go func(id int, token string) {
@@ -2265,21 +2252,20 @@ func TestConcurrentHTTPRequests_MultipleUsers(t *testing.T) {
 			req.Header.Set("Authorization", "Bearer "+token)
 			w := httptest.NewRecorder()
 			router.ServeHTTP(w, req)
-			
+
 			if w.Code != http.StatusOK {
 				t.Errorf("Concurrent request %d: Expected status 200, got %d", id, w.Code)
 			}
-			
+
 			done <- true
 		}(i, tokens[userIdx])
 	}
-	
+
 	// Wait for all requests to complete
 	for i := 0; i < concurrency; i++ {
 		<-done
 	}
 }
-
 
 // TestProperty_ConcurrentHTTPRequestsAreThreadSafe tests Property 18
 // **Validates: Requirements 7.4**
@@ -2291,22 +2277,22 @@ func TestProperty_ConcurrentHTTPRequestsAreThreadSafe(t *testing.T) {
 	mongo := setupTestMongo(t)
 	secret := "test-secret-that-is-at-least-32-characters-long"
 	validator := auth.NewJWTValidator(secret)
-	
+
 	storageService := storage.NewStorageService(mongo, "chat", "sessions", logger, nil)
 	sessionManager := session.NewSessionManager(30*time.Second, logger)
 	messageRouter := router.NewMessageRouter(sessionManager, nil, nil, nil, storageService, 30*time.Second, logger)
-	
+
 	// Create rate limiter
 	limiter := ratelimit.NewMessageLimiter(1*time.Minute, 100)
 	limiter.StartCleanup()
 	defer limiter.StopCleanup()
-	
+
 	// Set up router with all endpoints
 	r := gin.New()
 	r.GET("/healthz", handleHealthCheck)
 	r.GET("/readyz", handleReadyCheck(mongo, logger))
 	r.GET("/sessions", userAuthMiddleware(validator, logger), handleUserSessions(storageService, logger))
-	
+
 	adminGroup := r.Group("/admin")
 	adminGroup.Use(authMiddleware(validator, logger))
 	adminGroup.Use(adminRateLimitMiddleware(limiter, logger))
@@ -2315,7 +2301,7 @@ func TestProperty_ConcurrentHTTPRequestsAreThreadSafe(t *testing.T) {
 		adminGroup.GET("/metrics", handleGetMetrics(storageService, logger))
 		adminGroup.POST("/takeover/:sessionID", handleAdminTakeover(messageRouter, logger))
 	}
-	
+
 	// Create test sessions in storage
 	for i := 0; i < 5; i++ {
 		testSession := &session.Session{
@@ -2329,11 +2315,11 @@ func TestProperty_ConcurrentHTTPRequestsAreThreadSafe(t *testing.T) {
 			t.Fatalf("Failed to create test session: %v", err)
 		}
 	}
-	
+
 	// Create tokens
 	userToken := createTestJWT(t, secret, "user", []string{"user"})
 	adminToken := createTestJWT(t, secret, "admin", []string{constants.RoleAdmin})
-	
+
 	// Define test scenarios
 	scenarios := []struct {
 		method string
@@ -2348,11 +2334,11 @@ func TestProperty_ConcurrentHTTPRequestsAreThreadSafe(t *testing.T) {
 		{"GET", "/admin/sessions?status=active", adminToken},
 		{"GET", "/admin/metrics", adminToken},
 	}
-	
+
 	// Run concurrent requests with different scenarios
 	concurrency := 50
 	done := make(chan error, concurrency)
-	
+
 	for i := 0; i < concurrency; i++ {
 		scenario := scenarios[i%len(scenarios)]
 		go func(id int, s struct {
@@ -2366,13 +2352,13 @@ func TestProperty_ConcurrentHTTPRequestsAreThreadSafe(t *testing.T) {
 			}
 			w := httptest.NewRecorder()
 			r.ServeHTTP(w, req)
-			
+
 			// Verify response is valid
 			if w.Code < 200 || w.Code >= 600 {
 				done <- fmt.Errorf("request %d to %s: invalid status code %d", id, s.path, w.Code)
 				return
 			}
-			
+
 			// Verify response body is valid JSON (for non-404 responses)
 			if w.Code != http.StatusNotFound {
 				var response map[string]interface{}
@@ -2381,11 +2367,11 @@ func TestProperty_ConcurrentHTTPRequestsAreThreadSafe(t *testing.T) {
 					return
 				}
 			}
-			
+
 			done <- nil
 		}(i, scenario)
 	}
-	
+
 	// Collect results and check for errors
 	errorCount := 0
 	for i := 0; i < concurrency; i++ {
@@ -2394,8 +2380,390 @@ func TestProperty_ConcurrentHTTPRequestsAreThreadSafe(t *testing.T) {
 			errorCount++
 		}
 	}
-	
+
 	if errorCount > 0 {
 		t.Errorf("Property violation: %d out of %d concurrent requests failed", errorCount, concurrency)
 	}
+}
+
+// TestRegister_InvalidReconnectTimeout tests that Register fails with invalid reconnect timeout format
+// Subtask 19.6
+func TestRegister_InvalidReconnectTimeout(t *testing.T) {
+	router := setupTestRouter()
+	logger := setupTestLogger(t)
+	mongo := setupTestMongo(t)
+
+	// Set valid JWT secret
+	os.Setenv("JWT_SECRET", "test-secret-that-is-at-least-32-characters-long")
+	defer os.Unsetenv("JWT_SECRET")
+
+	// Create config with invalid reconnect timeout
+	configContent := `
+[chatbox]
+jwt_secret = "test-secret-that-is-at-least-32-characters-long"
+reconnect_timeout = "invalid-duration"
+`
+	tmpFile, err := os.CreateTemp("", "config-*.toml")
+	if err != nil {
+		t.Fatalf("Failed to create temp config file: %v", err)
+	}
+	defer os.Remove(tmpFile.Name())
+
+	if _, err := tmpFile.WriteString(configContent); err != nil {
+		t.Fatalf("Failed to write config file: %v", err)
+	}
+	tmpFile.Close()
+
+	// Set config file path
+	os.Setenv("RMBASE_FILE_CFG", tmpFile.Name())
+	defer os.Unsetenv("RMBASE_FILE_CFG")
+
+	// Load config
+	if err := goconfig.LoadConfig(); err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
+
+	config, err := goconfig.Default()
+	if err != nil {
+		t.Fatalf("Failed to get default config: %v", err)
+	}
+
+	err = Register(router, config, logger, mongo)
+	if err == nil {
+		t.Fatal("Expected error with invalid reconnect timeout, got nil")
+	}
+
+	if !strings.Contains(err.Error(), "reconnect timeout") {
+		t.Errorf("Expected error about reconnect timeout, got: %v", err)
+	}
+}
+
+// TestRegister_InvalidMaxMessageSize tests that Register handles invalid max message size gracefully
+// Subtask 19.7
+func TestRegister_InvalidMaxMessageSize(t *testing.T) {
+	router := setupTestRouter()
+	config := setupTestConfig(t)
+	logger := setupTestLogger(t)
+	mongo := setupTestMongo(t)
+
+	// Set valid JWT secret
+	os.Setenv("JWT_SECRET", "test-secret-that-is-at-least-32-characters-long")
+	defer os.Unsetenv("JWT_SECRET")
+
+	// Set invalid max message size (should be handled gracefully with default)
+	os.Setenv("MAX_MESSAGE_SIZE", "invalid-number")
+	defer os.Unsetenv("MAX_MESSAGE_SIZE")
+
+	// Register should succeed and use default value
+	err := Register(router, config, logger, mongo)
+	if err != nil {
+		t.Fatalf("Register should succeed with invalid max message size (using default): %v", err)
+	}
+}
+
+// TestRegister_CORSConfiguration tests CORS configuration
+// Subtask 19.9
+func TestRegister_CORSConfiguration(t *testing.T) {
+	t.Run("with CORS origins configured", func(t *testing.T) {
+		router := setupTestRouter()
+		logger := setupTestLogger(t)
+		mongo := setupTestMongo(t)
+
+		// Set valid JWT secret
+		os.Setenv("JWT_SECRET", "test-secret-that-is-at-least-32-characters-long")
+		defer os.Unsetenv("JWT_SECRET")
+
+		// Create config with CORS configuration
+		configContent := `
+[chatbox]
+jwt_secret = "test-secret-that-is-at-least-32-characters-long"
+reconnect_timeout = "30s"
+cors_allowed_origins = "http://localhost:3000,https://example.com"
+path_prefix = "/chatbox"
+`
+		tmpFile, err := os.CreateTemp("", "config-*.toml")
+		if err != nil {
+			t.Fatalf("Failed to create temp config file: %v", err)
+		}
+		defer os.Remove(tmpFile.Name())
+
+		if _, err := tmpFile.WriteString(configContent); err != nil {
+			t.Fatalf("Failed to write config file: %v", err)
+		}
+		tmpFile.Close()
+
+		// Set config file path
+		os.Setenv("RMBASE_FILE_CFG", tmpFile.Name())
+		defer os.Unsetenv("RMBASE_FILE_CFG")
+
+		// Load config
+		if err := goconfig.LoadConfig(); err != nil {
+			t.Fatalf("Failed to load config: %v", err)
+		}
+
+		config, err := goconfig.Default()
+		if err != nil {
+			t.Fatalf("Failed to get default config: %v", err)
+		}
+
+		err = Register(router, config, logger, mongo)
+		if err != nil {
+			t.Fatalf("Register should succeed with CORS configuration: %v", err)
+		}
+
+		// CORS middleware is applied to the router
+		// We can't easily verify it without making actual HTTP requests,
+		// but we verify that Register doesn't fail
+	})
+
+	t.Run("without CORS origins configured", func(t *testing.T) {
+		router := setupTestRouter()
+		config := setupTestConfig(t)
+		logger := setupTestLogger(t)
+		mongo := setupTestMongo(t)
+
+		// Set valid JWT secret
+		os.Setenv("JWT_SECRET", "test-secret-that-is-at-least-32-characters-long")
+		defer os.Unsetenv("JWT_SECRET")
+
+		err := Register(router, config, logger, mongo)
+		if err != nil {
+			t.Fatalf("Register should succeed without CORS configuration: %v", err)
+		}
+	})
+}
+
+// TestRegister_CustomPathPrefix tests custom path prefix configuration
+// Subtask 19.10 (additional test)
+func TestRegister_CustomPathPrefix(t *testing.T) {
+	router := setupTestRouter()
+	logger := setupTestLogger(t)
+	mongo := setupTestMongo(t)
+
+	// Set valid JWT secret
+	os.Setenv("JWT_SECRET", "test-secret-that-is-at-least-32-characters-long")
+	defer os.Unsetenv("JWT_SECRET")
+
+	// Set custom path prefix
+	os.Setenv("CHATBOX_PATH_PREFIX", "/api/v1/chat")
+	defer os.Unsetenv("CHATBOX_PATH_PREFIX")
+
+	// Create config with custom path prefix
+	configContent := `
+[chatbox]
+jwt_secret = "test-secret-that-is-at-least-32-characters-long"
+reconnect_timeout = "30s"
+path_prefix = "/api/v1/chat"
+`
+	tmpFile, err := os.CreateTemp("", "config-*.toml")
+	if err != nil {
+		t.Fatalf("Failed to create temp config file: %v", err)
+	}
+	defer os.Remove(tmpFile.Name())
+
+	if _, err := tmpFile.WriteString(configContent); err != nil {
+		t.Fatalf("Failed to write config file: %v", err)
+	}
+	tmpFile.Close()
+
+	// Set config file path
+	os.Setenv("RMBASE_FILE_CFG", tmpFile.Name())
+	defer os.Unsetenv("RMBASE_FILE_CFG")
+
+	// Load config
+	if err := goconfig.LoadConfig(); err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
+
+	config, err := goconfig.Default()
+	if err != nil {
+		t.Fatalf("Failed to get default config: %v", err)
+	}
+
+	err = Register(router, config, logger, mongo)
+	if err != nil {
+		t.Fatalf("Register should succeed with custom path prefix: %v", err)
+	}
+
+	// Verify routes use custom prefix
+	routes := router.Routes()
+	routeMap := make(map[string]bool)
+	for _, route := range routes {
+		routeMap[route.Path] = true
+	}
+
+	// Check that routes use custom prefix
+	if !routeMap["/api/v1/chat/ws"] {
+		t.Error("WebSocket route should use custom prefix /api/v1/chat")
+	}
+	if !routeMap["/api/v1/chat/healthz"] {
+		t.Error("Health route should use custom prefix /api/v1/chat")
+	}
+	if !routeMap["/api/v1/chat/readyz"] {
+		t.Error("Ready route should use custom prefix /api/v1/chat")
+	}
+}
+
+// TestRegister_EmptyPathPrefix tests that Register fails with empty path prefix
+// Subtask 19.10 (additional test)
+func TestRegister_EmptyPathPrefix(t *testing.T) {
+	router := setupTestRouter()
+	logger := setupTestLogger(t)
+	mongo := setupTestMongo(t)
+
+	// Set valid JWT secret
+	os.Setenv("JWT_SECRET", "test-secret-that-is-at-least-32-characters-long")
+	defer os.Unsetenv("JWT_SECRET")
+
+	// Set empty path prefix
+	os.Setenv("CHATBOX_PATH_PREFIX", "")
+	defer os.Unsetenv("CHATBOX_PATH_PREFIX")
+
+	// Create config with empty path prefix
+	configContent := `
+[chatbox]
+jwt_secret = "test-secret-that-is-at-least-32-characters-long"
+reconnect_timeout = "30s"
+path_prefix = ""
+`
+	tmpFile, err := os.CreateTemp("", "config-*.toml")
+	if err != nil {
+		t.Fatalf("Failed to create temp config file: %v", err)
+	}
+	defer os.Remove(tmpFile.Name())
+
+	if _, err := tmpFile.WriteString(configContent); err != nil {
+		t.Fatalf("Failed to write config file: %v", err)
+	}
+	tmpFile.Close()
+
+	// Set config file path
+	os.Setenv("RMBASE_FILE_CFG", tmpFile.Name())
+	defer os.Unsetenv("RMBASE_FILE_CFG")
+
+	// Load config
+	if err := goconfig.LoadConfig(); err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
+
+	config, err := goconfig.Default()
+	if err != nil {
+		t.Fatalf("Failed to get default config: %v", err)
+	}
+
+	err = Register(router, config, logger, mongo)
+	if err == nil {
+		t.Fatal("Expected error with empty path prefix, got nil")
+	}
+
+	if !strings.Contains(err.Error(), "path prefix") {
+		t.Errorf("Expected error about path prefix, got: %v", err)
+	}
+}
+
+// TestHandleReadyCheck_MongoConnectionFailure tests readiness check when MongoDB ping fails
+// This test attempts to create a scenario where MongoDB initialization succeeds but ping fails
+func TestHandleReadyCheck_MongoPingFailure(t *testing.T) {
+	if os.Getenv("SKIP_MONGO_TESTS") != "" {
+		t.Skip("Skipping MongoDB test")
+	}
+
+	gin.SetMode(gin.TestMode)
+	logger := setupTestLogger(t)
+
+	// Strategy: Connect to a non-existent port to simulate MongoDB being down
+	// Use a very short timeout so the test doesn't hang
+	configContent := `
+[dbs]
+verbose = 1
+slowThreshold = 2
+
+[dbs.chat]
+uri = "mongodb://localhost:27099/test?connectTimeoutMS=100&serverSelectionTimeoutMS=100&socketTimeoutMS=100"
+database = "test"
+collection = "test"
+connectTimeout = "100ms"
+`
+	tmpFile, err := os.CreateTemp("", "config-mongo-fail-*.toml")
+	if err != nil {
+		t.Skipf("Failed to create temp config file: %v", err)
+	}
+	defer os.Remove(tmpFile.Name())
+
+	if _, err := tmpFile.WriteString(configContent); err != nil {
+		t.Skipf("Failed to write config file: %v", err)
+	}
+	tmpFile.Close()
+
+	// Set config file path
+	os.Setenv("RMBASE_FILE_CFG", tmpFile.Name())
+	defer os.Unsetenv("RMBASE_FILE_CFG")
+
+	// Load config
+	if err := goconfig.LoadConfig(); err != nil {
+		t.Skipf("Failed to load config: %v", err)
+	}
+
+	config, err := goconfig.Default()
+	if err != nil {
+		t.Skipf("Failed to get config accessor: %v", err)
+	}
+
+	// Try to initialize MongoDB
+	mongo, err := gomongo.InitMongoDB(logger, config)
+	if err != nil {
+		// If initialization fails, we still test the nil path
+		t.Logf("MongoDB initialization failed: %v", err)
+		router := gin.New()
+		router.GET("/readyz", handleReadyCheck(nil, logger))
+
+		req := httptest.NewRequest("GET", "/readyz", nil)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+
+		if w.Code != constants.StatusServiceUnavailable {
+			t.Errorf("Expected status 503, got %d", w.Code)
+		}
+		return
+	}
+
+	// If initialization succeeded (lazy connection), test the ping failure
+	t.Log("MongoDB initialized, testing ping failure")
+	router := gin.New()
+	router.GET("/readyz", handleReadyCheck(mongo, logger))
+
+	req := httptest.NewRequest("GET", "/readyz", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+
+	// Should return 503 because ping will fail
+	if w.Code != constants.StatusServiceUnavailable {
+		t.Errorf("Expected status 503, got %d", w.Code)
+	}
+
+	var response map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatalf("Failed to parse response: %v", err)
+	}
+
+	if response["status"] != "not ready" {
+		t.Errorf("Expected status 'not ready', got %v", response["status"])
+	}
+
+	// Verify MongoDB check shows failure
+	checks, ok := response["checks"].(map[string]interface{})
+	if !ok {
+		t.Fatal("Expected checks to be a map")
+	}
+
+	mongoCheck, ok := checks["mongodb"].(map[string]interface{})
+	if !ok {
+		t.Fatal("Expected mongodb check to be a map")
+	}
+
+	if mongoCheck["status"] != "not ready" {
+		t.Errorf("Expected mongodb status 'not ready', got %v", mongoCheck["status"])
+	}
+
+	t.Log("Successfully tested MongoDB ping failure path")
 }

@@ -29,10 +29,8 @@ func TestProperty_SessionCreationAndPersistence(t *testing.T) {
 				return true
 			}
 
-			mongoClient, logger, cleanup := setupTestMongoDB(t)
+			service, cleanup := setupTestStorage(t, nil)
 			defer cleanup()
-
-			service := NewStorageService(mongoClient, "chatbox", "prop_sessions", logger, nil)
 
 			// Create session
 			now := time.Now()
@@ -116,10 +114,8 @@ func TestProperty_MessagePersistence(t *testing.T) {
 				return true
 			}
 
-			mongoClient, logger, cleanup := setupTestMongoDB(t)
+			service, cleanup := setupTestStorage(t, nil)
 			defer cleanup()
-
-			service := NewStorageService(mongoClient, "chatbox", "prop_sessions", logger, nil)
 
 			// Create session first
 			now := time.Now()
@@ -224,10 +220,8 @@ func TestProperty_ConversationHistoryRetrieval(t *testing.T) {
 				return true
 			}
 
-			mongoClient, logger, cleanup := setupTestMongoDB(t)
+			service, cleanup := setupTestStorage(t, nil)
 			defer cleanup()
-
-			service := NewStorageService(mongoClient, "chatbox", "prop_sessions", logger, nil)
 
 			// Create session
 			now := time.Now()
@@ -309,10 +303,8 @@ func TestProperty_SessionLifecycleTracking(t *testing.T) {
 				return true
 			}
 
-			mongoClient, logger, cleanup := setupTestMongoDB(t)
+			service, cleanup := setupTestStorage(t, nil)
 			defer cleanup()
-
-			service := NewStorageService(mongoClient, "chatbox", "prop_sessions", logger, nil)
 
 			// Create session
 			startTime := time.Now()
@@ -408,12 +400,10 @@ func TestProperty_DataEncryptionAtRest(t *testing.T) {
 				return true
 			}
 
-			mongoClient, logger, cleanup := setupTestMongoDB(t)
-			defer cleanup()
-
 			// Create 32-byte encryption key for AES-256
 			encryptionKey := []byte("12345678901234567890123456789012")
-			service := NewStorageService(mongoClient, "chatbox", "prop_sessions", logger, encryptionKey)
+			service, cleanup := setupTestStorage(t, encryptionKey)
+			defer cleanup()
 
 			// Create session
 			now := time.Now()
@@ -512,10 +502,8 @@ func TestProperty_SessionListOrdering(t *testing.T) {
 				return true
 			}
 
-			mongoClient, logger, cleanup := setupTestMongoDB(t)
+			service, cleanup := setupTestStorage(t, nil)
 			defer cleanup()
-
-			service := NewStorageService(mongoClient, "chatbox", "prop_sessions", logger, nil)
 
 			// Create multiple sessions with different start times
 			now := time.Now()
@@ -583,7 +571,6 @@ func TestProperty_SessionListOrdering(t *testing.T) {
 	properties.TestingRun(t, gopter.ConsoleReporter(false))
 }
 
-
 // Property 4: Storage Operations Maintain Data Integrity
 // **Validates: Requirements 2.2, 8.4**
 //
@@ -606,10 +593,8 @@ func TestProperty_StorageDataIntegrity(t *testing.T) {
 				totalTokens = -totalTokens
 			}
 
-			mongoClient, logger, cleanup := setupTestMongoDB(t)
+			service, cleanup := setupTestStorage(t, nil)
 			defer cleanup()
-
-			service := NewStorageService(mongoClient, "chatbox", "prop_integrity", logger, nil)
 
 			// Create session with various fields
 			now := time.Now()
@@ -698,10 +683,10 @@ func TestProperty_StorageDataIntegrity(t *testing.T) {
 
 			return true
 		},
-		gen.Identifier(),  // sessionID
-		gen.Identifier(),  // userID
-		gen.AlphaString(), // name
-		gen.AlphaString(), // modelID
+		gen.Identifier(),       // sessionID
+		gen.Identifier(),       // userID
+		gen.AlphaString(),      // name
+		gen.AlphaString(),      // modelID
 		gen.IntRange(0, 10000), // totalTokens
 	))
 
@@ -960,10 +945,8 @@ func TestProperty_ConcurrentOperations(t *testing.T) {
 				return true
 			}
 
-			mongoClient, logger, cleanup := setupTestMongoDB(t)
+			service, cleanup := setupTestStorage(t, nil)
 			defer cleanup()
-
-			service := NewStorageService(mongoClient, "chatbox", "prop_concurrent", logger, nil)
 
 			// Create initial session
 			sessionID := userID + "-concurrent-session"
@@ -1055,10 +1038,8 @@ func TestProperty_QueryOperations(t *testing.T) {
 				return true
 			}
 
-			mongoClient, logger, cleanup := setupTestMongoDB(t)
+			service, cleanup := setupTestStorage(t, nil)
 			defer cleanup()
-
-			service := NewStorageService(mongoClient, "chatbox", "prop_query", logger, nil)
 
 			// Create multiple sessions
 			now := time.Now()

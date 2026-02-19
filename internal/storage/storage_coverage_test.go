@@ -17,10 +17,8 @@ import (
 // TestStorageOperations_Coverage tests all public methods in StorageService
 // to ensure comprehensive coverage of storage operations
 func TestStorageOperations_Coverage(t *testing.T) {
-	mongoClient, logger, cleanup := setupTestMongoDB(t)
+	service, cleanup := setupTestStorage(t, nil)
 	defer cleanup()
-
-	service := NewStorageService(mongoClient, "chatbox", "coverage_sessions", logger, nil)
 
 	// Test EnsureIndexes
 	t.Run("EnsureIndexes", func(t *testing.T) {
@@ -186,10 +184,8 @@ func TestStorageOperations_Coverage(t *testing.T) {
 
 // TestStorageOperations_ErrorHandling tests error handling for MongoDB operations
 func TestStorageOperations_ErrorHandling(t *testing.T) {
-	mongoClient, logger, cleanup := setupTestMongoDB(t)
+	service, cleanup := setupTestStorage(t, nil)
 	defer cleanup()
-
-	service := NewStorageService(mongoClient, "chatbox", "coverage_sessions", logger, nil)
 
 	// Test context timeout scenarios
 	t.Run("ContextTimeout_GetSession", func(t *testing.T) {
@@ -247,10 +243,8 @@ func TestStorageOperations_ErrorHandling(t *testing.T) {
 
 // TestStorageOperations_EmptyResults tests handling of empty result sets
 func TestStorageOperations_EmptyResults(t *testing.T) {
-	mongoClient, logger, cleanup := setupTestMongoDB(t)
+	service, cleanup := setupTestStorage(t, nil)
 	defer cleanup()
-
-	service := NewStorageService(mongoClient, "chatbox", "coverage_empty", logger, nil)
 
 	t.Run("ListUserSessions_NoSessions", func(t *testing.T) {
 		sessions, err := service.ListUserSessions("user-no-sessions", 10)
@@ -277,10 +271,8 @@ func TestStorageOperations_EmptyResults(t *testing.T) {
 
 // TestStorageOperations_InvalidSessionIDs tests handling of invalid session IDs
 func TestStorageOperations_InvalidSessionIDs(t *testing.T) {
-	mongoClient, logger, cleanup := setupTestMongoDB(t)
+	service, cleanup := setupTestStorage(t, nil)
 	defer cleanup()
-
-	service := NewStorageService(mongoClient, "chatbox", "coverage_invalid", logger, nil)
 
 	t.Run("GetSession_EmptyID", func(t *testing.T) {
 		_, err := service.GetSession("")
@@ -388,10 +380,8 @@ func TestContainsAny_Coverage(t *testing.T) {
 
 // TestSessionListOptions_Filtering tests filtering options for session listing
 func TestSessionListOptions_Filtering(t *testing.T) {
-	mongoClient, logger, cleanup := setupTestMongoDB(t)
+	service, cleanup := setupTestStorage(t, nil)
 	defer cleanup()
-
-	service := NewStorageService(mongoClient, "chatbox", "coverage_filter", logger, nil)
 
 	// Create test sessions with different attributes
 	now := time.Now()
@@ -501,10 +491,8 @@ func TestSessionListOptions_Filtering(t *testing.T) {
 
 // TestSessionListOptions_Sorting tests sorting options for session listing
 func TestSessionListOptions_Sorting(t *testing.T) {
-	mongoClient, logger, cleanup := setupTestMongoDB(t)
+	service, cleanup := setupTestStorage(t, nil)
 	defer cleanup()
-
-	service := NewStorageService(mongoClient, "chatbox", "coverage_sort", logger, nil)
 
 	// Create test sessions with different attributes
 	now := time.Now()
@@ -595,10 +583,8 @@ func TestSessionListOptions_Sorting(t *testing.T) {
 
 // TestSessionListOptions_Pagination tests pagination options
 func TestSessionListOptions_Pagination(t *testing.T) {
-	mongoClient, logger, cleanup := setupTestMongoDB(t)
+	service, cleanup := setupTestStorage(t, nil)
 	defer cleanup()
-
-	service := NewStorageService(mongoClient, "chatbox", "coverage_page", logger, nil)
 
 	// Create multiple test sessions
 	now := time.Now()
@@ -654,7 +640,6 @@ func TestSessionListOptions_Pagination(t *testing.T) {
 		assert.NotNil(t, results)
 	})
 }
-
 
 // TestEncryption_Coverage tests encryption functionality with various scenarios
 func TestEncryption_Coverage(t *testing.T) {
@@ -806,11 +791,9 @@ func TestEncryption_Coverage(t *testing.T) {
 
 // TestEncryption_Integration tests encryption with MongoDB storage
 func TestEncryption_Integration(t *testing.T) {
-	mongoClient, logger, cleanup := setupTestMongoDB(t)
-	defer cleanup()
-
 	encryptionKey := []byte("12345678901234567890123456789012")
-	service := NewStorageService(mongoClient, "chatbox", "encryption_test", logger, encryptionKey)
+	service, cleanup := setupTestStorage(t, encryptionKey)
+	defer cleanup()
 
 	t.Run("MessageEncryptionInStorage", func(t *testing.T) {
 		// Create session
@@ -894,7 +877,6 @@ func TestEncryption_Integration(t *testing.T) {
 		}
 	})
 }
-
 
 // TestRetryLogic_Coverage tests retry logic with various scenarios
 func TestRetryLogic_Coverage(t *testing.T) {
@@ -1104,13 +1086,10 @@ func TestRetryLogic_Coverage(t *testing.T) {
 	})
 }
 
-
 // TestMongoDBIntegration_Coverage tests MongoDB integration functionality
 func TestMongoDBIntegration_Coverage(t *testing.T) {
-	mongoClient, logger, cleanup := setupTestMongoDB(t)
+	service, cleanup := setupTestStorage(t, nil)
 	defer cleanup()
-
-	service := NewStorageService(mongoClient, "chatbox", "mongo_integration", logger, nil)
 
 	// Test index creation verification
 	t.Run("IndexCreation", func(t *testing.T) {

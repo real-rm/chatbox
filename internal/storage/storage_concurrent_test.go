@@ -14,10 +14,8 @@ import (
 // TestConcurrentSessionCreation tests creating multiple sessions concurrently
 // Validates: Requirements 6.3
 func TestConcurrentSessionCreation(t *testing.T) {
-	mongoClient, logger, cleanup := setupTestMongoDB(t)
+	service, cleanup := setupTestStorage(t, nil)
 	defer cleanup()
-
-	service := NewStorageService(mongoClient, "chatbox", "sessions", logger, nil)
 
 	// Number of concurrent operations
 	numSessions := 50
@@ -85,10 +83,8 @@ func TestConcurrentSessionCreation(t *testing.T) {
 // TestConcurrentMessageAddition tests adding messages to the same session concurrently
 // Validates: Requirements 6.3
 func TestConcurrentMessageAddition(t *testing.T) {
-	mongoClient, logger, cleanup := setupTestMongoDB(t)
+	service, cleanup := setupTestStorage(t, nil)
 	defer cleanup()
-
-	service := NewStorageService(mongoClient, "chatbox", "sessions", logger, nil)
 
 	// Create a single session
 	now := time.Now()
@@ -163,10 +159,8 @@ func TestConcurrentMessageAddition(t *testing.T) {
 // TestConcurrentSessionUpdates tests updating the same session concurrently
 // Validates: Requirements 6.3
 func TestConcurrentSessionUpdates(t *testing.T) {
-	mongoClient, logger, cleanup := setupTestMongoDB(t)
+	service, cleanup := setupTestStorage(t, nil)
 	defer cleanup()
-
-	service := NewStorageService(mongoClient, "chatbox", "sessions", logger, nil)
 
 	// Create a session
 	now := time.Now()
@@ -246,10 +240,8 @@ func TestConcurrentSessionUpdates(t *testing.T) {
 // TestConcurrentMixedOperations tests a mix of create, read, update operations concurrently
 // Validates: Requirements 6.3
 func TestConcurrentMixedOperations(t *testing.T) {
-	mongoClient, logger, cleanup := setupTestMongoDB(t)
+	service, cleanup := setupTestStorage(t, nil)
 	defer cleanup()
-
-	service := NewStorageService(mongoClient, "chatbox", "sessions", logger, nil)
 
 	now := time.Now()
 
@@ -382,12 +374,10 @@ func TestConcurrentMixedOperations(t *testing.T) {
 // TestConcurrentSessionCreationWithEncryption tests concurrent session creation with encryption enabled
 // Validates: Requirements 6.3
 func TestConcurrentSessionCreationWithEncryption(t *testing.T) {
-	mongoClient, logger, cleanup := setupTestMongoDB(t)
-	defer cleanup()
-
 	// Create 32-byte encryption key for AES-256
 	encryptionKey := []byte("12345678901234567890123456789012")
-	service := NewStorageService(mongoClient, "chatbox", "sessions", logger, encryptionKey)
+	service, cleanup := setupTestStorage(t, encryptionKey)
+	defer cleanup()
 
 	// Number of concurrent operations
 	numSessions := 30
@@ -466,10 +456,8 @@ func TestConcurrentSessionCreationWithEncryption(t *testing.T) {
 // TestConcurrentListOperations tests concurrent list operations while sessions are being modified
 // Validates: Requirements 6.3
 func TestConcurrentListOperations(t *testing.T) {
-	mongoClient, logger, cleanup := setupTestMongoDB(t)
+	service, cleanup := setupTestStorage(t, nil)
 	defer cleanup()
-
-	service := NewStorageService(mongoClient, "chatbox", "sessions", logger, nil)
 
 	now := time.Now()
 

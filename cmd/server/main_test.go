@@ -1211,7 +1211,7 @@ func clearEnvVars() {
 	for _, envVar := range envVars {
 		os.Unsetenv(envVar)
 	}
-	
+
 	// Reset goconfig state to avoid interference between tests
 	goconfig.ResetConfig()
 }

@@ -232,7 +232,7 @@ standardOutput = true
 			// Serialize access to goconfig to avoid parallel test interference
 			goconfigMutex.Lock()
 			defer goconfigMutex.Unlock()
-			
+
 			goconfig.ResetConfig()
 			clearEnvVars()
 			defer func() {

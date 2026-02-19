@@ -165,10 +165,8 @@ func TestSortByMessageCount_LargeDataset_EdgeCases(t *testing.T) {
 
 // TestListAllSessionsWithOptions_LargeDataset_Sorting tests end-to-end sorting with MongoDB
 func TestListAllSessionsWithOptions_LargeDataset_Sorting(t *testing.T) {
-	mongoClient, logger, cleanup := setupTestMongoDB(t)
+	service, cleanup := setupTestStorage(t, nil)
 	defer cleanup()
-
-	service := NewStorageService(mongoClient, "test_db", "test_sessions_sorting", logger, nil)
 	require.NotNil(t, service)
 
 	now := time.Now()

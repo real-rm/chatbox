@@ -310,12 +310,29 @@ func (s *StorageService) UpdateSession(sess *session.Session) error {
 	// Convert session to document
 	doc := s.sessionToDocument(sess)
 
+	// Convert document to bson.M for proper $set operation
+	// We need to marshal the struct to BSON and then unmarshal to bson.M
+	// to ensure proper field mapping with BSON tags
+	docBytes, err := bson.Marshal(doc)
+	if err != nil {
+		return fmt.Errorf("failed to marshal session document: %w", err)
+	}
+
+	var updateFields bson.M
+	err = bson.Unmarshal(docBytes, &updateFields)
+	if err != nil {
+		return fmt.Errorf("failed to unmarshal session document: %w", err)
+	}
+
+	// Remove _id field from update as it cannot be changed
+	delete(updateFields, "_id")
+
 	// Update document with retry logic for transient errors
 	filter := bson.M{constants.MongoFieldID: sess.ID}
-	update := bson.M{"$set": doc}
+	update := bson.M{"$set": updateFields}
 
 	var result *mongo.UpdateResult
-	err := s.retryOperation(ctx, "UpdateSession", func() error {
+	err = s.retryOperation(ctx, "UpdateSession", func() error {
 		var err error
 		result, err = s.collection.UpdateOne(ctx, filter, update)
 		return err
@@ -611,7 +628,7 @@ func (s *StorageService) encrypt(plaintext string) (string, error) {
 	if keyLen != 0 && keyLen != 16 && keyLen != 24 && keyLen != 32 {
 		return "", fmt.Errorf("invalid encryption key size: %d bytes (must be 16, 24, or 32)", keyLen)
 	}
-	
+
 	// If no key is set (0 bytes), treat as "no encryption"
 	if keyLen == 0 {
 		return plaintext, nil

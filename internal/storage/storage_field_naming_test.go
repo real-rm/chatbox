@@ -15,10 +15,8 @@ import (
 // TestMongoDBFieldNaming_CreateAndRead tests that sessions are stored with camelCase field names
 // and can be read back correctly
 func TestMongoDBFieldNaming_CreateAndRead(t *testing.T) {
-	mongoClient, logger, cleanup := setupTestMongoDB(t)
+	service, cleanup := setupTestStorage(t, nil)
 	defer cleanup()
-
-	service := NewStorageService(mongoClient, "chatbox", "field_naming_test", logger, nil)
 
 	now := time.Now()
 	sess := &session.Session{
@@ -89,10 +87,8 @@ func TestMongoDBFieldNaming_CreateAndRead(t *testing.T) {
 
 // TestMongoDBFieldNaming_QueryByUserID tests querying by uid field
 func TestMongoDBFieldNaming_QueryByUserID(t *testing.T) {
-	mongoClient, logger, cleanup := setupTestMongoDB(t)
+	service, cleanup := setupTestStorage(t, nil)
 	defer cleanup()
-
-	service := NewStorageService(mongoClient, "chatbox", "field_naming_query", logger, nil)
 
 	// Create sessions for different users
 	now := time.Now()
@@ -122,10 +118,8 @@ func TestMongoDBFieldNaming_QueryByUserID(t *testing.T) {
 
 // TestMongoDBFieldNaming_QueryByStartTime tests querying by ts field
 func TestMongoDBFieldNaming_QueryByStartTime(t *testing.T) {
-	mongoClient, logger, cleanup := setupTestMongoDB(t)
+	service, cleanup := setupTestStorage(t, nil)
 	defer cleanup()
-
-	service := NewStorageService(mongoClient, "chatbox", "field_naming_time", logger, nil)
 
 	now := time.Now()
 
@@ -175,10 +169,8 @@ func TestMongoDBFieldNaming_QueryByStartTime(t *testing.T) {
 
 // TestMongoDBFieldNaming_QueryByAdminAssisted tests querying by adminAssisted field
 func TestMongoDBFieldNaming_QueryByAdminAssisted(t *testing.T) {
-	mongoClient, logger, cleanup := setupTestMongoDB(t)
+	service, cleanup := setupTestStorage(t, nil)
 	defer cleanup()
-
-	service := NewStorageService(mongoClient, "chatbox", "field_naming_admin", logger, nil)
 
 	now := time.Now()
 
@@ -222,10 +214,8 @@ func TestMongoDBFieldNaming_QueryByAdminAssisted(t *testing.T) {
 
 // TestMongoDBFieldNaming_QueryByActiveStatus tests querying by endTs field
 func TestMongoDBFieldNaming_QueryByActiveStatus(t *testing.T) {
-	mongoClient, logger, cleanup := setupTestMongoDB(t)
+	service, cleanup := setupTestStorage(t, nil)
 	defer cleanup()
-
-	service := NewStorageService(mongoClient, "chatbox", "field_naming_active", logger, nil)
 
 	now := time.Now()
 	endTime := now.Add(-1 * time.Hour)
@@ -279,10 +269,8 @@ func TestMongoDBFieldNaming_QueryByActiveStatus(t *testing.T) {
 
 // TestMongoDBFieldNaming_SortByStartTime tests sorting by ts field
 func TestMongoDBFieldNaming_SortByStartTime(t *testing.T) {
-	mongoClient, logger, cleanup := setupTestMongoDB(t)
+	service, cleanup := setupTestStorage(t, nil)
 	defer cleanup()
-
-	service := NewStorageService(mongoClient, "chatbox", "field_naming_sort_ts", logger, nil)
 
 	now := time.Now()
 
@@ -341,10 +329,8 @@ func TestMongoDBFieldNaming_SortByStartTime(t *testing.T) {
 
 // TestMongoDBFieldNaming_SortByTotalTokens tests sorting by totalTokens field
 func TestMongoDBFieldNaming_SortByTotalTokens(t *testing.T) {
-	mongoClient, logger, cleanup := setupTestMongoDB(t)
+	service, cleanup := setupTestStorage(t, nil)
 	defer cleanup()
-
-	service := NewStorageService(mongoClient, "chatbox", "field_naming_sort_tokens", logger, nil)
 
 	now := time.Now()
 
@@ -400,10 +386,8 @@ func TestMongoDBFieldNaming_SortByTotalTokens(t *testing.T) {
 
 // TestMongoDBFieldNaming_SortByUserID tests sorting by uid field
 func TestMongoDBFieldNaming_SortByUserID(t *testing.T) {
-	mongoClient, logger, cleanup := setupTestMongoDB(t)
+	service, cleanup := setupTestStorage(t, nil)
 	defer cleanup()
-
-	service := NewStorageService(mongoClient, "chatbox", "field_naming_sort_uid", logger, nil)
 
 	now := time.Now()
 
@@ -453,10 +437,8 @@ func TestMongoDBFieldNaming_SortByUserID(t *testing.T) {
 
 // TestMongoDBFieldNaming_UpdateSession tests updating with new field names
 func TestMongoDBFieldNaming_UpdateSession(t *testing.T) {
-	mongoClient, logger, cleanup := setupTestMongoDB(t)
+	service, cleanup := setupTestStorage(t, nil)
 	defer cleanup()
-
-	service := NewStorageService(mongoClient, "chatbox", "field_naming_update", logger, nil)
 
 	now := time.Now()
 
@@ -501,10 +483,8 @@ func TestMongoDBFieldNaming_UpdateSession(t *testing.T) {
 
 // TestMongoDBFieldNaming_AddMessage tests adding messages with new field names
 func TestMongoDBFieldNaming_AddMessage(t *testing.T) {
-	mongoClient, logger, cleanup := setupTestMongoDB(t)
+	service, cleanup := setupTestStorage(t, nil)
 	defer cleanup()
-
-	service := NewStorageService(mongoClient, "chatbox", "field_naming_msg", logger, nil)
 
 	now := time.Now()
 
@@ -559,10 +539,8 @@ func TestMongoDBFieldNaming_AddMessage(t *testing.T) {
 
 // TestMongoDBFieldNaming_EndSession tests ending session with endTs field
 func TestMongoDBFieldNaming_EndSession(t *testing.T) {
-	mongoClient, logger, cleanup := setupTestMongoDB(t)
+	service, cleanup := setupTestStorage(t, nil)
 	defer cleanup()
-
-	service := NewStorageService(mongoClient, "chatbox", "field_naming_end", logger, nil)
 
 	now := time.Now()
 
@@ -599,10 +577,8 @@ func TestMongoDBFieldNaming_EndSession(t *testing.T) {
 
 // TestMongoDBFieldNaming_CombinedOperations tests a realistic workflow with all operations
 func TestMongoDBFieldNaming_CombinedOperations(t *testing.T) {
-	mongoClient, logger, cleanup := setupTestMongoDB(t)
+	service, cleanup := setupTestStorage(t, nil)
 	defer cleanup()
-
-	service := NewStorageService(mongoClient, "chatbox", "field_naming_combined", logger, nil)
 
 	now := time.Now()
 

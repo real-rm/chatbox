@@ -245,11 +245,11 @@ standardOutput = true
 			configPath := filepath.Join(tmpDir, "config.toml")
 
 			malformedPatterns := []string{
-				"[server\nport = 8080",                    // Unclosed section
-				"[server]\nport = ",                       // Missing value
-				"[server]\nport = \"not a number\"",       // Wrong type
-				"invalid syntax here",                     // Invalid syntax
-				"[server]\n\x00invalid",                   // Null byte
+				"[server\nport = 8080",              // Unclosed section
+				"[server]\nport = ",                 // Missing value
+				"[server]\nport = \"not a number\"", // Wrong type
+				"invalid syntax here",               // Invalid syntax
+				"[server]\n\x00invalid",             // Null byte
 			}
 
 			// Ensure positive index

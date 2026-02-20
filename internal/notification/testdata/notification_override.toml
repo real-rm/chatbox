@@ -1,0 +1,7 @@
+# Override config: replaces TOML-array notification values with comma-separated strings.
+# Load as: ../../config.toml,testdata/notification_override.toml
+# This exercises the string-parsing paths in getAdminEmails / getAdminPhones.
+
+[notification]
+adminEmails = "primary@example.com,secondary@example.com"
+adminPhones = "+1111111111,+2222222222"

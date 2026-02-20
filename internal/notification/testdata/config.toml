@@ -1,0 +1,19 @@
+# Minimal test config: only mock mail engine + notification values as plain strings.
+# Using TOML arrays here would make ConfigString() fail, so we use comma-separated strings
+# to exercise the parsing paths in getAdminEmails / getAdminPhones.
+
+[mail]
+defaultFromName = "Test Support"
+replyToEmail = "test@example.com"
+adminEmail = "fallback@example.com"
+
+[[mail.engines.mock]]
+name = "mock"
+verbose = false
+
+# No [sms] section → sms.accountSID and sms.authToken look-ups will error,
+# which exercises the "SMS not configured" warn path in NewNotificationService.
+
+[notification]
+adminEmails = "primary@example.com,secondary@example.com"
+adminPhones = "+1111111111,+2222222222"

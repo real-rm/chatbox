@@ -241,10 +241,10 @@ func TestExtractRoles(t *testing.T) {
 			wantErr:   false,
 		},
 		{
-			name:      "[]interface{} with non-string element",
-			input:     []interface{}{"user", 42},
-			wantErr:   true,
-			errMsg:    "non-string value at index 1",
+			name:    "[]interface{} with non-string element",
+			input:   []interface{}{"user", 42},
+			wantErr: true,
+			errMsg:  "non-string value at index 1",
 		},
 		{
 			name:      "[]string — direct string slice (less common)",

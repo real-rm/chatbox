@@ -586,16 +586,37 @@ func (c *Connection) readPump(h *Handler) {
 		// CRITICAL FIX C2: Sanitize incoming message to prevent XSS
 		msg.Sanitize()
 
-		// No else needed: optional operation (set default value)
-		// Set timestamp if not provided
+		// Set defaults before validation (clients may omit these optional fields)
 		if msg.Timestamp.IsZero() {
 			msg.Timestamp = time.Now()
 		}
-
-		// No else needed: optional operation (set default value)
-		// Set sender if not provided
 		if msg.Sender == "" {
 			msg.Sender = message.SenderUser
+		}
+
+		// Validate message fields (type, required fields, length constraints)
+		if err := msg.Validate(); err != nil {
+			h.logger.Warn("Message validation failed",
+				"user_id", c.UserID,
+				"connection_id", c.ConnectionID,
+				"error", err)
+
+			metrics.MessageErrors.Inc()
+
+			errorMsg := &message.Message{
+				Type:   message.TypeError,
+				Sender: message.SenderAI,
+				Error: &message.ErrorInfo{
+					Code:        string(chaterrors.ErrCodeInvalidFormat),
+					Message:     "Message validation failed",
+					Recoverable: true,
+				},
+				Timestamp: time.Now(),
+			}
+			if errorBytes, err := json.Marshal(errorMsg); err == nil {
+				c.send <- errorBytes
+			}
+			continue
 		}
 
 		h.logger.Debug("Message received",

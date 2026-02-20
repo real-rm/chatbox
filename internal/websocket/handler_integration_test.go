@@ -675,10 +675,8 @@ func TestEndToEndMessageFlow(t *testing.T) {
 					Timestamp: time.Now(),
 				},
 			},
-			expectedRouted: 1,
-			validateFunc: func(t *testing.T, router *mockRouter) {
-				assert.Equal(t, "", router.RoutedMessages()[0].Content)
-			},
+			expectedRouted: 0,
+			validateFunc:   nil,
 		},
 	}
 

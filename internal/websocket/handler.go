@@ -492,6 +492,27 @@ func (c *Connection) ReceiveForTest() <-chan []byte {
 
 // readPump reads messages from the WebSocket connection
 // It handles:
+// sendErrorResponse sends a structured error message to the client via the send channel.
+// Uses a select/default guard to avoid blocking if the channel is full.
+func (c *Connection) sendErrorResponse(code chaterrors.ErrorCode, msg string) {
+	errorMsg := &message.Message{
+		Type:   message.TypeError,
+		Sender: message.SenderAI,
+		Error: &message.ErrorInfo{
+			Code:        string(code),
+			Message:     msg,
+			Recoverable: true,
+		},
+		Timestamp: time.Now(),
+	}
+	if errorBytes, err := json.Marshal(errorMsg); err == nil {
+		select {
+		case c.send <- errorBytes:
+		default:
+		}
+	}
+}
+
 // - Setting read deadline based on pongWait
 // - Configuring pong handler to reset read deadline
 // - Reading messages from the client
@@ -567,19 +588,7 @@ func (c *Connection) readPump(h *Handler) {
 			metrics.MessageErrors.Inc()
 
 			// Send error response to client
-			errorMsg := &message.Message{
-				Type:   message.TypeError,
-				Sender: message.SenderAI,
-				Error: &message.ErrorInfo{
-					Code:        string(chaterrors.ErrCodeInvalidFormat),
-					Message:     "Invalid message format",
-					Recoverable: true,
-				},
-				Timestamp: time.Now(),
-			}
-			if errorBytes, err := json.Marshal(errorMsg); err == nil {
-				c.send <- errorBytes
-			}
+			c.sendErrorResponse(chaterrors.ErrCodeInvalidFormat, "Invalid message format")
 			continue
 		}
 
@@ -603,19 +612,7 @@ func (c *Connection) readPump(h *Handler) {
 
 			metrics.MessageErrors.Inc()
 
-			errorMsg := &message.Message{
-				Type:   message.TypeError,
-				Sender: message.SenderAI,
-				Error: &message.ErrorInfo{
-					Code:        string(chaterrors.ErrCodeInvalidFormat),
-					Message:     "Message validation failed",
-					Recoverable: true,
-				},
-				Timestamp: time.Now(),
-			}
-			if errorBytes, err := json.Marshal(errorMsg); err == nil {
-				c.send <- errorBytes
-			}
+			c.sendErrorResponse(chaterrors.ErrCodeInvalidFormat, "Message validation failed")
 			continue
 		}
 

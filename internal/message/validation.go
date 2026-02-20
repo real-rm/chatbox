@@ -230,7 +230,8 @@ func isValidMessageType(t MessageType) bool {
 	switch t {
 	case TypeUserMessage, TypeAIResponse, TypeFileUpload, TypeVoiceMessage,
 		TypeError, TypeConnectionStatus, TypeTypingIndicator, TypeHelpRequest,
-		TypeAdminJoin, TypeAdminLeave, TypeModelSelect, TypeLoading:
+		TypeAdminJoin, TypeAdminLeave, TypeModelSelect, TypeLoading,
+		TypeNotification:
 		return true
 	default:
 		return false
@@ -240,7 +241,7 @@ func isValidMessageType(t MessageType) bool {
 // isValidSenderType checks if the sender type is valid
 func isValidSenderType(s SenderType) bool {
 	switch s {
-	case SenderUser, SenderAI, SenderAdmin:
+	case SenderUser, SenderAI, SenderAdmin, SenderSystem:
 		return true
 	default:
 		return false

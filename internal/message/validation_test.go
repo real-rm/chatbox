@@ -743,6 +743,7 @@ func TestIsValidMessageType(t *testing.T) {
 		TypeUserMessage, TypeAIResponse, TypeFileUpload, TypeVoiceMessage,
 		TypeError, TypeConnectionStatus, TypeTypingIndicator, TypeHelpRequest,
 		TypeAdminJoin, TypeAdminLeave, TypeModelSelect, TypeLoading,
+		TypeNotification,
 	}
 
 	for _, msgType := range validTypes {
@@ -762,7 +763,7 @@ func TestIsValidMessageType(t *testing.T) {
 
 // TestIsValidSenderType tests sender type validation
 func TestIsValidSenderType(t *testing.T) {
-	validSenders := []SenderType{SenderUser, SenderAI, SenderAdmin}
+	validSenders := []SenderType{SenderUser, SenderAI, SenderAdmin, SenderSystem}
 
 	for _, sender := range validSenders {
 		t.Run(string(sender), func(t *testing.T) {
@@ -771,7 +772,7 @@ func TestIsValidSenderType(t *testing.T) {
 	}
 
 	// Test invalid senders
-	invalidSenders := []SenderType{"invalid", "system", ""}
+	invalidSenders := []SenderType{"invalid", ""}
 	for _, sender := range invalidSenders {
 		t.Run(string(sender), func(t *testing.T) {
 			assert.False(t, isValidSenderType(sender))

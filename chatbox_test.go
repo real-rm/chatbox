@@ -94,8 +94,10 @@ func TestAllowedOriginsConfiguration(t *testing.T) {
 
 	// Set config file path for testing
 	os.Setenv("RMBASE_FILE_CFG", "config.toml")
+	t.Cleanup(func() { goconfig.ResetConfig() })
 
-	// Load config
+	// Load config (reset first to override any previously loaded config)
+	goconfig.ResetConfig()
 	err := goconfig.LoadConfig()
 	if err != nil {
 		t.Skipf("Failed to load config: %v", err)
@@ -222,8 +224,10 @@ func TestReadyCheckWithMongoDB(t *testing.T) {
 
 		// Set config file path for testing
 		os.Setenv("RMBASE_FILE_CFG", "config.toml")
+		t.Cleanup(func() { goconfig.ResetConfig() })
 
-		// Load config
+		// Load config (reset first to override any previously loaded config)
+		goconfig.ResetConfig()
 		err := goconfig.LoadConfig()
 		if err != nil {
 			t.Skipf("Failed to load config: %v", err)
@@ -285,8 +289,10 @@ func TestReadyCheckWithMongoDB(t *testing.T) {
 
 		// Set config file path for testing
 		os.Setenv("RMBASE_FILE_CFG", "config.toml")
+		t.Cleanup(func() { goconfig.ResetConfig() })
 
-		// Load config
+		// Load config (reset first to override any previously loaded config)
+		goconfig.ResetConfig()
 		err := goconfig.LoadConfig()
 		if err != nil {
 			t.Skipf("Failed to load config: %v", err)
@@ -335,8 +341,10 @@ func TestEncryptionKeyConfiguration(t *testing.T) {
 
 	// Set config file path for testing
 	os.Setenv("RMBASE_FILE_CFG", "config.toml")
+	t.Cleanup(func() { goconfig.ResetConfig() })
 
-	// Load config
+	// Load config (reset first to override any previously loaded config)
+	goconfig.ResetConfig()
 	err := goconfig.LoadConfig()
 	if err != nil {
 		t.Skipf("Failed to load config: %v", err)
@@ -405,8 +413,10 @@ func TestMaxMessageSizeConfiguration(t *testing.T) {
 
 	// Set config file path for testing
 	os.Setenv("RMBASE_FILE_CFG", "config.toml")
+	t.Cleanup(func() { goconfig.ResetConfig() })
 
-	// Load config
+	// Load config (reset first to override any previously loaded config)
+	goconfig.ResetConfig()
 	err := goconfig.LoadConfig()
 	if err != nil {
 		t.Skipf("Failed to load config: %v", err)

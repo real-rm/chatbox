@@ -27,10 +27,19 @@ import (
 	"github.com/real-rm/chatbox/internal/util"
 	"github.com/real-rm/chatbox/internal/websocket"
 	"github.com/real-rm/goconfig"
+	levelStore "github.com/real-rm/golevelstore"
 	"github.com/real-rm/golog"
 	"github.com/real-rm/gomongo"
 	"github.com/real-rm/goupload"
 )
+
+func init() {
+	// Register "CHAT" as a valid board type for golevelstore's file storage system.
+	// golevelstore only ships with predefined board types; we extend it here for the
+	// chatbox application. 128 L2 directories provides sufficient distribution for
+	// chat file uploads.
+	levelStore.SOURCE_L2_SIZE["CHAT"] = 128
+}
 
 var (
 	// Global references for graceful shutdown
@@ -92,6 +101,27 @@ func Register(r *gin.Engine, config *goconfig.ConfigAccessor, logger *golog.Logg
 	// No else needed: early return pattern (guard clause)
 	if err != nil {
 		return fmt.Errorf("invalid reconnect timeout format: %w", err)
+	}
+
+	// Load and validate HTTP path prefix early to fail fast on configuration errors.
+	// Priority: Environment variable > Config file > Default ("/chatbox")
+	pathPrefix := os.Getenv("CHATBOX_PATH_PREFIX")
+	if pathPrefix == "" {
+		// Fall back to config file
+		pathPrefix, err = config.ConfigStringWithDefault("chatbox.path_prefix", constants.DefaultPathPrefix)
+		// No else needed: early return pattern (guard clause)
+		if err != nil {
+			return fmt.Errorf("failed to get path prefix: %w", err)
+		}
+	}
+	// Validate path prefix format
+	// No else needed: early return pattern (guard clause)
+	if pathPrefix == "" {
+		return fmt.Errorf("path prefix cannot be empty")
+	}
+	// No else needed: early return pattern (guard clause)
+	if !strings.HasPrefix(pathPrefix, "/") {
+		return fmt.Errorf("path prefix must start with '/' (got: %s)", pathPrefix)
 	}
 
 	// Initialize goupload for file uploads
@@ -299,28 +329,6 @@ func Register(r *gin.Engine, config *goconfig.ConfigAccessor, logger *golog.Logg
 			"allow_credentials", true)
 	} else {
 		chatboxLogger.Warn("No CORS origins configured, CORS middleware not enabled")
-	}
-
-	// Load HTTP path prefix configuration
-	// Priority: Environment variable > Config file > Default ("/chatbox")
-	pathPrefix := os.Getenv("CHATBOX_PATH_PREFIX")
-	if pathPrefix == "" {
-		// Fall back to config file
-		pathPrefix, err = config.ConfigStringWithDefault("chatbox.path_prefix", constants.DefaultPathPrefix)
-		// No else needed: early return pattern (guard clause)
-		if err != nil {
-			return fmt.Errorf("failed to get path prefix: %w", err)
-		}
-	}
-
-	// Validate path prefix format
-	// No else needed: early return pattern (guard clause)
-	if pathPrefix == "" {
-		return fmt.Errorf("path prefix cannot be empty")
-	}
-	// No else needed: early return pattern (guard clause)
-	if !strings.HasPrefix(pathPrefix, "/") {
-		return fmt.Errorf("path prefix must start with '/' (got: %s)", pathPrefix)
 	}
 
 	chatboxLogger.Info("Using HTTP path prefix", "prefix", pathPrefix)
@@ -851,7 +859,7 @@ func handleReadyCheck(mongo *gomongo.Mongo, logger *golog.Logger) gin.HandlerFun
 
 			// Use Ping() to check MongoDB connectivity
 			// This is the recommended way to verify database health
-			testColl := mongo.Coll("admin", "system.version")
+			testColl := mongo.Coll("chat", "sessions")
 			err := testColl.Ping(ctx)
 			// No else needed: optional operation (health check result recording)
 			if err != nil {

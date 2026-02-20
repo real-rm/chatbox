@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"os"
 	"testing"
 	"time"
 
@@ -15,125 +14,32 @@ import (
 	"github.com/real-rm/chatbox/internal/router"
 	"github.com/real-rm/chatbox/internal/session"
 	"github.com/real-rm/chatbox/internal/storage"
-	"github.com/real-rm/goconfig"
 	"github.com/real-rm/golog"
-	"github.com/real-rm/gomongo"
 	"github.com/stretchr/testify/require"
-	"go.mongodb.org/mongo-driver/bson"
 )
 
 // Test configuration constants
 const (
-	testDBName         = "chatbox"
+	testDBName         = "chat"
 	testCollectionName = "test_handlers_sessions"
 )
 
-// setupTestStorage creates a storage service for testing
+// setupTestStorage creates a storage service for testing using the shared MongoDB client.
 func setupTestStorage(t *testing.T) (*storage.StorageService, func()) {
 	t.Helper()
 
-	// Check if we should skip MongoDB tests
-	if testing.Short() || os.Getenv("SKIP_MONGO_TESTS") != "" {
-		t.Skip("Skipping MongoDB-dependent test")
-	}
-
-	// Get MongoDB URI from environment or use default test configuration
-	mongoURI := os.Getenv("MONGO_URI")
-	if mongoURI == "" {
-		// Default test configuration from test.md
-		mongoURI = "mongodb://chatbox:ChatBox123@127.0.0.1:27017/chatbox?authSource=admin"
-	}
-
-	// Create temporary config file
-	configContent := fmt.Sprintf(`
-[dbs]
-verbose = 1
-slowThreshold = 2
-
-[dbs.chatbox]
-uri = "%s"
-`, mongoURI)
-
-	tmpFile, err := os.CreateTemp("", "test_config_handlers_*.toml")
-	if err != nil {
-		t.Skipf("Skipping MongoDB tests: failed to create temp config: %v", err)
-		return nil, func() {}
-	}
-	defer tmpFile.Close()
-
-	_, err = tmpFile.WriteString(configContent)
-	if err != nil {
-		t.Skipf("Skipping MongoDB tests: failed to write config: %v", err)
+	mongoClient := getSharedRootMongoClient(t)
+	if mongoClient == nil {
 		return nil, func() {}
 	}
 
-	// Set config file path
-	os.Setenv("RMBASE_FILE_CFG", tmpFile.Name())
-
-	// Reset and load config
-	goconfig.ResetConfig()
-	err = goconfig.LoadConfig()
-	if err != nil {
-		t.Skipf("Skipping MongoDB tests: failed to load config: %v", err)
-		return nil, func() {}
-	}
-
-	configAccessor, err := goconfig.Default()
-	if err != nil {
-		t.Skipf("Skipping MongoDB tests: failed to get config accessor: %v", err)
-		return nil, func() {}
-	}
-
-	// Initialize logger
-	logger, err := golog.InitLog(golog.LogConfig{
-		Level:          "error",
-		StandardOutput: false,
-		Dir:            "/tmp",
-	})
-	if err != nil {
-		t.Skipf("Skipping MongoDB tests: failed to initialize logger: %v", err)
-		return nil, func() {}
-	}
-
-	// Try to initialize MongoDB client
-	var mongoClient *gomongo.Mongo
-	mongoClient, err = gomongo.InitMongoDB(logger, configAccessor)
-	if err != nil {
-		t.Skipf("Skipping MongoDB tests: failed to initialize MongoDB: %v", err)
-		return nil, func() {}
-	}
-
-	// Test connection with unique collection name to avoid conflicts
 	uniqueCollectionName := fmt.Sprintf("%s_%d", testCollectionName, time.Now().UnixNano())
-	testColl := mongoClient.Coll(testDBName, uniqueCollectionName)
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+	storageService := storage.NewStorageService(mongoClient, testDBName, uniqueCollectionName, rootMongoLogger, nil)
 
-	_, err = testColl.InsertOne(ctx, bson.M{"test": "connection"})
-	if err != nil {
-		t.Skipf("Skipping MongoDB tests: failed to verify connection: %v", err)
-		return nil, func() {}
-	}
-
-	// Delete the test document
-	_, _ = testColl.DeleteOne(ctx, bson.M{"test": "connection"})
-
-	// Create storage service with unique collection name
-	storageService := storage.NewStorageService(mongoClient, testDBName, uniqueCollectionName, logger, nil)
-
-	// Cleanup function
 	cleanup := func() {
-		// Drop test collection
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-
-		if err := testColl.Drop(ctx); err != nil {
-			t.Logf("Warning: Failed to drop test collection: %v", err)
-		}
-
-		// Clean up temp config file
-		os.Remove(tmpFile.Name())
-		logger.Close()
+		mongoClient.Coll(testDBName, uniqueCollectionName).Drop(ctx)
 	}
 
 	return storageService, cleanup
@@ -183,9 +89,9 @@ func setupTestStorageWithData(t *testing.T, sessions []*session.Session) (*stora
 
 // createTestSession creates a test session with the given parameters
 func createTestSession(userID, name string, isActive bool) *session.Session {
-	// Use nanosecond timestamp and random suffix for uniqueness
+	// Use nanosecond timestamp and name for uniqueness (name differentiates rapid calls)
 	sess := &session.Session{
-		ID:        fmt.Sprintf("test-%s-%d-%d", userID, time.Now().UnixNano(), time.Now().Unix()),
+		ID:        fmt.Sprintf("test-%s-%s-%d", userID, name, time.Now().UnixNano()),
 		UserID:    userID,
 		Name:      name,
 		ModelID:   "gpt-4",

@@ -33,8 +33,10 @@ func TestMongoDBHealthCheck_Integration(t *testing.T) {
 
 	// Set config file path
 	os.Setenv("RMBASE_FILE_CFG", "config.toml")
+	t.Cleanup(func() { goconfig.ResetConfig() })
 
-	// Load config
+	// Load config (reset first to override any previously loaded config)
+	goconfig.ResetConfig()
 	err := goconfig.LoadConfig()
 	require.NoError(t, err, "Failed to load config")
 
@@ -125,8 +127,10 @@ func TestMongoDBHealthCheck_Down(t *testing.T) {
 
 		// Set config file path
 		os.Setenv("RMBASE_FILE_CFG", "config.toml")
+		t.Cleanup(func() { goconfig.ResetConfig() })
 
-		// Load config
+		// Load config (reset first to override any previously loaded config)
+		goconfig.ResetConfig()
 		err := goconfig.LoadConfig()
 		if err != nil {
 			t.Skipf("Failed to load config: %v", err)

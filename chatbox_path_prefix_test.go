@@ -59,15 +59,17 @@ func TestPathPrefixRouteRegistration(t *testing.T) {
 			// Set up test environment
 			os.Clearenv()
 			os.Setenv("CHATBOX_PATH_PREFIX", tt.pathPrefix)
-			os.Setenv("JWT_SECRET", "test-secret-key-that-is-long-enough-for-validation")
+			os.Setenv("JWT_SECRET", "V4l1d-JWT-K3y-F0r-T3st1ng-Purp0ses-1!")
 			os.Setenv("ENCRYPTION_KEY", "12345678901234567890123456789012") // 32 bytes
 			os.Setenv("RMBASE_FILE_CFG", "config.toml")
 
-			// Load config
+			// Load config (reset first to ensure clean state per subtest)
+			goconfig.ResetConfig()
 			err := goconfig.LoadConfig()
 			if err != nil {
 				t.Skipf("Failed to load config: %v", err)
 			}
+			t.Cleanup(func() { goconfig.ResetConfig() })
 
 			config, err := goconfig.Default()
 			if err != nil {
@@ -157,15 +159,17 @@ func TestPathPrefixValidation(t *testing.T) {
 			// Set up test environment
 			os.Clearenv()
 			os.Setenv("CHATBOX_PATH_PREFIX", tt.pathPrefix)
-			os.Setenv("JWT_SECRET", "test-secret-key-that-is-long-enough-for-validation")
+			os.Setenv("JWT_SECRET", "V4l1d-JWT-K3y-F0r-T3st1ng-Purp0ses-1!")
 			os.Setenv("ENCRYPTION_KEY", "12345678901234567890123456789012") // 32 bytes
 			os.Setenv("RMBASE_FILE_CFG", "config.toml")
 
-			// Load config
+			// Load config (reset first to ensure clean state per subtest)
+			goconfig.ResetConfig()
 			err := goconfig.LoadConfig()
 			if err != nil {
 				t.Skipf("Failed to load config: %v", err)
 			}
+			t.Cleanup(func() { goconfig.ResetConfig() })
 
 			config, err := goconfig.Default()
 			if err != nil {

@@ -39,7 +39,7 @@ func setupTestConfig(t *testing.T) *goconfig.ConfigAccessor {
 	// Create a temporary config file
 	configContent := `
 [chatbox]
-jwt_secret = "test-secret-that-is-at-least-32-characters-long"
+jwt_secret = "V4l1d-JWT-K3y-F0r-T3st1ng-Purp0ses-1!"
 reconnect_timeout = "30s"
 encryption_key = ""
 max_message_size = "1048576"
@@ -49,6 +49,22 @@ admin_rate_window = "1m"
 allowed_origins = "http://localhost:3000"
 cors_allowed_origins = "http://localhost:3000"
 path_prefix = "/chatbox"
+
+[[llm.providers]]
+id = "test-provider"
+name = "Test Provider"
+type = "openai"
+endpoint = "https://api.openai.com/v1"
+apiKey = "test-api-key"
+model = "gpt-4"
+
+[mail.engines]
+ses = []
+smtp = []
+
+[[mail.engines.mock]]
+name = "mock"
+verbose = false
 `
 
 	tmpFile, err := os.CreateTemp("", "config-*.toml")
@@ -68,9 +84,11 @@ path_prefix = "/chatbox"
 	os.Setenv("RMBASE_FILE_CFG", tmpFile.Name())
 	t.Cleanup(func() {
 		os.Unsetenv("RMBASE_FILE_CFG")
+		goconfig.ResetConfig() // ensure clean state for next test
 	})
 
-	// Load config
+	// Reset and load config (ResetConfig ensures idempotent LoadConfig reloads fresh)
+	goconfig.ResetConfig()
 	if err := goconfig.LoadConfig(); err != nil {
 		t.Fatalf("Failed to load config: %v", err)
 	}
@@ -103,26 +121,10 @@ func setupTestLogger(t *testing.T) *golog.Logger {
 func setupTestMongo(t *testing.T) *gomongo.Mongo {
 	t.Helper()
 
-	// Skip MongoDB tests in short mode or when explicitly disabled
-	if testing.Short() || os.Getenv("SKIP_MONGO_TESTS") != "" {
-		t.Skip("Skipping MongoDB-dependent test")
-	}
-
-	// Load config first
-	if err := goconfig.LoadConfig(); err != nil {
-		t.Skipf("MongoDB not available: failed to load config: %v", err)
-	}
-
-	config, err := goconfig.Default()
-	if err != nil {
-		t.Skipf("MongoDB not available: failed to get config: %v", err)
-	}
-
-	logger := setupTestLogger(t)
-
-	mongo, err := gomongo.InitMongoDB(logger, config)
-	if err != nil {
-		t.Skipf("MongoDB not available: %v", err)
+	// Use the shared singleton client to avoid 10s Ping timeouts on every test function.
+	mongo := getSharedRootMongoClient(t)
+	if mongo == nil {
+		return nil
 	}
 
 	// Clean up test data
@@ -174,7 +176,7 @@ func TestRegister_RouteSetup(t *testing.T) {
 	mongo := setupTestMongo(t)
 
 	// Set JWT secret in environment
-	os.Setenv("JWT_SECRET", "test-secret-that-is-at-least-32-characters-long")
+	os.Setenv("JWT_SECRET", "V4l1d-JWT-K3y-F0r-T3st1ng-Purp0ses-1!")
 	defer os.Unsetenv("JWT_SECRET")
 
 	err := Register(router, config, logger, mongo)
@@ -239,7 +241,8 @@ reconnect_timeout = "30s"
 	os.Setenv("RMBASE_FILE_CFG", tmpFile.Name())
 	defer os.Unsetenv("RMBASE_FILE_CFG")
 
-	// Load config
+	// Load config (reset first to override any previously loaded config)
+	goconfig.ResetConfig()
 	if err := goconfig.LoadConfig(); err != nil {
 		t.Fatalf("Failed to load config: %v", err)
 	}
@@ -266,8 +269,8 @@ func TestRegister_WeakJWTSecret(t *testing.T) {
 	logger := setupTestLogger(t)
 	mongo := setupTestMongo(t)
 
-	// Set weak JWT secret
-	os.Setenv("JWT_SECRET", "password123")
+	// Set weak JWT secret (long enough to pass length check but contains "password" pattern)
+	os.Setenv("JWT_SECRET", "bad-password-long-enough-to-pass-length-check!")
 	defer os.Unsetenv("JWT_SECRET")
 
 	err := Register(router, config, logger, mongo)
@@ -309,7 +312,7 @@ func TestRegister_InvalidEncryptionKey(t *testing.T) {
 	mongo := setupTestMongo(t)
 
 	// Set valid JWT secret
-	os.Setenv("JWT_SECRET", "test-secret-that-is-at-least-32-characters-long")
+	os.Setenv("JWT_SECRET", "V4l1d-JWT-K3y-F0r-T3st1ng-Purp0ses-1!")
 	defer os.Unsetenv("JWT_SECRET")
 
 	// Set invalid encryption key (not 32 bytes)
@@ -334,7 +337,7 @@ func TestRegister_ValidEncryptionKey(t *testing.T) {
 	mongo := setupTestMongo(t)
 
 	// Set valid JWT secret
-	os.Setenv("JWT_SECRET", "test-secret-that-is-at-least-32-characters-long")
+	os.Setenv("JWT_SECRET", "V4l1d-JWT-K3y-F0r-T3st1ng-Purp0ses-1!")
 	defer os.Unsetenv("JWT_SECRET")
 
 	// Set valid 32-byte encryption key
@@ -354,7 +357,7 @@ func TestRegister_InvalidPathPrefix(t *testing.T) {
 	mongo := setupTestMongo(t)
 
 	// Set valid JWT secret
-	os.Setenv("JWT_SECRET", "test-secret-that-is-at-least-32-characters-long")
+	os.Setenv("JWT_SECRET", "V4l1d-JWT-K3y-F0r-T3st1ng-Purp0ses-1!")
 	defer os.Unsetenv("JWT_SECRET")
 
 	// Set invalid path prefix (doesn't start with /)
@@ -364,7 +367,7 @@ func TestRegister_InvalidPathPrefix(t *testing.T) {
 	// Create config with invalid path prefix
 	configContent := `
 [chatbox]
-jwt_secret = "test-secret-that-is-at-least-32-characters-long"
+jwt_secret = "V4l1d-JWT-K3y-F0r-T3st1ng-Purp0ses-1!"
 reconnect_timeout = "30s"
 path_prefix = "chatbox"
 `
@@ -383,7 +386,9 @@ path_prefix = "chatbox"
 	os.Setenv("RMBASE_FILE_CFG", tmpFile.Name())
 	defer os.Unsetenv("RMBASE_FILE_CFG")
 
-	// Load config
+	// Load config (reset first to override any previously loaded config)
+	goconfig.ResetConfig()
+	defer goconfig.ResetConfig()
 	if err := goconfig.LoadConfig(); err != nil {
 		t.Fatalf("Failed to load config: %v", err)
 	}
@@ -409,7 +414,7 @@ func TestAuthMiddleware_MissingToken(t *testing.T) {
 	router := gin.New()
 	logger := setupTestLogger(t)
 
-	secret := "test-secret-that-is-at-least-32-characters-long"
+	secret := "V4l1d-JWT-K3y-F0r-T3st1ng-Purp0ses-1!"
 	validator := auth.NewJWTValidator(secret)
 
 	// Add middleware to test endpoint
@@ -433,7 +438,7 @@ func TestAuthMiddleware_InvalidToken(t *testing.T) {
 	router := gin.New()
 	logger := setupTestLogger(t)
 
-	secret := "test-secret-that-is-at-least-32-characters-long"
+	secret := "V4l1d-JWT-K3y-F0r-T3st1ng-Purp0ses-1!"
 	validator := auth.NewJWTValidator(secret)
 
 	// Add middleware to test endpoint
@@ -458,7 +463,7 @@ func TestAuthMiddleware_ExpiredToken_Coverage(t *testing.T) {
 	router := gin.New()
 	logger := setupTestLogger(t)
 
-	secret := "test-secret-that-is-at-least-32-characters-long"
+	secret := "V4l1d-JWT-K3y-F0r-T3st1ng-Purp0ses-1!"
 	validator := auth.NewJWTValidator(secret)
 
 	// Add middleware to test endpoint
@@ -497,7 +502,7 @@ func TestAuthMiddleware_ValidTokenNoAdminRole(t *testing.T) {
 	router := gin.New()
 	logger := setupTestLogger(t)
 
-	secret := "test-secret-that-is-at-least-32-characters-long"
+	secret := "V4l1d-JWT-K3y-F0r-T3st1ng-Purp0ses-1!"
 	validator := auth.NewJWTValidator(secret)
 
 	// Add middleware to test endpoint
@@ -525,7 +530,7 @@ func TestAuthMiddleware_ValidTokenWithAdminRole(t *testing.T) {
 	router := gin.New()
 	logger := setupTestLogger(t)
 
-	secret := "test-secret-that-is-at-least-32-characters-long"
+	secret := "V4l1d-JWT-K3y-F0r-T3st1ng-Purp0ses-1!"
 	validator := auth.NewJWTValidator(secret)
 
 	// Add middleware to test endpoint
@@ -553,7 +558,7 @@ func TestAuthMiddleware_ValidTokenWithChatAdminRole(t *testing.T) {
 	router := gin.New()
 	logger := setupTestLogger(t)
 
-	secret := "test-secret-that-is-at-least-32-characters-long"
+	secret := "V4l1d-JWT-K3y-F0r-T3st1ng-Purp0ses-1!"
 	validator := auth.NewJWTValidator(secret)
 
 	// Add middleware to test endpoint
@@ -581,7 +586,7 @@ func TestUserAuthMiddleware_ValidToken_Coverage(t *testing.T) {
 	router := gin.New()
 	logger := setupTestLogger(t)
 
-	secret := "test-secret-that-is-at-least-32-characters-long"
+	secret := "V4l1d-JWT-K3y-F0r-T3st1ng-Purp0ses-1!"
 	validator := auth.NewJWTValidator(secret)
 
 	// Add middleware to test endpoint
@@ -609,7 +614,7 @@ func TestUserAuthMiddleware_MissingToken(t *testing.T) {
 	router := gin.New()
 	logger := setupTestLogger(t)
 
-	secret := "test-secret-that-is-at-least-32-characters-long"
+	secret := "V4l1d-JWT-K3y-F0r-T3st1ng-Purp0ses-1!"
 	validator := auth.NewJWTValidator(secret)
 
 	// Add middleware to test endpoint
@@ -635,7 +640,7 @@ func TestUserAuthMiddleware_MissingToken(t *testing.T) {
 func TestProperty_AuthenticationMiddlewareEnforcesAccessControl(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	logger := setupTestLogger(t)
-	secret := "test-secret-that-is-at-least-32-characters-long"
+	secret := "V4l1d-JWT-K3y-F0r-T3st1ng-Purp0ses-1!"
 	validator := auth.NewJWTValidator(secret)
 
 	testCases := []struct {
@@ -714,7 +719,7 @@ func TestRateLimitMiddleware_Enforcement(t *testing.T) {
 	limiter.StartCleanup()
 	defer limiter.StopCleanup()
 
-	secret := "test-secret-that-is-at-least-32-characters-long"
+	secret := "V4l1d-JWT-K3y-F0r-T3st1ng-Purp0ses-1!"
 	validator := auth.NewJWTValidator(secret)
 
 	router := gin.New()
@@ -767,7 +772,7 @@ func TestRateLimitMiddleware_ResetAfterWindow(t *testing.T) {
 	limiter.StartCleanup()
 	defer limiter.StopCleanup()
 
-	secret := "test-secret-that-is-at-least-32-characters-long"
+	secret := "V4l1d-JWT-K3y-F0r-T3st1ng-Purp0ses-1!"
 	validator := auth.NewJWTValidator(secret)
 
 	router := gin.New()
@@ -854,7 +859,7 @@ func TestRateLimitMiddleware_DifferentUsers(t *testing.T) {
 	limiter.StartCleanup()
 	defer limiter.StopCleanup()
 
-	secret := "test-secret-that-is-at-least-32-characters-long"
+	secret := "V4l1d-JWT-K3y-F0r-T3st1ng-Purp0ses-1!"
 	validator := auth.NewJWTValidator(secret)
 
 	router := gin.New()
@@ -910,7 +915,7 @@ func TestRateLimitMiddleware_DifferentUsers(t *testing.T) {
 func TestProperty_RateLimitingMiddlewareEnforcesLimits(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	logger := setupTestLogger(t)
-	secret := "test-secret-that-is-at-least-32-characters-long"
+	secret := "V4l1d-JWT-K3y-F0r-T3st1ng-Purp0ses-1!"
 	validator := auth.NewJWTValidator(secret)
 
 	testCases := []struct {
@@ -1001,7 +1006,7 @@ func TestProperty_RateLimitingMiddlewareEnforcesLimits(t *testing.T) {
 func TestAuthorizationMiddleware_AdminRole(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	logger := setupTestLogger(t)
-	secret := "test-secret-that-is-at-least-32-characters-long"
+	secret := "V4l1d-JWT-K3y-F0r-T3st1ng-Purp0ses-1!"
 	validator := auth.NewJWTValidator(secret)
 
 	router := gin.New()
@@ -1026,7 +1031,7 @@ func TestAuthorizationMiddleware_AdminRole(t *testing.T) {
 func TestAuthorizationMiddleware_ChatAdminRole(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	logger := setupTestLogger(t)
-	secret := "test-secret-that-is-at-least-32-characters-long"
+	secret := "V4l1d-JWT-K3y-F0r-T3st1ng-Purp0ses-1!"
 	validator := auth.NewJWTValidator(secret)
 
 	router := gin.New()
@@ -1051,7 +1056,7 @@ func TestAuthorizationMiddleware_ChatAdminRole(t *testing.T) {
 func TestAuthorizationMiddleware_NonAdminRole(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	logger := setupTestLogger(t)
-	secret := "test-secret-that-is-at-least-32-characters-long"
+	secret := "V4l1d-JWT-K3y-F0r-T3st1ng-Purp0ses-1!"
 	validator := auth.NewJWTValidator(secret)
 
 	router := gin.New()
@@ -1076,7 +1081,7 @@ func TestAuthorizationMiddleware_NonAdminRole(t *testing.T) {
 func TestAuthorizationMiddleware_EmptyRoles(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	logger := setupTestLogger(t)
-	secret := "test-secret-that-is-at-least-32-characters-long"
+	secret := "V4l1d-JWT-K3y-F0r-T3st1ng-Purp0ses-1!"
 	validator := auth.NewJWTValidator(secret)
 
 	router := gin.New()
@@ -1101,7 +1106,7 @@ func TestAuthorizationMiddleware_EmptyRoles(t *testing.T) {
 func TestAuthorizationMiddleware_MultipleRolesWithAdmin(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	logger := setupTestLogger(t)
-	secret := "test-secret-that-is-at-least-32-characters-long"
+	secret := "V4l1d-JWT-K3y-F0r-T3st1ng-Purp0ses-1!"
 	validator := auth.NewJWTValidator(secret)
 
 	router := gin.New()
@@ -1130,7 +1135,7 @@ func TestAuthorizationMiddleware_MultipleRolesWithAdmin(t *testing.T) {
 func TestProperty_AuthorizationMiddlewareEnforcesRoles(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	logger := setupTestLogger(t)
-	secret := "test-secret-that-is-at-least-32-characters-long"
+	secret := "V4l1d-JWT-K3y-F0r-T3st1ng-Purp0ses-1!"
 	validator := auth.NewJWTValidator(secret)
 
 	testCases := []struct {
@@ -1296,7 +1301,7 @@ func TestHandleUserSessions_Success(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	logger := setupTestLogger(t)
 	mongo := setupTestMongo(t)
-	secret := "test-secret-that-is-at-least-32-characters-long"
+	secret := "V4l1d-JWT-K3y-F0r-T3st1ng-Purp0ses-1!"
 	validator := auth.NewJWTValidator(secret)
 
 	storageService := storage.NewStorageService(mongo, "chat", "sessions", logger, nil)
@@ -1364,7 +1369,7 @@ func TestHandleListSessions_WithFilters(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	logger := setupTestLogger(t)
 	mongo := setupTestMongo(t)
-	secret := "test-secret-that-is-at-least-32-characters-long"
+	secret := "V4l1d-JWT-K3y-F0r-T3st1ng-Purp0ses-1!"
 	validator := auth.NewJWTValidator(secret)
 
 	storageService := storage.NewStorageService(mongo, "chat", "sessions", logger, nil)
@@ -1413,7 +1418,7 @@ func TestHandleListSessions_InvalidTimeFormat(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	logger := setupTestLogger(t)
 	mongo := setupTestMongo(t)
-	secret := "test-secret-that-is-at-least-32-characters-long"
+	secret := "V4l1d-JWT-K3y-F0r-T3st1ng-Purp0ses-1!"
 	validator := auth.NewJWTValidator(secret)
 
 	storageService := storage.NewStorageService(mongo, "chat", "sessions", logger, nil)
@@ -1441,7 +1446,7 @@ func TestHandleGetMetrics_Success(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	logger := setupTestLogger(t)
 	mongo := setupTestMongo(t)
-	secret := "test-secret-that-is-at-least-32-characters-long"
+	secret := "V4l1d-JWT-K3y-F0r-T3st1ng-Purp0ses-1!"
 	validator := auth.NewJWTValidator(secret)
 
 	storageService := storage.NewStorageService(mongo, "chat", "sessions", logger, nil)
@@ -1480,7 +1485,7 @@ func TestHandleGetMetrics_InvalidTimeFormat(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	logger := setupTestLogger(t)
 	mongo := setupTestMongo(t)
-	secret := "test-secret-that-is-at-least-32-characters-long"
+	secret := "V4l1d-JWT-K3y-F0r-T3st1ng-Purp0ses-1!"
 	validator := auth.NewJWTValidator(secret)
 
 	storageService := storage.NewStorageService(mongo, "chat", "sessions", logger, nil)
@@ -1507,7 +1512,7 @@ func TestHandleAdminTakeover_Success(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	logger := setupTestLogger(t)
 	mongo := setupTestMongo(t)
-	secret := "test-secret-that-is-at-least-32-characters-long"
+	secret := "V4l1d-JWT-K3y-F0r-T3st1ng-Purp0ses-1!"
 	validator := auth.NewJWTValidator(secret)
 
 	// Create dependencies
@@ -1565,7 +1570,7 @@ func TestHandleAdminTakeover_MissingSessionID(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	logger := setupTestLogger(t)
 	mongo := setupTestMongo(t)
-	secret := "test-secret-that-is-at-least-32-characters-long"
+	secret := "V4l1d-JWT-K3y-F0r-T3st1ng-Purp0ses-1!"
 	validator := auth.NewJWTValidator(secret)
 
 	storageService := storage.NewStorageService(mongo, "chat", "sessions", logger, nil)
@@ -1599,7 +1604,7 @@ func TestProperty_HTTPHandlersProcessValidRequests(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	logger := setupTestLogger(t)
 	mongo := setupTestMongo(t)
-	secret := "test-secret-that-is-at-least-32-characters-long"
+	secret := "V4l1d-JWT-K3y-F0r-T3st1ng-Purp0ses-1!"
 	validator := auth.NewJWTValidator(secret)
 
 	storageService := storage.NewStorageService(mongo, "chat", "sessions", logger, nil)
@@ -2056,7 +2061,7 @@ func TestConcurrentHTTPRequests_SameEndpoint(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	logger := setupTestLogger(t)
 	mongo := setupTestMongo(t)
-	secret := "test-secret-that-is-at-least-32-characters-long"
+	secret := "V4l1d-JWT-K3y-F0r-T3st1ng-Purp0ses-1!"
 	validator := auth.NewJWTValidator(secret)
 
 	storageService := storage.NewStorageService(mongo, "chat", "sessions", logger, nil)
@@ -2097,7 +2102,7 @@ func TestConcurrentHTTPRequests_DifferentEndpoints(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	logger := setupTestLogger(t)
 	mongo := setupTestMongo(t)
-	secret := "test-secret-that-is-at-least-32-characters-long"
+	secret := "V4l1d-JWT-K3y-F0r-T3st1ng-Purp0ses-1!"
 	validator := auth.NewJWTValidator(secret)
 
 	storageService := storage.NewStorageService(mongo, "chat", "sessions", logger, nil)
@@ -2166,7 +2171,7 @@ func TestConcurrentHTTPRequests_WithRateLimiting(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	logger := setupTestLogger(t)
 	mongo := setupTestMongo(t)
-	secret := "test-secret-that-is-at-least-32-characters-long"
+	secret := "V4l1d-JWT-K3y-F0r-T3st1ng-Purp0ses-1!"
 	validator := auth.NewJWTValidator(secret)
 
 	// Create rate limiter with low limit
@@ -2231,7 +2236,7 @@ func TestConcurrentHTTPRequests_MultipleUsers(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	logger := setupTestLogger(t)
 	mongo := setupTestMongo(t)
-	secret := "test-secret-that-is-at-least-32-characters-long"
+	secret := "V4l1d-JWT-K3y-F0r-T3st1ng-Purp0ses-1!"
 	validator := auth.NewJWTValidator(secret)
 
 	storageService := storage.NewStorageService(mongo, "chat", "sessions", logger, nil)
@@ -2280,7 +2285,7 @@ func TestProperty_ConcurrentHTTPRequestsAreThreadSafe(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	logger := setupTestLogger(t)
 	mongo := setupTestMongo(t)
-	secret := "test-secret-that-is-at-least-32-characters-long"
+	secret := "V4l1d-JWT-K3y-F0r-T3st1ng-Purp0ses-1!"
 	validator := auth.NewJWTValidator(secret)
 
 	storageService := storage.NewStorageService(mongo, "chat", "sessions", logger, nil)
@@ -2399,13 +2404,13 @@ func TestRegister_InvalidReconnectTimeout(t *testing.T) {
 	mongo := setupTestMongo(t)
 
 	// Set valid JWT secret
-	os.Setenv("JWT_SECRET", "test-secret-that-is-at-least-32-characters-long")
+	os.Setenv("JWT_SECRET", "V4l1d-JWT-K3y-F0r-T3st1ng-Purp0ses-1!")
 	defer os.Unsetenv("JWT_SECRET")
 
 	// Create config with invalid reconnect timeout
 	configContent := `
 [chatbox]
-jwt_secret = "test-secret-that-is-at-least-32-characters-long"
+jwt_secret = "V4l1d-JWT-K3y-F0r-T3st1ng-Purp0ses-1!"
 reconnect_timeout = "invalid-duration"
 `
 	tmpFile, err := os.CreateTemp("", "config-*.toml")
@@ -2423,7 +2428,9 @@ reconnect_timeout = "invalid-duration"
 	os.Setenv("RMBASE_FILE_CFG", tmpFile.Name())
 	defer os.Unsetenv("RMBASE_FILE_CFG")
 
-	// Load config
+	// Load config (reset first to override any previously loaded config)
+	goconfig.ResetConfig()
+	defer goconfig.ResetConfig()
 	if err := goconfig.LoadConfig(); err != nil {
 		t.Fatalf("Failed to load config: %v", err)
 	}
@@ -2452,7 +2459,7 @@ func TestRegister_InvalidMaxMessageSize(t *testing.T) {
 	mongo := setupTestMongo(t)
 
 	// Set valid JWT secret
-	os.Setenv("JWT_SECRET", "test-secret-that-is-at-least-32-characters-long")
+	os.Setenv("JWT_SECRET", "V4l1d-JWT-K3y-F0r-T3st1ng-Purp0ses-1!")
 	defer os.Unsetenv("JWT_SECRET")
 
 	// Set invalid max message size (should be handled gracefully with default)
@@ -2475,16 +2482,37 @@ func TestRegister_CORSConfiguration(t *testing.T) {
 		mongo := setupTestMongo(t)
 
 		// Set valid JWT secret
-		os.Setenv("JWT_SECRET", "test-secret-that-is-at-least-32-characters-long")
+		os.Setenv("JWT_SECRET", "V4l1d-JWT-K3y-F0r-T3st1ng-Purp0ses-1!")
 		defer os.Unsetenv("JWT_SECRET")
 
 		// Create config with CORS configuration
 		configContent := `
 [chatbox]
-jwt_secret = "test-secret-that-is-at-least-32-characters-long"
+jwt_secret = "V4l1d-JWT-K3y-F0r-T3st1ng-Purp0ses-1!"
 reconnect_timeout = "30s"
+encryption_key = ""
+max_message_size = "1048576"
+llm_stream_timeout = "30s"
+admin_rate_limit = 10
+admin_rate_window = "1m"
 cors_allowed_origins = "http://localhost:3000,https://example.com"
 path_prefix = "/chatbox"
+
+[[llm.providers]]
+id = "test-provider"
+name = "Test Provider"
+type = "openai"
+endpoint = "https://api.openai.com/v1"
+apiKey = "test-api-key"
+model = "gpt-4"
+
+[mail.engines]
+ses = []
+smtp = []
+
+[[mail.engines.mock]]
+name = "mock"
+verbose = false
 `
 		tmpFile, err := os.CreateTemp("", "config-*.toml")
 		if err != nil {
@@ -2501,7 +2529,9 @@ path_prefix = "/chatbox"
 		os.Setenv("RMBASE_FILE_CFG", tmpFile.Name())
 		defer os.Unsetenv("RMBASE_FILE_CFG")
 
-		// Load config
+		// Load config (reset first to override any previously loaded config)
+		goconfig.ResetConfig()
+		defer goconfig.ResetConfig()
 		if err := goconfig.LoadConfig(); err != nil {
 			t.Fatalf("Failed to load config: %v", err)
 		}
@@ -2528,7 +2558,7 @@ path_prefix = "/chatbox"
 		mongo := setupTestMongo(t)
 
 		// Set valid JWT secret
-		os.Setenv("JWT_SECRET", "test-secret-that-is-at-least-32-characters-long")
+		os.Setenv("JWT_SECRET", "V4l1d-JWT-K3y-F0r-T3st1ng-Purp0ses-1!")
 		defer os.Unsetenv("JWT_SECRET")
 
 		err := Register(router, config, logger, mongo)
@@ -2546,7 +2576,7 @@ func TestRegister_CustomPathPrefix(t *testing.T) {
 	mongo := setupTestMongo(t)
 
 	// Set valid JWT secret
-	os.Setenv("JWT_SECRET", "test-secret-that-is-at-least-32-characters-long")
+	os.Setenv("JWT_SECRET", "V4l1d-JWT-K3y-F0r-T3st1ng-Purp0ses-1!")
 	defer os.Unsetenv("JWT_SECRET")
 
 	// Set custom path prefix
@@ -2556,9 +2586,30 @@ func TestRegister_CustomPathPrefix(t *testing.T) {
 	// Create config with custom path prefix
 	configContent := `
 [chatbox]
-jwt_secret = "test-secret-that-is-at-least-32-characters-long"
+jwt_secret = "V4l1d-JWT-K3y-F0r-T3st1ng-Purp0ses-1!"
 reconnect_timeout = "30s"
+encryption_key = ""
+max_message_size = "1048576"
+llm_stream_timeout = "30s"
+admin_rate_limit = 10
+admin_rate_window = "1m"
 path_prefix = "/api/v1/chat"
+
+[[llm.providers]]
+id = "test-provider"
+name = "Test Provider"
+type = "openai"
+endpoint = "https://api.openai.com/v1"
+apiKey = "test-api-key"
+model = "gpt-4"
+
+[mail.engines]
+ses = []
+smtp = []
+
+[[mail.engines.mock]]
+name = "mock"
+verbose = false
 `
 	tmpFile, err := os.CreateTemp("", "config-*.toml")
 	if err != nil {
@@ -2575,7 +2626,9 @@ path_prefix = "/api/v1/chat"
 	os.Setenv("RMBASE_FILE_CFG", tmpFile.Name())
 	defer os.Unsetenv("RMBASE_FILE_CFG")
 
-	// Load config
+	// Load config (reset first to override any previously loaded config)
+	goconfig.ResetConfig()
+	defer goconfig.ResetConfig()
 	if err := goconfig.LoadConfig(); err != nil {
 		t.Fatalf("Failed to load config: %v", err)
 	}
@@ -2617,7 +2670,7 @@ func TestRegister_EmptyPathPrefix(t *testing.T) {
 	mongo := setupTestMongo(t)
 
 	// Set valid JWT secret
-	os.Setenv("JWT_SECRET", "test-secret-that-is-at-least-32-characters-long")
+	os.Setenv("JWT_SECRET", "V4l1d-JWT-K3y-F0r-T3st1ng-Purp0ses-1!")
 	defer os.Unsetenv("JWT_SECRET")
 
 	// Set empty path prefix
@@ -2627,7 +2680,7 @@ func TestRegister_EmptyPathPrefix(t *testing.T) {
 	// Create config with empty path prefix
 	configContent := `
 [chatbox]
-jwt_secret = "test-secret-that-is-at-least-32-characters-long"
+jwt_secret = "V4l1d-JWT-K3y-F0r-T3st1ng-Purp0ses-1!"
 reconnect_timeout = "30s"
 path_prefix = ""
 `
@@ -2646,7 +2699,9 @@ path_prefix = ""
 	os.Setenv("RMBASE_FILE_CFG", tmpFile.Name())
 	defer os.Unsetenv("RMBASE_FILE_CFG")
 
-	// Load config
+	// Load config (reset first to override any previously loaded config)
+	goconfig.ResetConfig()
+	defer goconfig.ResetConfig()
 	if err := goconfig.LoadConfig(); err != nil {
 		t.Fatalf("Failed to load config: %v", err)
 	}
@@ -2704,7 +2759,9 @@ connectTimeout = "100ms"
 	os.Setenv("RMBASE_FILE_CFG", tmpFile.Name())
 	defer os.Unsetenv("RMBASE_FILE_CFG")
 
-	// Load config
+	// Load config (reset first to override any previously loaded config)
+	goconfig.ResetConfig()
+	defer goconfig.ResetConfig()
 	if err := goconfig.LoadConfig(); err != nil {
 		t.Skipf("Failed to load config: %v", err)
 	}

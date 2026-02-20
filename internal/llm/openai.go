@@ -14,10 +14,11 @@ import (
 
 // OpenAIProvider implements the LLMProvider interface for OpenAI API
 type OpenAIProvider struct {
-	apiKey   string
-	endpoint string
-	model    string
-	client   *http.Client
+	apiKey       string
+	endpoint     string
+	model        string
+	client       *http.Client // used for non-streaming requests (60s timeout)
+	streamClient *http.Client // used for streaming requests (no transport timeout; context controls cancellation)
 }
 
 // NewOpenAIProvider creates a new OpenAI provider
@@ -28,6 +29,9 @@ func NewOpenAIProvider(apiKey, endpoint, model string) *OpenAIProvider {
 		model:    model,
 		client: &http.Client{
 			Timeout: 60 * time.Second,
+		},
+		streamClient: &http.Client{
+			Timeout: 0, // no deadline; the caller's context controls cancellation
 		},
 	}
 }
@@ -165,8 +169,8 @@ func (p *OpenAIProvider) StreamMessage(ctx context.Context, req *LLMRequest) (<-
 	httpReq.Header.Set("Authorization", "Bearer "+p.apiKey)
 	httpReq.Header.Set("Accept", "text/event-stream")
 
-	// Send request
-	resp, err := p.client.Do(httpReq)
+	// Send request using streamClient (no transport-level timeout; context cancellation controls the stream)
+	resp, err := p.streamClient.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("failed to send request: %w", err)
 	}

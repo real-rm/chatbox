@@ -501,6 +501,22 @@ func TestGenerateSessionName(t *testing.T) {
 			expectedName: "Exactly fifty characters in this message here!",
 			maxLength:    50,
 		},
+		{
+			// When maxLength <= len("...") == 3, GenerateSessionName returns
+			// just the ellipsis without trying to truncate.
+			name:         "maxLength at ellipsis boundary returns ellipsis only",
+			firstMessage: "Hello world",
+			expectedName: "...",
+			maxLength:    3,
+		},
+		{
+			// Long word with no spaces — truncateAtWordBoundary falls back to
+			// hard truncation at maxLen since no space is found.
+			name:         "long word with no spaces hard-truncates",
+			firstMessage: "Supercalifragilisticexpialidocious",
+			expectedName: "Supercalif...",
+			maxLength:    13,
+		},
 	}
 
 	for _, tt := range tests {

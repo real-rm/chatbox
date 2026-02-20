@@ -204,6 +204,24 @@ func TestMessage_UnmarshalJSON(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			// No timestamp field in JSON — exercises the false branch of
+			// "if aux.Timestamp != ''" in UnmarshalJSON.
+			name: "missing timestamp field uses zero time",
+			json: `{
+				"type": "user_message",
+				"session_id": "session-no-ts",
+				"content": "No timestamp",
+				"sender": "user"
+			}`,
+			want: Message{
+				Type:      TypeUserMessage,
+				SessionID: "session-no-ts",
+				Content:   "No timestamp",
+				Sender:    SenderUser,
+			},
+			wantErr: false,
+		},
+		{
 			name:    "invalid json",
 			json:    `{invalid}`,
 			want:    Message{},

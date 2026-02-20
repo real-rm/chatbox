@@ -14,10 +14,11 @@ import (
 
 // AnthropicProvider implements the LLMProvider interface for Anthropic API
 type AnthropicProvider struct {
-	apiKey   string
-	endpoint string
-	model    string
-	client   *http.Client
+	apiKey       string
+	endpoint     string
+	model        string
+	client       *http.Client // used for non-streaming requests (60s timeout)
+	streamClient *http.Client // used for streaming requests (no transport timeout; context controls cancellation)
 }
 
 // NewAnthropicProvider creates a new Anthropic provider
@@ -28,6 +29,9 @@ func NewAnthropicProvider(apiKey, endpoint, model string) *AnthropicProvider {
 		model:    model,
 		client: &http.Client{
 			Timeout: 60 * time.Second,
+		},
+		streamClient: &http.Client{
+			Timeout: 0, // no deadline; the caller's context controls cancellation
 		},
 	}
 }
@@ -194,8 +198,8 @@ func (p *AnthropicProvider) StreamMessage(ctx context.Context, req *LLMRequest) 
 	httpReq.Header.Set("anthropic-version", "2023-06-01")
 	httpReq.Header.Set("Accept", "text/event-stream")
 
-	// Send request
-	resp, err := p.client.Do(httpReq)
+	// Send request using streamClient (no transport-level timeout; context cancellation controls the stream)
+	resp, err := p.streamClient.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("failed to send request: %w", err)
 	}

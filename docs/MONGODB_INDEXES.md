@@ -286,7 +286,7 @@ db.sessions.dropIndexes()
 
 ## Related Documentation
 
-- [DEPLOYMENT.md](../DEPLOYMENT.md) - General deployment guide with index verification steps
+- [DEPLOYMENT.md](DEPLOYMENT.md) - General deployment guide with index verification steps
 - [deployments/kubernetes/README.md](../deployments/kubernetes/README.md) - Kubernetes-specific deployment
 - [internal/storage/README.md](../internal/storage/README.md) - Storage service documentation
 - [internal/storage/storage.go](../internal/storage/storage.go) - Index implementation code

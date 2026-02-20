@@ -48,11 +48,9 @@ func TestMultiDevice_MessageBroadcastToAllConnections(t *testing.T) {
 	}
 
 	// Verify all connections are registered
-	handler.mu.RLock()
-	userConns, exists := handler.connections[userID]
-	handler.mu.RUnlock()
+	connCount, exists := handler.connectionCountForTest(userID)
 	require.True(t, exists, "User should have connections registered")
-	require.Equal(t, numDevices, len(userConns), "User should have %d connections", numDevices)
+	require.Equal(t, numDevices, connCount, "User should have %d connections", numDevices)
 
 	// Send a message to all user connections
 	testMessage := message.Message{
@@ -64,16 +62,14 @@ func TestMultiDevice_MessageBroadcastToAllConnections(t *testing.T) {
 	messageBytes, err := json.Marshal(testMessage)
 	require.NoError(t, err)
 
-	// Broadcast to all user connections
-	handler.mu.RLock()
-	for _, conn := range userConns {
+	// Broadcast to all user connections using a safe snapshot
+	for _, conn := range handler.connectionSnapshotForTest(userID) {
 		select {
 		case conn.send <- messageBytes:
 		default:
 			t.Fatal("Failed to send message to connection")
 		}
 	}
-	handler.mu.RUnlock()
 
 	// Verify all connections received the message
 	receivedCount := 0
@@ -212,28 +208,22 @@ func TestMultiDevice_ConnectionFailureIsolation(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	// Verify all 3 connections are active
-	handler.mu.RLock()
-	userConns := handler.connections[userID]
-	handler.mu.RUnlock()
-	assert.Equal(t, 3, len(userConns), "Should have 3 active connections")
+	connCount, _ := handler.connectionCountForTest(userID)
+	assert.Equal(t, 3, connCount, "Should have 3 active connections")
 
 	// Simulate device 2 connection failure (abrupt close)
 	conn2.Close()
 	time.Sleep(150 * time.Millisecond)
 
 	// Verify only 2 connections remain
-	handler.mu.RLock()
-	userConns = handler.connections[userID]
-	handler.mu.RUnlock()
-	assert.Equal(t, 2, len(userConns), "Should have 2 active connections after one fails")
+	connCount, _ = handler.connectionCountForTest(userID)
+	assert.Equal(t, 2, connCount, "Should have 2 active connections after one fails")
 
-	// Send a test message to remaining connections
+	// Send a test message to remaining connections using a safe snapshot
 	testMessage := []byte(`{"type":"text","content":"Test after failure","sender":"ai"}`)
-	handler.mu.RLock()
-	for _, conn := range userConns {
+	for _, conn := range handler.connectionSnapshotForTest(userID) {
 		conn.send <- testMessage
 	}
-	handler.mu.RUnlock()
 
 	// Verify conn1 and conn3 can still receive messages
 	conn1.SetReadDeadline(time.Now().Add(2 * time.Second))
@@ -358,20 +348,16 @@ func TestMultiDevice_ReconnectionScenario(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	// Verify 2 connections
-	handler.mu.RLock()
-	userConns := handler.connections[userID]
-	handler.mu.RUnlock()
-	assert.Equal(t, 2, len(userConns), "Should have 2 connections")
+	connCount, _ := handler.connectionCountForTest(userID)
+	assert.Equal(t, 2, connCount, "Should have 2 connections")
 
 	// Device 2 disconnects
 	conn2.Close()
 	time.Sleep(150 * time.Millisecond)
 
 	// Verify only 1 connection remains
-	handler.mu.RLock()
-	userConns = handler.connections[userID]
-	handler.mu.RUnlock()
-	assert.Equal(t, 1, len(userConns), "Should have 1 connection after disconnect")
+	connCount, _ = handler.connectionCountForTest(userID)
+	assert.Equal(t, 1, connCount, "Should have 1 connection after disconnect")
 
 	// Device 2 reconnects
 	conn2New, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
@@ -379,18 +365,14 @@ func TestMultiDevice_ReconnectionScenario(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	// Verify 2 connections again
-	handler.mu.RLock()
-	userConns = handler.connections[userID]
-	handler.mu.RUnlock()
-	assert.Equal(t, 2, len(userConns), "Should have 2 connections after reconnect")
+	connCount, _ = handler.connectionCountForTest(userID)
+	assert.Equal(t, 2, connCount, "Should have 2 connections after reconnect")
 
-	// Verify both connections are functional
+	// Verify both connections are functional using a safe snapshot
 	testMessage := []byte(`{"type":"text","content":"Test after reconnect","sender":"ai"}`)
-	handler.mu.RLock()
-	for _, conn := range userConns {
+	for _, conn := range handler.connectionSnapshotForTest(userID) {
 		conn.send <- testMessage
 	}
-	handler.mu.RUnlock()
 
 	// Both devices should receive the message
 	conn1.SetReadDeadline(time.Now().Add(2 * time.Second))
@@ -438,10 +420,8 @@ func TestMultiDevice_MaxConnectionsEnforcement(t *testing.T) {
 	}
 
 	// Verify all connections are registered
-	handler.mu.RLock()
-	userConns := handler.connections[userID]
-	handler.mu.RUnlock()
-	assert.Equal(t, maxConnections, len(userConns), "Should have max connections")
+	connCount, _ := handler.connectionCountForTest(userID)
+	assert.Equal(t, maxConnections, connCount, "Should have max connections")
 
 	// Try to connect an 11th device - should be rejected
 	_, resp, err := websocket.DefaultDialer.Dial(wsURL, nil)
@@ -461,10 +441,8 @@ func TestMultiDevice_MaxConnectionsEnforcement(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	// Verify we're back at max connections
-	handler.mu.RLock()
-	userConns = handler.connections[userID]
-	handler.mu.RUnlock()
-	assert.Equal(t, maxConnections, len(userConns), "Should be at max connections again")
+	connCount, _ = handler.connectionCountForTest(userID)
+	assert.Equal(t, maxConnections, connCount, "Should be at max connections again")
 
 	// Clean up
 	conn11.Close()

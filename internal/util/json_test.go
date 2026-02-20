@@ -39,6 +39,11 @@ func TestMarshalJSON(t *testing.T) {
 			input:   nil,
 			wantErr: false,
 		},
+		{
+			name:    "unmarshalable channel — triggers error path",
+			input:   make(chan int),
+			wantErr: true,
+		},
 	}
 
 	for _, tt := range tests {

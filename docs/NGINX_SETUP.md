@@ -957,12 +957,12 @@ openssl s_client -connect chat.example.com:443 -servername chat.example.com
 - [Nginx WebSocket Proxying](https://nginx.org/en/docs/http/websocket.html)
 - [Mozilla SSL Configuration Generator](https://ssl-config.mozilla.org/)
 - [Let's Encrypt Documentation](https://letsencrypt.org/docs/)
-- [Chatbox Deployment Guide](../DEPLOYMENT.md)
+- [Chatbox Deployment Guide](DEPLOYMENT.md)
 
 ## Support
 
 For issues specific to the Chatbox service:
 1. Check application logs: `kubectl logs -n chatbox -l app=chatbox`
 2. Verify backend health: `curl http://backend:8080/chatbox/healthz`
-3. Review [DEPLOYMENT.md](../DEPLOYMENT.md)
+3. Review [DEPLOYMENT.md](DEPLOYMENT.md)
 4. Check Nginx error logs: `/var/log/nginx/chatbox_error.log`

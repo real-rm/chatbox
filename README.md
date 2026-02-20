@@ -38,7 +38,7 @@ docker-compose logs -f chatbox
 # - Metrics: http://localhost:8080/metrics
 ```
 
-See [DEPLOYMENT.md](DEPLOYMENT.md) for detailed deployment instructions.
+See [DEPLOYMENT.md](docs/DEPLOYMENT.md) for detailed deployment instructions.
 
 ## Project Structure
 
@@ -72,7 +72,7 @@ chatbox/
 ## Documentation
 
 ### Getting Started
-- [DEPLOYMENT.md](DEPLOYMENT.md) - Comprehensive deployment guide
+- [DEPLOYMENT.md](docs/DEPLOYMENT.md) - Comprehensive deployment guide
 - [docs/NGINX_SETUP.md](docs/NGINX_SETUP.md) - Nginx reverse proxy configuration
 - [docs/SECRET_SETUP_QUICKSTART.md](docs/SECRET_SETUP_QUICKSTART.md) - Quick secret setup
 - [docs/TESTING.md](docs/TESTING.md) - Testing strategy
@@ -84,7 +84,7 @@ chatbox/
 - Comprehensive documentation of all code patterns
 
 ### Production Readiness
-- [PRODUCTION_READINESS_REVIEW.md](PRODUCTION_READINESS_REVIEW.md) - Final production assessment
+- [PRODUCTION_READINESS_REVIEW.md](docs/PRODUCTION_READINESS_REVIEW.md) - Final production assessment
 - [docs/PRODUCTION_READINESS_PLAN.md](docs/PRODUCTION_READINESS_PLAN.md) - Original readiness plan
 - [docs/PRODUCTION_READINESS_STATUS.md](docs/PRODUCTION_READINESS_STATUS.md) - Task completion status
 
@@ -235,7 +235,7 @@ data:
 - Must start with `/`
 - Invalid configuration causes startup failure with clear error message
 
-For detailed deployment configuration including nginx setup, see [DEPLOYMENT.md](DEPLOYMENT.md#http-path-prefix-configuration).
+For detailed deployment configuration including nginx setup, see [DEPLOYMENT.md](docs/DEPLOYMENT.md#http-path-prefix-configuration).
 
 ## Development
 
@@ -370,7 +370,7 @@ The following critical and high-priority issues have been addressed:
 **Low Priority Issues:**
 - Shutdown timeout: Parallel connection closure with context deadline respect
 
-See [PRODUCTION_READINESS_REVIEW.md](PRODUCTION_READINESS_REVIEW.md) for the complete assessment.
+See [PRODUCTION_READINESS_REVIEW.md](docs/PRODUCTION_READINESS_REVIEW.md) for the complete assessment.
 
 ## Troubleshooting
 

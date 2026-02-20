@@ -369,7 +369,7 @@ kubectl rollout restart deployment chatbox-websocket
 ## Related Documentation
 
 - [Kubernetes Deployment Guide](../deployments/kubernetes/README.md)
-- [Security Best Practices](../DEPLOYMENT.md#security)
+- [Security Best Practices](DEPLOYMENT.md#security)
 - [WebSocket Configuration](../README.md#websocket-configuration)
 
 ## References

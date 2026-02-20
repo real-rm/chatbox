@@ -73,6 +73,24 @@ func TestRespondBadRequest(t *testing.T) {
 	assert.Equal(t, CodeBadRequest, response.Code)
 }
 
+// TestRespondBadRequest_EmptyMessage covers the branch where the message is
+// empty and the default message is substituted.
+func TestRespondBadRequest_EmptyMessage(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+
+	RespondBadRequest(c, "")
+
+	assert.Equal(t, 400, w.Code)
+
+	var response ErrorResponse
+	err := json.Unmarshal(w.Body.Bytes(), &response)
+	assert.NoError(t, err)
+	assert.Equal(t, MsgBadRequest, response.Error)
+	assert.Equal(t, CodeBadRequest, response.Code)
+}
+
 func TestRespondInternalError(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	w := httptest.NewRecorder()

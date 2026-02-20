@@ -348,14 +348,22 @@ func (h *Handler) unregisterConnection(conn *Connection) {
 
 // notifyConnectionLimit sends a notification to all user's connections when connection limit is reached
 func (h *Handler) notifyConnectionLimit(userID string) {
+	// Take a snapshot of the connections under the lock to avoid holding it during channel sends.
 	h.mu.RLock()
-	userConns, exists := h.connections[userID]
-	h.mu.RUnlock()
-
-	// No else needed: early return pattern (guard clause)
-	if !exists || len(userConns) == 0 {
+	userConns := h.connections[userID]
+	if len(userConns) == 0 {
+		h.mu.RUnlock()
 		return
 	}
+	type connEntry struct {
+		id   string
+		conn *Connection
+	}
+	snapshot := make([]connEntry, 0, len(userConns))
+	for id, c := range userConns {
+		snapshot = append(snapshot, connEntry{id: id, conn: c})
+	}
+	h.mu.RUnlock()
 
 	// Create notification message
 	notificationMsg := &message.Message{
@@ -374,17 +382,17 @@ func (h *Handler) notifyConnectionLimit(userID string) {
 		return
 	}
 
-	// Send notification to all user's connections
-	for connID, conn := range userConns {
+	// Send notification to all user's connections using the snapshot
+	for _, entry := range snapshot {
 		select {
-		case conn.send <- notificationBytes:
+		case entry.conn.send <- notificationBytes:
 			h.logger.Debug("Sent connection limit notification",
 				"user_id", userID,
-				"connection_id", connID)
+				"connection_id", entry.id)
 		default:
 			h.logger.Warn("Failed to send connection limit notification, channel full",
 				"user_id", userID,
-				"connection_id", connID)
+				"connection_id", entry.id)
 		}
 	}
 }

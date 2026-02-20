@@ -3,6 +3,7 @@ package router
 import (
 	"context"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -593,14 +594,17 @@ func TestProperty_VoiceResponseFormatting(t *testing.T) {
 
 // mockLLMService is a mock implementation of LLMService for testing
 type mockLLMService struct {
+	mu                sync.Mutex
 	sendMessageCalled bool
 	streamCalled      bool
 	lastMessages      []llm.ChatMessage
 }
 
 func (m *mockLLMService) SendMessage(ctx context.Context, modelID string, messages []llm.ChatMessage) (*llm.LLMResponse, error) {
+	m.mu.Lock()
 	m.sendMessageCalled = true
 	m.lastMessages = messages
+	m.mu.Unlock()
 	return &llm.LLMResponse{
 		Content:    "Mock response",
 		TokensUsed: 10,
@@ -609,8 +613,10 @@ func (m *mockLLMService) SendMessage(ctx context.Context, modelID string, messag
 }
 
 func (m *mockLLMService) StreamMessage(ctx context.Context, modelID string, messages []llm.ChatMessage) (<-chan *llm.LLMChunk, error) {
+	m.mu.Lock()
 	m.streamCalled = true
 	m.lastMessages = messages
+	m.mu.Unlock()
 	ch := make(chan *llm.LLMChunk, 1)
 	ch <- &llm.LLMChunk{Content: "Mock chunk", Done: true}
 	close(ch)

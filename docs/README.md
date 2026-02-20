@@ -4,7 +4,7 @@ This directory contains comprehensive documentation for the Chatbox WebSocket ap
 
 ## Quick Start
 
-- [DEPLOYMENT.md](../DEPLOYMENT.md) - Deployment instructions and Docker setup
+- [DEPLOYMENT.md](DEPLOYMENT.md) - Deployment instructions and Docker setup
 - [SECRET_SETUP_QUICKSTART.md](SECRET_SETUP_QUICKSTART.md) - Quick guide to setting up secrets
 
 ## Architecture & Code Quality
@@ -17,7 +17,7 @@ The chatbox application follows strict code quality standards:
 - **Documented Patterns**: All code patterns clearly documented
 - **Clean Architecture**: Clear separation of concerns across packages
 
-See [CODE_QUALITY.md](CODE_QUALITY.md) for comprehensive code quality documentation and [DEPLOYMENT.md](../DEPLOYMENT.md#code-quality-and-architecture) for deployment implications.
+See [CODE_QUALITY.md](CODE_QUALITY.md) for comprehensive code quality documentation and [DEPLOYMENT.md](DEPLOYMENT.md#code-quality-and-architecture) for deployment implications.
 
 ## Production Readiness
 
@@ -77,7 +77,7 @@ docs/
 ├── PRODUCTION_READINESS_PLAN.md      # Production readiness review
 ├── PRODUCTION_READINESS_STATUS.md    # Current status
 ├── CI_SETUP.md                       # CI/CD configuration
-├── DEPLOYMENT.md                     # Deployment guide (in root)
+├── docs/DEPLOYMENT.md              # Deployment guide
 └── [feature-specific docs]           # Individual feature documentation
 ```
 

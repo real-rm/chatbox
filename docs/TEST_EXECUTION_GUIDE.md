@@ -287,7 +287,7 @@ When tests fail:
 
 ## Additional Resources
 
-- [Production Readiness Review](../PRODUCTION_READINESS_REVIEW.md)
+- [Production Readiness Review](PRODUCTION_READINESS_REVIEW.md)
 - [Production Readiness Test Results](../PRODUCTION_READINESS_TEST_RESULTS.md)
 - [Go Testing Documentation](https://golang.org/pkg/testing/)
 - [Go Race Detector](https://golang.org/doc/articles/race_detector.html)

@@ -172,7 +172,7 @@ kubectl logs -l app=chatbox -n default | grep -i "encrypt"
 
 - **[SECRET_MANAGEMENT.md](../SECRET_MANAGEMENT.md)** - Comprehensive secret management guide
 - **[KEY_MANAGEMENT.md](../KEY_MANAGEMENT.md)** - Encryption key management and rotation
-- **[DEPLOYMENT.md](../DEPLOYMENT.md)** - General deployment guide
+- **[DEPLOYMENT.md](DEPLOYMENT.md)** - General deployment guide
 - **[deployments/kubernetes/README.md](../deployments/kubernetes/README.md)** - Kubernetes deployment guide
 
 ## Support

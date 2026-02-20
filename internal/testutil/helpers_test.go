@@ -2,6 +2,7 @@ package testutil
 
 import (
 	"context"
+	"errors"
 	"runtime"
 	"testing"
 	"time"
@@ -38,16 +39,111 @@ func TestMockStorageService(t *testing.T) {
 		assert.Len(t, mock.CreatedSessions, 0)
 	})
 
+	t.Run("CreateSession with custom func", func(t *testing.T) {
+		customErr := assert.AnError
+		mock := &MockStorageService{
+			CreateSessionFunc: func(s *session.Session) error {
+				return customErr
+			},
+		}
+		sess := CreateTestSession("user-1", "session-1")
+		err := mock.CreateSession(sess)
+		assert.ErrorIs(t, err, customErr)
+	})
+
+	t.Run("UpdateSession tracking", func(t *testing.T) {
+		mock := &MockStorageService{}
+		sess := CreateTestSession("user-2", "session-2")
+
+		err := mock.UpdateSession(sess)
+		require.NoError(t, err)
+
+		assert.True(t, mock.UpdateSessionCalled)
+		assert.Len(t, mock.UpdatedSessions, 1)
+		assert.Equal(t, sess, mock.UpdatedSessions[0])
+	})
+
+	t.Run("UpdateSession with error", func(t *testing.T) {
+		mock := &MockStorageService{
+			UpdateSessionError: assert.AnError,
+		}
+		sess := CreateTestSession("user-2", "session-2")
+
+		err := mock.UpdateSession(sess)
+		assert.Error(t, err)
+		assert.True(t, mock.UpdateSessionCalled)
+		assert.Len(t, mock.UpdatedSessions, 0)
+	})
+
+	t.Run("UpdateSession with custom func", func(t *testing.T) {
+		called := false
+		mock := &MockStorageService{
+			UpdateSessionFunc: func(s *session.Session) error {
+				called = true
+				return nil
+			},
+		}
+		sess := CreateTestSession("user-2", "session-2")
+		err := mock.UpdateSession(sess)
+		require.NoError(t, err)
+		assert.True(t, called)
+	})
+
+	t.Run("GetSession tracking", func(t *testing.T) {
+		mock := &MockStorageService{}
+
+		retrieved, err := mock.GetSession("session-3")
+		require.NoError(t, err)
+		require.NotNil(t, retrieved)
+
+		assert.True(t, mock.GetSessionCalled)
+		assert.Equal(t, "session-3", mock.GetSessionID)
+		assert.Equal(t, "session-3", retrieved.ID)
+	})
+
+	t.Run("GetSession with error", func(t *testing.T) {
+		mock := &MockStorageService{
+			GetSessionError: assert.AnError,
+		}
+
+		retrieved, err := mock.GetSession("session-4")
+		assert.Error(t, err)
+		assert.Nil(t, retrieved)
+		assert.True(t, mock.GetSessionCalled)
+	})
+
+	t.Run("GetSession with custom func", func(t *testing.T) {
+		customSess := &session.Session{ID: "custom-id", UserID: "custom-user"}
+		mock := &MockStorageService{
+			GetSessionFunc: func(id string) (*session.Session, error) {
+				return customSess, nil
+			},
+		}
+
+		retrieved, err := mock.GetSession("any-id")
+		require.NoError(t, err)
+		assert.Equal(t, customSess, retrieved)
+	})
+
 	t.Run("Reset clears tracking", func(t *testing.T) {
 		mock := &MockStorageService{}
 		sess := CreateTestSession("user-1", "session-1")
 
 		mock.CreateSession(sess)
+		mock.UpdateSession(sess)
+		mock.GetSession("session-1")
+
 		assert.True(t, mock.CreateSessionCalled)
+		assert.True(t, mock.UpdateSessionCalled)
+		assert.True(t, mock.GetSessionCalled)
 
 		mock.Reset()
 		assert.False(t, mock.CreateSessionCalled)
+		assert.False(t, mock.UpdateSessionCalled)
+		assert.False(t, mock.GetSessionCalled)
 		assert.Len(t, mock.CreatedSessions, 0)
+		assert.Len(t, mock.UpdatedSessions, 0)
+		assert.Empty(t, mock.GetSessionID)
 	})
 }
 
@@ -104,6 +200,65 @@ func TestMockLLMService(t *testing.T) {
 		mock.Reset()
 		assert.False(t, mock.StreamMessageCalled)
 		assert.Equal(t, 0, mock.StreamCallCount)
+	})
+
+	t.Run("StreamMessage error injection", func(t *testing.T) {
+		mock := &MockLLMService{
+			StreamError: errors.New("stream error"),
+		}
+		ctx := context.Background()
+		messages := []llm.ChatMessage{{Role: "user", Content: "test"}}
+
+		ch, err := mock.StreamMessage(ctx, "gpt-4", messages)
+		assert.Error(t, err)
+		assert.Nil(t, ch)
+		assert.True(t, mock.StreamMessageCalled)
+	})
+
+	t.Run("StreamMessage custom func", func(t *testing.T) {
+		customCh := make(chan *llm.LLMChunk, 1)
+		customCh <- &llm.LLMChunk{Content: "custom", Done: true}
+		close(customCh)
+
+		mock := &MockLLMService{
+			StreamMessageFunc: func(_ context.Context, _ string, _ []llm.ChatMessage) (<-chan *llm.LLMChunk, error) {
+				return customCh, nil
+			},
+		}
+		ctx := context.Background()
+		messages := []llm.ChatMessage{{Role: "user", Content: "test"}}
+
+		ch, err := mock.StreamMessage(ctx, "gpt-4", messages)
+		require.NoError(t, err)
+		chunk := <-ch
+		assert.Equal(t, "custom", chunk.Content)
+	})
+
+	t.Run("SendMessage error injection", func(t *testing.T) {
+		mock := &MockLLMService{
+			SendError: errors.New("send error"),
+		}
+		ctx := context.Background()
+		messages := []llm.ChatMessage{{Role: "user", Content: "test"}}
+
+		resp, err := mock.SendMessage(ctx, "gpt-4", messages)
+		assert.Error(t, err)
+		assert.Nil(t, resp)
+		assert.True(t, mock.SendMessageCalled)
+	})
+
+	t.Run("SendMessage custom func", func(t *testing.T) {
+		mock := &MockLLMService{
+			SendMessageFunc: func(_ context.Context, _ string, _ []llm.ChatMessage) (*llm.LLMResponse, error) {
+				return &llm.LLMResponse{Content: "custom-send"}, nil
+			},
+		}
+		ctx := context.Background()
+		messages := []llm.ChatMessage{{Role: "user", Content: "test"}}
+
+		resp, err := mock.SendMessage(ctx, "gpt-4", messages)
+		require.NoError(t, err)
+		assert.Equal(t, "custom-send", resp.Content)
 	})
 }
 
@@ -197,6 +352,24 @@ func TestAssertGoroutineCount(t *testing.T) {
 
 	// This should log goroutine count information
 	AssertGoroutineCount(t, before, after, "test goroutine")
+}
+
+// TestAssertMemoryGrowth_NoGrowth covers the branch where memory growth is
+// zero or negative (before.Alloc >= after.Alloc), so only the outer log line
+// is executed and the inner "if growth > 0" block is skipped.
+func TestAssertMemoryGrowth_NoGrowth(t *testing.T) {
+	// Create stats where after.Alloc is less than before.Alloc to simulate
+	// no growth (e.g., after GC). This exercises the false branch of "if growth > 0".
+	var before, after runtime.MemStats
+	before.Alloc = 1000
+	before.TotalAlloc = 5000
+	before.HeapAlloc = 900
+	after.Alloc = 800 // Less than before — negative growth
+	after.TotalAlloc = 5200
+	after.HeapAlloc = 700
+
+	// Must not panic; simply logs that there is no significant growth.
+	AssertMemoryGrowth(t, before, after, "no growth scenario")
 }
 
 // TestAssertNoDataRace verifies AssertNoDataRace functionality

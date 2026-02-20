@@ -12,6 +12,7 @@ require (
 	github.com/prometheus/client_model v0.6.2
 	github.com/real-rm/goconfig v0.2.0
 	github.com/real-rm/gohelper v0.2.0
+	github.com/real-rm/golevelstore v0.2.0
 	github.com/real-rm/golog v0.2.0
 	github.com/real-rm/gomail v0.2.0
 	github.com/real-rm/gomongo v0.2.0
@@ -19,6 +20,7 @@ require (
 	github.com/real-rm/goupload v0.2.0
 	github.com/stretchr/testify v1.11.1
 	go.mongodb.org/mongo-driver v1.17.9
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
@@ -76,7 +78,6 @@ require (
 	github.com/quic-go/qpack v0.5.1 // indirect
 	github.com/quic-go/quic-go v0.54.0 // indirect
 	github.com/real-rm/go-toml v0.0.0-20251210064641-a1863d06cb7a // indirect
-	github.com/real-rm/golevelstore v0.2.0 // indirect
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
 	github.com/twilio/twilio-go v1.26.1 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
@@ -98,5 +99,4 @@ require (
 	google.golang.org/protobuf v1.36.9 // indirect
 	gopkg.in/alexcesaro/quotedprintable.v3 v3.0.0-20150716171945-2caba252f4dc // indirect
 	gopkg.in/gomail.v2 v2.0.0-20160411212932-81ebce5c23df // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

@@ -373,7 +373,7 @@ If you're migrating from config.toml to Kubernetes secrets:
 - [Kubernetes Secrets Documentation](https://kubernetes.io/docs/concepts/configuration/secret/)
 - [External Secrets Operator](https://external-secrets.io/)
 - [KEY_MANAGEMENT.md](./KEY_MANAGEMENT.md) - Encryption key management guide
-- [DEPLOYMENT.md](./DEPLOYMENT.md) - General deployment guide
+- [DEPLOYMENT.md](DEPLOYMENT.md) - General deployment guide
 - [deployments/kubernetes/README.md](./deployments/kubernetes/README.md) - Kubernetes-specific deployment guide
 
 ## Support

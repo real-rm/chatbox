@@ -17,6 +17,26 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// connectionCountForTest returns the count of connections for a user (thread-safe, for tests only).
+func (h *Handler) connectionCountForTest(userID string) (int, bool) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	conns, exists := h.connections[userID]
+	return len(conns), exists
+}
+
+// connectionSnapshotForTest returns a slice copy of connections for a user (thread-safe, for tests only).
+func (h *Handler) connectionSnapshotForTest(userID string) []*Connection {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	conns := h.connections[userID]
+	result := make([]*Connection, 0, len(conns))
+	for _, c := range conns {
+		result = append(result, c)
+	}
+	return result
+}
+
 // TestHandler_MultipleConnectionsPerUser tests that a single user can have multiple simultaneous connections
 func TestHandler_MultipleConnectionsPerUser(t *testing.T) {
 	// Helper function to create a valid JWT token
@@ -61,20 +81,16 @@ func TestHandler_MultipleConnectionsPerUser(t *testing.T) {
 	}
 
 	// Verify all connections are registered
-	handler.mu.RLock()
-	userConns, exists := handler.connections[userID]
-	handler.mu.RUnlock()
+	connCount, exists := handler.connectionCountForTest(userID)
 
 	assert.True(t, exists, "User should have connections registered")
-	assert.Equal(t, numConnections, len(userConns), "User should have %d connections", numConnections)
+	assert.Equal(t, numConnections, connCount, "User should have %d connections", numConnections)
 
 	// Verify each connection has a unique connection ID
 	connectionIDs := make(map[string]bool)
-	handler.mu.RLock()
-	for connID := range userConns {
-		connectionIDs[connID] = true
+	for _, conn := range handler.connectionSnapshotForTest(userID) {
+		connectionIDs[conn.ConnectionID] = true
 	}
-	handler.mu.RUnlock()
 	assert.Equal(t, numConnections, len(connectionIDs), "All connection IDs should be unique")
 
 	// Close one connection
@@ -82,12 +98,10 @@ func TestHandler_MultipleConnectionsPerUser(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Verify other connections are still active
-	handler.mu.RLock()
-	userConns, exists = handler.connections[userID]
-	handler.mu.RUnlock()
+	connCount, exists = handler.connectionCountForTest(userID)
 
 	assert.True(t, exists, "User should still have connections")
-	assert.Equal(t, numConnections-1, len(userConns), "User should have %d connections after closing one", numConnections-1)
+	assert.Equal(t, numConnections-1, connCount, "User should have %d connections after closing one", numConnections-1)
 
 	// Close remaining connections
 	for i := 1; i < numConnections; i++ {
@@ -96,12 +110,10 @@ func TestHandler_MultipleConnectionsPerUser(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Verify all connections are cleaned up
-	handler.mu.RLock()
-	userConns, exists = handler.connections[userID]
-	handler.mu.RUnlock()
+	connCount, exists = handler.connectionCountForTest(userID)
 
 	assert.False(t, exists, "User should have no connections after all are closed")
-	assert.Equal(t, 0, len(userConns), "Connection map should be empty")
+	assert.Equal(t, 0, connCount, "Connection map should be empty")
 }
 
 // TestHandler_ConnectionIDUniqueness tests that connection IDs are unique even for rapid connections
@@ -156,10 +168,8 @@ func TestHandler_MultiConnectionMessageIsolation(t *testing.T) {
 	handler.registerConnection(conn2)
 
 	// Verify both are registered
-	handler.mu.RLock()
-	userConns := handler.connections[userID]
-	handler.mu.RUnlock()
-	assert.Equal(t, 2, len(userConns), "Should have 2 connections")
+	connCount, _ := handler.connectionCountForTest(userID)
+	assert.Equal(t, 2, connCount, "Should have 2 connections")
 
 	// Send message to conn1
 	testMessage := []byte("test message")
@@ -202,10 +212,8 @@ func TestHandler_RateLimitPerUser(t *testing.T) {
 	handler.registerConnection(conn1)
 
 	// Verify connection is registered
-	handler.mu.RLock()
-	userConns := handler.connections[userID]
-	handler.mu.RUnlock()
-	assert.Equal(t, 1, len(userConns))
+	connCount, _ := handler.connectionCountForTest(userID)
+	assert.Equal(t, 1, connCount)
 
 	// Create multiple additional connections up to the limit
 	// The handler has a limit of 10 connections per user
@@ -219,13 +227,11 @@ func TestHandler_RateLimitPerUser(t *testing.T) {
 	}
 
 	// Verify all connections are registered
-	handler.mu.RLock()
-	userConns = handler.connections[userID]
-	handler.mu.RUnlock()
-	assert.Equal(t, 10, len(userConns), "Should have 10 connections at the limit")
+	connCount, _ = handler.connectionCountForTest(userID)
+	assert.Equal(t, 10, connCount, "Should have 10 connections at the limit")
 
 	// Clean up
-	for _, conn := range userConns {
+	for _, conn := range handler.connectionSnapshotForTest(userID) {
 		handler.unregisterConnection(conn)
 	}
 }
@@ -311,12 +317,10 @@ func TestHandler_ConnectionLimitGracefulHandling(t *testing.T) {
 	}
 
 	// Verify all connections are registered
-	handler.mu.RLock()
-	userConns, exists := handler.connections[userID]
-	handler.mu.RUnlock()
+	connCount, exists := handler.connectionCountForTest(userID)
 
 	assert.True(t, exists, "User should have connections registered")
-	assert.Equal(t, maxConnections, len(userConns), "User should have %d connections", maxConnections)
+	assert.Equal(t, maxConnections, connCount, "User should have %d connections", maxConnections)
 
 	// Try to connect one more time - should be rejected with 429
 	_, resp, err := websocket.DefaultDialer.Dial(wsURL, nil)
@@ -335,12 +339,10 @@ func TestHandler_ConnectionLimitGracefulHandling(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	// Verify we still have the max number of connections
-	handler.mu.RLock()
-	userConns, exists = handler.connections[userID]
-	handler.mu.RUnlock()
+	connCount, exists = handler.connectionCountForTest(userID)
 
 	assert.True(t, exists, "User should have connections registered")
-	assert.Equal(t, maxConnections, len(userConns), "User should have %d connections", maxConnections)
+	assert.Equal(t, maxConnections, connCount, "User should have %d connections", maxConnections)
 
 	// Clean up
 	newConn.Close()
@@ -350,11 +352,10 @@ func TestHandler_ConnectionLimitGracefulHandling(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Verify all connections are cleaned up
-	handler.mu.RLock()
-	userConns, exists = handler.connections[userID]
-	handler.mu.RUnlock()
+	connCount, exists = handler.connectionCountForTest(userID)
 
 	assert.False(t, exists, "User should have no connections after all are closed")
+	_ = connCount
 }
 
 // TestHandler_ConnectionLimitPerUser tests that connection limits apply per user, not globally
@@ -401,10 +402,8 @@ func TestHandler_ConnectionLimitPerUser(t *testing.T) {
 	}
 
 	// Verify user1 has max connections
-	handler.mu.RLock()
-	user1Conns := handler.connections[user1ID]
-	handler.mu.RUnlock()
-	assert.Equal(t, maxConnections, len(user1Conns), "User1 should have %d connections", maxConnections)
+	user1Count, _ := handler.connectionCountForTest(user1ID)
+	assert.Equal(t, maxConnections, user1Count, "User1 should have %d connections", maxConnections)
 
 	// User2 should still be able to connect even though user1 is at the limit
 	user2Connections := make([]*websocket.Conn, 3)
@@ -417,10 +416,8 @@ func TestHandler_ConnectionLimitPerUser(t *testing.T) {
 	}
 
 	// Verify user2 has connections
-	handler.mu.RLock()
-	user2Conns := handler.connections[user2ID]
-	handler.mu.RUnlock()
-	assert.Equal(t, 3, len(user2Conns), "User2 should have 3 connections")
+	user2Count, _ := handler.connectionCountForTest(user2ID)
+	assert.Equal(t, 3, user2Count, "User2 should have 3 connections")
 
 	// Clean up
 	for _, conn := range user1Connections {
@@ -475,12 +472,10 @@ func TestHandler_NotifyConnectionLimit(t *testing.T) {
 	}
 
 	// Verify all connections are registered
-	handler.mu.RLock()
-	userConns, exists := handler.connections[userID]
-	handler.mu.RUnlock()
+	connCount, exists := handler.connectionCountForTest(userID)
 
 	assert.True(t, exists, "User should have connections registered")
-	assert.Equal(t, maxConnections, len(userConns), "User should have %d connections", maxConnections)
+	assert.Equal(t, maxConnections, connCount, "User should have %d connections", maxConnections)
 
 	// Try to connect one more time - should be rejected with 429
 	_, resp, err := websocket.DefaultDialer.Dial(wsURL, nil)
@@ -540,12 +535,10 @@ func TestHandler_NotifyConnectionLimit_NoExistingConnections(t *testing.T) {
 	handler.notifyConnectionLimit("non-existent-user")
 
 	// Verify no connections exist
-	handler.mu.RLock()
-	userConns, exists := handler.connections["non-existent-user"]
-	handler.mu.RUnlock()
+	connCount, exists := handler.connectionCountForTest("non-existent-user")
 
 	assert.False(t, exists, "User should not exist in connections map")
-	assert.Equal(t, 0, len(userConns), "Should have no connections")
+	assert.Equal(t, 0, connCount, "Should have no connections")
 }
 
 // TestHandler_NotifyConnectionLimit_MessageFormat tests the notification message format

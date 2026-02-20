@@ -218,6 +218,76 @@ func TestValidateToken_WithoutName(t *testing.T) {
 	assert.Equal(t, []string{"user"}, extractedClaims.Roles)
 }
 
+// TestExtractRoles covers all branches of the extractRoles internal function.
+// Since extractRoles is package-private, we test it directly here.
+func TestExtractRoles(t *testing.T) {
+	tests := []struct {
+		name      string
+		input     interface{}
+		wantRoles []string
+		wantErr   bool
+		errMsg    string
+	}{
+		{
+			name:      "[]interface{} with strings — normal JWT claim format",
+			input:     []interface{}{"user", "admin"},
+			wantRoles: []string{"user", "admin"},
+			wantErr:   false,
+		},
+		{
+			name:      "empty []interface{}",
+			input:     []interface{}{},
+			wantRoles: []string{},
+			wantErr:   false,
+		},
+		{
+			name:      "[]interface{} with non-string element",
+			input:     []interface{}{"user", 42},
+			wantErr:   true,
+			errMsg:    "non-string value at index 1",
+		},
+		{
+			name:      "[]string — direct string slice (less common)",
+			input:     []string{"admin", "moderator"},
+			wantRoles: []string{"admin", "moderator"},
+			wantErr:   false,
+		},
+		{
+			name:    "string — invalid type",
+			input:   "user",
+			wantErr: true,
+			errMsg:  "must be an array of strings",
+		},
+		{
+			name:    "nil — invalid type",
+			input:   nil,
+			wantErr: true,
+			errMsg:  "must be an array of strings",
+		},
+		{
+			name:    "integer — invalid type",
+			input:   42,
+			wantErr: true,
+			errMsg:  "must be an array of strings",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			roles, err := extractRoles(tt.input)
+			if tt.wantErr {
+				require.Error(t, err)
+				if tt.errMsg != "" {
+					assert.Contains(t, err.Error(), tt.errMsg)
+				}
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, tt.wantRoles, roles)
+			}
+		})
+	}
+}
+
 func TestValidateToken_WithEmptyName(t *testing.T) {
 	validator := NewJWTValidator(testSecret)
 

@@ -16,10 +16,11 @@ import (
 
 // DifyProvider implements the LLMProvider interface for Dify API
 type DifyProvider struct {
-	apiKey   string
-	endpoint string
-	model    string
-	client   *http.Client
+	apiKey       string
+	endpoint     string
+	model        string
+	client       *http.Client // used for non-streaming requests (60s timeout)
+	streamClient *http.Client // used for streaming requests (no transport timeout; context controls cancellation)
 }
 
 // NewDifyProvider creates a new Dify provider
@@ -30,6 +31,9 @@ func NewDifyProvider(apiKey, endpoint, model string) *DifyProvider {
 		model:    model,
 		client: &http.Client{
 			Timeout: 60 * time.Second,
+		},
+		streamClient: &http.Client{
+			Timeout: 0, // no deadline; the caller's context controls cancellation
 		},
 	}
 }
@@ -155,8 +159,8 @@ func (p *DifyProvider) StreamMessage(ctx context.Context, req *LLMRequest) (<-ch
 	httpReq.Header.Set("Authorization", "Bearer "+p.apiKey)
 	httpReq.Header.Set("Accept", "text/event-stream")
 
-	// Send request
-	resp, err := p.client.Do(httpReq)
+	// Send request using streamClient (no transport-level timeout; context cancellation controls the stream)
+	resp, err := p.streamClient.Do(httpReq)
 	if err != nil {
 		return nil, fmt.Errorf("failed to send request: %w", err)
 	}

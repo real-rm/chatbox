@@ -44,6 +44,8 @@ func TestValidateNotNil(t *testing.T) {
 		{"nil pointer", nilPtr, "field", true},
 		{"nil interface", nil, "field", true},
 		{"non-nil value", "test", "field", false},
+		{"nil *int pointer", (*int)(nil), "field", true},
+		{"non-nil *int pointer", new(int), "field", false},
 	}
 
 	for _, tt := range tests {
@@ -148,6 +150,57 @@ func TestValidatePositive(t *testing.T) {
 			err := ValidatePositive(tt.value, tt.fieldName)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ValidatePositive() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+// TestValidateTimeRange verifies that ValidateTimeRange always returns an
+// error (current implementation is a placeholder returning "not implemented").
+func TestValidateTimeRange(t *testing.T) {
+	tests := []struct {
+		name    string
+		start   interface{}
+		end     interface{}
+		wantErr bool
+	}{
+		{
+			name:    "nil start and nil end — still returns error",
+			start:   nil,
+			end:     nil,
+			wantErr: true,
+		},
+		{
+			name:    "zero values — still returns error",
+			start:   0,
+			end:     0,
+			wantErr: true,
+		},
+		{
+			name:    "string values — still returns error",
+			start:   "2024-01-01",
+			end:     "2024-12-31",
+			wantErr: true,
+		},
+		{
+			name:    "integer range — still returns error",
+			start:   1,
+			end:     100,
+			wantErr: true,
+		},
+		{
+			name:    "inverted range — still returns error",
+			start:   100,
+			end:     1,
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateTimeRange(tt.start, tt.end)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ValidateTimeRange() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
 	}

@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -19,6 +21,7 @@ import (
 
 // mockRouter implements the MessageRouter interface for testing
 type mockRouter struct {
+	mu                   sync.RWMutex
 	registeredSessions   map[string]*Connection
 	unregisteredSessions []string
 	routedMessages       []*message.Message
@@ -33,18 +36,53 @@ func newMockRouter() *mockRouter {
 }
 
 func (m *mockRouter) RouteMessage(conn *Connection, msg *message.Message) error {
+	m.mu.Lock()
 	m.routedMessages = append(m.routedMessages, msg)
+	m.mu.Unlock()
 	return nil
 }
 
 func (m *mockRouter) RegisterConnection(sessionID string, conn *Connection) error {
+	m.mu.Lock()
 	m.registeredSessions[sessionID] = conn
+	m.mu.Unlock()
 	return nil
 }
 
 func (m *mockRouter) UnregisterConnection(sessionID string) {
+	m.mu.Lock()
 	m.unregisteredSessions = append(m.unregisteredSessions, sessionID)
 	delete(m.registeredSessions, sessionID)
+	m.mu.Unlock()
+}
+
+// RoutedMessages returns a snapshot of all routed messages (thread-safe).
+func (m *mockRouter) RoutedMessages() []*message.Message {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	result := make([]*message.Message, len(m.routedMessages))
+	copy(result, m.routedMessages)
+	return result
+}
+
+// RegisteredSessions returns a snapshot of the registered sessions map (thread-safe).
+func (m *mockRouter) RegisteredSessions() map[string]*Connection {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	result := make(map[string]*Connection, len(m.registeredSessions))
+	for k, v := range m.registeredSessions {
+		result[k] = v
+	}
+	return result
+}
+
+// UnregisteredSessions returns a snapshot of unregistered session IDs (thread-safe).
+func (m *mockRouter) UnregisteredSessions() []string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	result := make([]string, len(m.unregisteredSessions))
+	copy(result, m.unregisteredSessions)
+	return result
 }
 
 // TestReadPump_RouterIntegration tests that readPump properly connects to the message router
@@ -112,16 +150,16 @@ func TestReadPump_RouterIntegration(t *testing.T) {
 	}
 
 	// Verify that the connection was registered with the router
-	assert.Len(t, router.registeredSessions, 0, "connection should be unregistered after close")
-	assert.Len(t, router.unregisteredSessions, 1, "connection should have been unregistered")
-	assert.Equal(t, "test-session-123", router.unregisteredSessions[0])
+	assert.Len(t, router.RegisteredSessions(), 0, "connection should be unregistered after close")
+	assert.Len(t, router.UnregisteredSessions(), 1, "connection should have been unregistered")
+	assert.Equal(t, "test-session-123", router.UnregisteredSessions()[0])
 
 	// Verify that the message was routed
-	assert.Len(t, router.routedMessages, 1, "message should have been routed")
-	if len(router.routedMessages) > 0 {
-		assert.Equal(t, message.TypeUserMessage, router.routedMessages[0].Type)
-		assert.Equal(t, "test-session-123", router.routedMessages[0].SessionID)
-		assert.Equal(t, "Hello, world!", router.routedMessages[0].Content)
+	assert.Len(t, router.RoutedMessages(), 1, "message should have been routed")
+	if len(router.RoutedMessages()) > 0 {
+		assert.Equal(t, message.TypeUserMessage, router.RoutedMessages()[0].Type)
+		assert.Equal(t, "test-session-123", router.RoutedMessages()[0].SessionID)
+		assert.Equal(t, "Hello, world!", router.RoutedMessages()[0].Content)
 	}
 }
 
@@ -202,11 +240,11 @@ func TestReadPump_SessionIDAssignment(t *testing.T) {
 	assert.Equal(t, "session-abc", connection.SessionID)
 
 	// Verify that connection was registered only once with the router
-	assert.Len(t, router.unregisteredSessions, 1)
-	assert.Equal(t, "session-abc", router.unregisteredSessions[0])
+	assert.Len(t, router.UnregisteredSessions(), 1)
+	assert.Equal(t, "session-abc", router.UnregisteredSessions()[0])
 
 	// Verify both messages were routed
-	assert.Len(t, router.routedMessages, 2)
+	assert.Len(t, router.RoutedMessages(), 2)
 }
 
 // TestReadPump_InvalidJSON tests error handling for invalid JSON
@@ -216,7 +254,7 @@ func TestReadPump_InvalidJSON(t *testing.T) {
 	handler := NewHandler(validator, router, testLogger(), 1048576)
 
 	// Create a test server
-	receivedError := false
+	var receivedError atomic.Bool
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		upgrader := websocket.Upgrader{}
 		conn, err := upgrader.Upgrade(w, r, nil)
@@ -233,7 +271,7 @@ func TestReadPump_InvalidJSON(t *testing.T) {
 			var errorMsg message.Message
 			if errorMsg.UnmarshalJSON(msg) == nil {
 				if errorMsg.Type == message.TypeError {
-					receivedError = true
+					receivedError.Store(true)
 				}
 			}
 		}
@@ -260,10 +298,10 @@ func TestReadPump_InvalidJSON(t *testing.T) {
 	handler.registerConnection(connection)
 
 	// Start readPump and writePump
-	done := make(chan bool)
+	done := make(chan struct{})
 	go func() {
 		connection.readPump(handler)
-		done <- true
+		close(done)
 	}()
 
 	go connection.writePump()
@@ -277,10 +315,10 @@ func TestReadPump_InvalidJSON(t *testing.T) {
 	}
 
 	// Verify error was sent
-	assert.True(t, receivedError, "error message should have been sent")
+	assert.True(t, receivedError.Load(), "error message should have been sent")
 
 	// Verify no messages were routed
-	assert.Len(t, router.routedMessages, 0)
+	assert.Len(t, router.RoutedMessages(), 0)
 }
 
 // TestReadPump_RoutingErrorHandling tests that routing errors are properly handled and logged
@@ -296,7 +334,10 @@ func TestReadPump_RoutingErrorHandling(t *testing.T) {
 	handler := NewHandler(validator, router, testLogger(), 1048576)
 
 	// Create a test server
-	var receivedErrorMsg *message.Message
+	var (
+		receivedErrorMsgMu sync.Mutex
+		receivedErrorMsg   *message.Message
+	)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		upgrader := websocket.Upgrader{}
 		conn, err := upgrader.Upgrade(w, r, nil)
@@ -336,15 +377,18 @@ func TestReadPump_RoutingErrorHandling(t *testing.T) {
 	// Register connection
 	handler.registerConnection(connection)
 
-	// Start readPump and writePump
-	done := make(chan bool)
+	// Start readPump; close done to broadcast to all waiters
+	done := make(chan struct{})
 	go func() {
 		connection.readPump(handler)
-		done <- true
+		close(done)
 	}()
 
-	// Start writePump to send error messages
+	// Start writePump to capture error messages; exit when done is closed
+	var wgSend sync.WaitGroup
+	wgSend.Add(1)
 	go func() {
+		defer wgSend.Done()
 		for {
 			select {
 			case msg, ok := <-connection.send:
@@ -355,7 +399,9 @@ func TestReadPump_RoutingErrorHandling(t *testing.T) {
 				var errorMsg message.Message
 				if err := json.Unmarshal(msg, &errorMsg); err == nil {
 					if errorMsg.Type == message.TypeError {
+						receivedErrorMsgMu.Lock()
 						receivedErrorMsg = &errorMsg
+						receivedErrorMsgMu.Unlock()
 					}
 				}
 			case <-done:
@@ -372,12 +418,18 @@ func TestReadPump_RoutingErrorHandling(t *testing.T) {
 		t.Fatal("readPump did not finish in time")
 	}
 
+	// Wait for the send-capture goroutine to exit before reading shared state
+	wgSend.Wait()
+
 	// Verify that an error message was sent
-	require.NotNil(t, receivedErrorMsg, "error message should have been sent")
-	assert.Equal(t, message.TypeError, receivedErrorMsg.Type)
-	assert.NotNil(t, receivedErrorMsg.Error)
-	assert.Equal(t, string(chaterrors.ErrCodeLLMUnavailable), receivedErrorMsg.Error.Code)
-	assert.True(t, receivedErrorMsg.Error.Recoverable)
+	receivedErrorMsgMu.Lock()
+	captured := receivedErrorMsg
+	receivedErrorMsgMu.Unlock()
+	require.NotNil(t, captured, "error message should have been sent")
+	assert.Equal(t, message.TypeError, captured.Type)
+	assert.NotNil(t, captured.Error)
+	assert.Equal(t, string(chaterrors.ErrCodeLLMUnavailable), captured.Error.Code)
+	assert.True(t, captured.Error.Recoverable)
 }
 
 // mockRouterWithError is a mock router that can return errors
@@ -414,7 +466,10 @@ func TestReadPump_RegistrationErrorHandling(t *testing.T) {
 	handler := NewHandler(validator, router, testLogger(), 1048576)
 
 	// Create a test server
-	var receivedErrorMsg *message.Message
+	var (
+		receivedErrorMsgMu sync.Mutex
+		receivedErrorMsg   *message.Message
+	)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		upgrader := websocket.Upgrader{}
 		conn, err := upgrader.Upgrade(w, r, nil)
@@ -454,15 +509,18 @@ func TestReadPump_RegistrationErrorHandling(t *testing.T) {
 	// Register connection
 	handler.registerConnection(connection)
 
-	// Start readPump and writePump
-	done := make(chan bool)
+	// Start readPump; close done to broadcast to all waiters
+	done := make(chan struct{})
 	go func() {
 		connection.readPump(handler)
-		done <- true
+		close(done)
 	}()
 
-	// Start writePump to capture error messages
+	// Start writePump to capture error messages; exit when done is closed
+	var wgSend sync.WaitGroup
+	wgSend.Add(1)
 	go func() {
+		defer wgSend.Done()
 		for {
 			select {
 			case msg, ok := <-connection.send:
@@ -473,7 +531,9 @@ func TestReadPump_RegistrationErrorHandling(t *testing.T) {
 				var errorMsg message.Message
 				if err := json.Unmarshal(msg, &errorMsg); err == nil {
 					if errorMsg.Type == message.TypeError {
+						receivedErrorMsgMu.Lock()
 						receivedErrorMsg = &errorMsg
+						receivedErrorMsgMu.Unlock()
 					}
 				}
 			case <-done:
@@ -490,13 +550,19 @@ func TestReadPump_RegistrationErrorHandling(t *testing.T) {
 		t.Fatal("readPump did not finish in time")
 	}
 
+	// Wait for the send-capture goroutine to exit before reading shared state
+	wgSend.Wait()
+
 	// Verify that an error message was sent for registration failure
-	require.NotNil(t, receivedErrorMsg, "error message should have been sent for registration failure")
-	assert.Equal(t, message.TypeError, receivedErrorMsg.Type)
-	assert.NotNil(t, receivedErrorMsg.Error)
-	assert.Equal(t, string(chaterrors.ErrCodeServiceError), receivedErrorMsg.Error.Code)
-	assert.Contains(t, receivedErrorMsg.Error.Message, "Failed to establish session connection")
-	assert.True(t, receivedErrorMsg.Error.Recoverable)
+	receivedErrorMsgMu.Lock()
+	captured := receivedErrorMsg
+	receivedErrorMsgMu.Unlock()
+	require.NotNil(t, captured, "error message should have been sent for registration failure")
+	assert.Equal(t, message.TypeError, captured.Type)
+	assert.NotNil(t, captured.Error)
+	assert.Equal(t, string(chaterrors.ErrCodeServiceError), captured.Error.Code)
+	assert.Contains(t, captured.Error.Message, "Failed to establish session connection")
+	assert.True(t, captured.Error.Recoverable)
 }
 
 // mockRouterWithRegistrationError is a mock router that returns errors on registration
@@ -536,8 +602,8 @@ func TestEndToEndMessageFlow(t *testing.T) {
 			},
 			expectedRouted: 1,
 			validateFunc: func(t *testing.T, router *mockRouter) {
-				assert.Equal(t, "Hello AI", router.routedMessages[0].Content)
-				assert.Equal(t, message.TypeUserMessage, router.routedMessages[0].Type)
+				assert.Equal(t, "Hello AI", router.RoutedMessages()[0].Content)
+				assert.Equal(t, message.TypeUserMessage, router.RoutedMessages()[0].Type)
 			},
 		},
 		{
@@ -567,11 +633,11 @@ func TestEndToEndMessageFlow(t *testing.T) {
 			},
 			expectedRouted: 3,
 			validateFunc: func(t *testing.T, router *mockRouter) {
-				assert.Equal(t, "First message", router.routedMessages[0].Content)
-				assert.Equal(t, "Second message", router.routedMessages[1].Content)
-				assert.Equal(t, "Third message", router.routedMessages[2].Content)
+				assert.Equal(t, "First message", router.RoutedMessages()[0].Content)
+				assert.Equal(t, "Second message", router.RoutedMessages()[1].Content)
+				assert.Equal(t, "Third message", router.RoutedMessages()[2].Content)
 				// All should have same session ID
-				for _, msg := range router.routedMessages {
+				for _, msg := range router.RoutedMessages() {
 					assert.Equal(t, "session-002", msg.SessionID)
 				}
 			},
@@ -593,9 +659,9 @@ func TestEndToEndMessageFlow(t *testing.T) {
 			},
 			expectedRouted: 1,
 			validateFunc: func(t *testing.T, router *mockRouter) {
-				assert.NotNil(t, router.routedMessages[0].Metadata)
-				assert.Equal(t, "1.0.0", router.routedMessages[0].Metadata["client_version"])
-				assert.Equal(t, "web", router.routedMessages[0].Metadata["platform"])
+				assert.NotNil(t, router.RoutedMessages()[0].Metadata)
+				assert.Equal(t, "1.0.0", router.RoutedMessages()[0].Metadata["client_version"])
+				assert.Equal(t, "web", router.RoutedMessages()[0].Metadata["platform"])
 			},
 		},
 		{
@@ -611,7 +677,7 @@ func TestEndToEndMessageFlow(t *testing.T) {
 			},
 			expectedRouted: 1,
 			validateFunc: func(t *testing.T, router *mockRouter) {
-				assert.Equal(t, "", router.routedMessages[0].Content)
+				assert.Equal(t, "", router.RoutedMessages()[0].Content)
 			},
 		},
 	}
@@ -672,7 +738,7 @@ func TestEndToEndMessageFlow(t *testing.T) {
 			}
 
 			// Verify expected number of messages routed
-			assert.Len(t, router.routedMessages, tt.expectedRouted)
+			assert.Len(t, router.RoutedMessages(), tt.expectedRouted)
 
 			// Run custom validation
 			if tt.validateFunc != nil {
@@ -746,14 +812,14 @@ func TestEndToEndMessageFlow_SessionRegistration(t *testing.T) {
 	}
 
 	// Verify session was registered with router
-	assert.Contains(t, router.unregisteredSessions, sessionID, "session should have been registered and then unregistered")
+	assert.Contains(t, router.UnregisteredSessions(), sessionID, "session should have been registered and then unregistered")
 
 	// Verify connection got the session ID
 	assert.Equal(t, sessionID, connection.SessionID)
 
 	// Verify message was routed
-	assert.Len(t, router.routedMessages, 1)
-	assert.Equal(t, sessionID, router.routedMessages[0].SessionID)
+	assert.Len(t, router.RoutedMessages(), 1)
+	assert.Equal(t, sessionID, router.RoutedMessages()[0].SessionID)
 }
 
 // TestEndToEndMessageFlow_TimestampHandling tests that timestamps are set correctly
@@ -824,14 +890,14 @@ func TestEndToEndMessageFlow_TimestampHandling(t *testing.T) {
 	}
 
 	// Verify both messages were routed
-	require.Len(t, router.routedMessages, 2)
+	require.Len(t, router.RoutedMessages(), 2)
 
 	// First message should have timestamp set by server
-	assert.False(t, router.routedMessages[0].Timestamp.IsZero(), "timestamp should be set by server")
-	assert.True(t, time.Since(router.routedMessages[0].Timestamp) < 5*time.Second, "timestamp should be recent")
+	assert.False(t, router.RoutedMessages()[0].Timestamp.IsZero(), "timestamp should be set by server")
+	assert.True(t, time.Since(router.RoutedMessages()[0].Timestamp) < 5*time.Second, "timestamp should be recent")
 
 	// Second message should preserve explicit timestamp
-	assert.Equal(t, time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC), router.routedMessages[1].Timestamp)
+	assert.Equal(t, time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC), router.RoutedMessages()[1].Timestamp)
 }
 
 // TestEndToEndMessageFlow_SenderHandling tests that sender field is set correctly
@@ -901,11 +967,11 @@ func TestEndToEndMessageFlow_SenderHandling(t *testing.T) {
 	}
 
 	// Verify both messages were routed
-	require.Len(t, router.routedMessages, 2)
+	require.Len(t, router.RoutedMessages(), 2)
 
 	// Both messages should have sender set to User
-	assert.Equal(t, message.SenderUser, router.routedMessages[0].Sender, "sender should default to User")
-	assert.Equal(t, message.SenderUser, router.routedMessages[1].Sender)
+	assert.Equal(t, message.SenderUser, router.RoutedMessages()[0].Sender, "sender should default to User")
+	assert.Equal(t, message.SenderUser, router.RoutedMessages()[1].Sender)
 }
 
 // TestEndToEndMessageFlow_ConcurrentMessages tests handling of rapid message sequences
@@ -970,12 +1036,12 @@ func TestEndToEndMessageFlow_ConcurrentMessages(t *testing.T) {
 	}
 
 	// Verify all messages were routed
-	assert.Len(t, router.routedMessages, messageCount, "all messages should be routed")
+	assert.Len(t, router.RoutedMessages(), messageCount, "all messages should be routed")
 
 	// Verify messages are in order (content should be sequential)
 	for i := 0; i < messageCount; i++ {
 		expected := "Message " + string(rune('A'+i))
-		assert.Equal(t, expected, router.routedMessages[i].Content, "messages should be in order")
+		assert.Equal(t, expected, router.RoutedMessages()[i].Content, "messages should be in order")
 	}
 }
 
@@ -1037,8 +1103,8 @@ func TestEndToEndMessageFlow_UnregistrationOnClose(t *testing.T) {
 	}
 
 	// Verify session was unregistered
-	assert.Contains(t, router.unregisteredSessions, sessionID, "session should be unregistered on close")
-	assert.NotContains(t, router.registeredSessions, sessionID, "session should not be in registered map")
+	assert.Contains(t, router.UnregisteredSessions(), sessionID, "session should be unregistered on close")
+	assert.NotContains(t, router.RegisteredSessions(), sessionID, "session should not be in registered map")
 }
 
 // streamingMockRouter is a mock router that simulates streaming LLM responses
@@ -1302,7 +1368,10 @@ func TestReadPump_NilRouterHandling(t *testing.T) {
 	handler := NewHandler(validator, nil, testLogger(), 1048576)
 
 	// Create a test server
-	var receivedErrorMsg *message.Message
+	var (
+		receivedErrorMsgMu sync.Mutex
+		receivedErrorMsg   *message.Message
+	)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		upgrader := websocket.Upgrader{}
 		conn, err := upgrader.Upgrade(w, r, nil)
@@ -1342,15 +1411,18 @@ func TestReadPump_NilRouterHandling(t *testing.T) {
 	// Register connection
 	handler.registerConnection(connection)
 
-	// Start readPump and writePump
-	done := make(chan bool)
+	// Start readPump; close done to broadcast to all waiters
+	done := make(chan struct{})
 	go func() {
 		connection.readPump(handler)
-		done <- true
+		close(done)
 	}()
 
-	// Start writePump to send error messages
+	// Start writePump to capture error messages; exit when done is closed
+	var wgSend sync.WaitGroup
+	wgSend.Add(1)
 	go func() {
+		defer wgSend.Done()
 		for {
 			select {
 			case msg, ok := <-connection.send:
@@ -1361,7 +1433,9 @@ func TestReadPump_NilRouterHandling(t *testing.T) {
 				var errorMsg message.Message
 				if err := json.Unmarshal(msg, &errorMsg); err == nil {
 					if errorMsg.Type == message.TypeError {
+						receivedErrorMsgMu.Lock()
 						receivedErrorMsg = &errorMsg
+						receivedErrorMsgMu.Unlock()
 					}
 				}
 			case <-done:
@@ -1378,13 +1452,19 @@ func TestReadPump_NilRouterHandling(t *testing.T) {
 		t.Fatal("readPump did not finish in time")
 	}
 
+	// Wait for the send-capture goroutine to exit before reading shared state
+	wgSend.Wait()
+
 	// Verify that an error message was sent
-	require.NotNil(t, receivedErrorMsg, "error message should have been sent when router is nil")
-	assert.Equal(t, message.TypeError, receivedErrorMsg.Type)
-	assert.NotNil(t, receivedErrorMsg.Error)
-	assert.Equal(t, string(chaterrors.ErrCodeServiceError), receivedErrorMsg.Error.Code)
-	assert.Equal(t, "Service temporarily unavailable", receivedErrorMsg.Error.Message)
-	assert.True(t, receivedErrorMsg.Error.Recoverable)
+	receivedErrorMsgMu.Lock()
+	captured := receivedErrorMsg
+	receivedErrorMsgMu.Unlock()
+	require.NotNil(t, captured, "error message should have been sent when router is nil")
+	assert.Equal(t, message.TypeError, captured.Type)
+	assert.NotNil(t, captured.Error)
+	assert.Equal(t, string(chaterrors.ErrCodeServiceError), captured.Error.Code)
+	assert.Equal(t, "Service temporarily unavailable", captured.Error.Message)
+	assert.True(t, captured.Error.Recoverable)
 }
 
 // TestOversizedMessages_Integration tests the complete flow of message size limit enforcement
@@ -1446,9 +1526,9 @@ func TestOversizedMessages_Integration(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 
 	// Verify the message was routed successfully
-	assert.Len(t, router.routedMessages, 1, "Message at limit should be routed")
-	if len(router.routedMessages) > 0 {
-		assert.Equal(t, string(contentAtLimit), router.routedMessages[0].Content)
+	assert.Len(t, router.RoutedMessages(), 1, "Message at limit should be routed")
+	if len(router.RoutedMessages()) > 0 {
+		assert.Equal(t, string(contentAtLimit), router.RoutedMessages()[0].Content)
 	}
 
 	// Test 2: Send message over limit (should fail and close connection)
@@ -1481,7 +1561,7 @@ func TestOversizedMessages_Integration(t *testing.T) {
 	assert.Error(t, readErr, "Connection should be closed after oversized message")
 
 	// Verify no additional messages were routed (only the first valid message)
-	assert.Len(t, router.routedMessages, 1, "Oversized message should not be routed")
+	assert.Len(t, router.RoutedMessages(), 1, "Oversized message should not be routed")
 
 	// Note: Log verification would require capturing log output, which is tested
 	// in the property-based tests. The handler logs with user_id, connection_id,
@@ -1546,9 +1626,9 @@ func TestOversizedMessages_ExactLimit(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 
 	// Verify the message was routed successfully
-	assert.Len(t, router.routedMessages, 1, "Message near limit should be routed")
-	if len(router.routedMessages) > 0 {
-		assert.Equal(t, string(content), router.routedMessages[0].Content)
+	assert.Len(t, router.RoutedMessages(), 1, "Message near limit should be routed")
+	if len(router.RoutedMessages()) > 0 {
+		assert.Equal(t, string(content), router.RoutedMessages()[0].Content)
 	}
 
 	// Verify connection is still open by sending another message
@@ -1567,7 +1647,7 @@ func TestOversizedMessages_ExactLimit(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 
 	// Verify both messages were routed
-	assert.Len(t, router.routedMessages, 2, "Both messages should be routed")
+	assert.Len(t, router.RoutedMessages(), 2, "Both messages should be routed")
 }
 
 // TestOversizedMessages_MultipleConnections tests that size limit is enforced per connection
@@ -1669,11 +1749,11 @@ func TestOversizedMessages_MultipleConnections(t *testing.T) {
 	assert.Error(t, readErr, "User 2's connection should be closed")
 
 	// Verify only user 1's messages were routed
-	assert.GreaterOrEqual(t, len(router.routedMessages), 2, "User 1's messages should be routed")
+	assert.GreaterOrEqual(t, len(router.RoutedMessages()), 2, "User 1's messages should be routed")
 
 	// Check that user 1's messages are present
 	foundUser1Messages := 0
-	for _, msg := range router.routedMessages {
+	for _, msg := range router.RoutedMessages() {
 		if msg.SessionID == "session-user-1" {
 			foundUser1Messages++
 		}

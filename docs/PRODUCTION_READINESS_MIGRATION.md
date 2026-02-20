@@ -504,13 +504,13 @@ If you encounter issues not covered in this guide:
 
 1. Check application logs: `kubectl logs -n chatbox -l app=chatbox`
 2. Check pod events: `kubectl describe pod -n chatbox <pod-name>`
-3. Review [DEPLOYMENT.md](../DEPLOYMENT.md) for general deployment issues
-4. Review [PRODUCTION_READINESS_REVIEW.md](../PRODUCTION_READINESS_REVIEW.md) for issue details
+3. Review [DEPLOYMENT.md](DEPLOYMENT.md) for general deployment issues
+4. Review [PRODUCTION_READINESS_REVIEW.md](PRODUCTION_READINESS_REVIEW.md) for issue details
 5. Contact DevOps team
 
 ## Additional Resources
 
-- [Production Readiness Review](../PRODUCTION_READINESS_REVIEW.md) - Detailed issue analysis
-- [Deployment Guide](../DEPLOYMENT.md) - General deployment documentation
+- [Production Readiness Review](PRODUCTION_READINESS_REVIEW.md) - Detailed issue analysis
+- [Deployment Guide](DEPLOYMENT.md) - General deployment documentation
 - [Configuration Guide](../README.md#configuration) - Configuration options
 - [Kubernetes Deployment](../deployments/kubernetes/README.md) - K8s-specific docs

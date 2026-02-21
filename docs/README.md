@@ -1,90 +1,43 @@
 # Chatbox Documentation
 
-This directory contains comprehensive documentation for the Chatbox WebSocket application.
-
 ## Quick Start
 
 - [DEPLOYMENT.md](DEPLOYMENT.md) - Deployment instructions and Docker setup
 - [SECRET_SETUP_QUICKSTART.md](SECRET_SETUP_QUICKSTART.md) - Quick guide to setting up secrets
 
-## Architecture & Code Quality
-
-The chatbox application follows strict code quality standards:
-
-- **No Magic Numbers/Strings**: All constants centralized in `internal/constants/`
-- **DRY Principle**: Common functionality in `internal/util/` package
-- **High Test Coverage**: 80%+ coverage with unit, property-based, and integration tests
-- **Documented Patterns**: All code patterns clearly documented
-- **Clean Architecture**: Clear separation of concerns across packages
-
-See [CODE_QUALITY.md](CODE_QUALITY.md) for comprehensive code quality documentation and [DEPLOYMENT.md](DEPLOYMENT.md#code-quality-and-architecture) for deployment implications.
-
-## Production Readiness
-
-- [PRODUCTION_READINESS_PLAN.md](PRODUCTION_READINESS_PLAN.md) - Complete production readiness review
-- [PRODUCTION_READINESS_STATUS.md](PRODUCTION_READINESS_STATUS.md) - Current status of production readiness tasks
-
 ## Configuration & Setup
 
 - [CI_SETUP.md](CI_SETUP.md) - CI/CD configuration for GitHub Actions and GitLab CI
+- [CI_CONFIGURATION.md](CI_CONFIGURATION.md) - Detailed CI pipeline configuration
+- [CI_GITHUB_TOKEN_SETUP.md](CI_GITHUB_TOKEN_SETUP.md) - GitHub token setup for Docker builds
 - [PRIVATE_REGISTRY_SETUP.md](PRIVATE_REGISTRY_SETUP.md) - Private Go module registry configuration
+
+## Security
+
 - [SECRET_MANAGEMENT.md](SECRET_MANAGEMENT.md) - Secret management best practices
-- [KEY_MANAGEMENT.md](KEY_MANAGEMENT.md) - Encryption key management
+- [SECRET_SETUP_QUICKSTART.md](SECRET_SETUP_QUICKSTART.md) - Quick secret setup guide
+- [KEY_MANAGEMENT.md](KEY_MANAGEMENT.md) - AES-256-GCM encryption key management
+- [JWT_TOKEN_SECURITY.md](JWT_TOKEN_SECURITY.md) - JWT token security considerations
+- [WEBSOCKET_ORIGIN_VALIDATION.md](WEBSOCKET_ORIGIN_VALIDATION.md) - WebSocket CSRF prevention
+- [CORS_CONFIGURATION.md](CORS_CONFIGURATION.md) - CORS setup for HTTP and WebSocket
+
+## Architecture & Features
+
 - [CODE_QUALITY.md](CODE_QUALITY.md) - Code quality standards and best practices
-
-## Features & Components
-
-- [CORS_CONFIGURATION.md](CORS_CONFIGURATION.md) - CORS setup for admin endpoints
-- [MONGODB_INDEXES.md](MONGODB_INDEXES.md) - Database index configuration
-- [WEBSOCKET_ORIGIN_VALIDATION.md](WEBSOCKET_ORIGIN_VALIDATION.md) - WebSocket security configuration
-- [ADMIN_NAME_DISPLAY.md](ADMIN_NAME_DISPLAY.md) - Admin takeover name display
+- [REGISTER.md](REGISTER.md) - Service registration with gomain
 - [GRACEFUL_SHUTDOWN.md](GRACEFUL_SHUTDOWN.md) - Graceful shutdown implementation
+- [ADMIN_NAME_DISPLAY.md](ADMIN_NAME_DISPLAY.md) - Admin takeover name display
+- [MONGODB_INDEXES.md](MONGODB_INDEXES.md) - Database index configuration
 
-## Kubernetes Deployment
+## Deployment
 
+- [DEPLOYMENT.md](DEPLOYMENT.md) - Full deployment guide (Docker, K8s, Nginx, monitoring)
 - [KUBERNETES_DEPLOYMENT_SUMMARY.md](KUBERNETES_DEPLOYMENT_SUMMARY.md) - Kubernetes deployment guide
+- [NGINX_SETUP.md](NGINX_SETUP.md) - Nginx reverse proxy configuration
 - [deployments/kubernetes/](../deployments/kubernetes/) - Kubernetes manifests
 
 ## Testing
 
 - [TESTING.md](TESTING.md) - Testing strategy and guidelines
-- [verification/](verification/) - Test results and verification reports
+- [MONGODB_TEST_SETUP.md](MONGODB_TEST_SETUP.md) - MongoDB test environment setup
 
-## Registration & Integration
-
-- [REGISTER.md](REGISTER.md) - Service registration documentation
-
-## Verification Reports
-
-The [verification/](verification/) directory contains detailed test results and verification reports:
-
-- CI/CD build verification
-- Docker build verification
-- MongoDB field naming tests
-- LLM provider integration tests
-- Error handling verification
-- Encryption verification
-- Performance benchmarks
-- And more...
-
-## Directory Structure
-
-```
-docs/
-├── README.md                          # This file
-├── verification/                      # Test results and verification reports
-├── testing/                          # Testing utilities and scripts
-├── PRODUCTION_READINESS_PLAN.md      # Production readiness review
-├── PRODUCTION_READINESS_STATUS.md    # Current status
-├── CI_SETUP.md                       # CI/CD configuration
-├── docs/DEPLOYMENT.md              # Deployment guide
-└── [feature-specific docs]           # Individual feature documentation
-```
-
-## Contributing
-
-When adding new documentation:
-1. Place feature-specific docs in the `docs/` directory
-2. Place verification/test results in `docs/verification/`
-3. Update this README with links to new documentation
-4. Follow the existing naming conventions (UPPERCASE_WITH_UNDERSCORES.md)

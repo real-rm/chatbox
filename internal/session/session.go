@@ -91,6 +91,7 @@ type SessionManager struct {
 	sessionTTL      time.Duration
 	stopCleanup     chan struct{}
 	cleanupWg       sync.WaitGroup
+	stopOnce        sync.Once
 }
 
 // NewSessionManager creates a new session manager
@@ -290,27 +291,13 @@ func (sm *SessionManager) cleanupExpiredSessions() {
 	}
 }
 
-// StopCleanup stops the background cleanup goroutine
-// This should be called during graceful shutdown
-// CRITICAL FIX C3: Use sync.Once to prevent double-close panic
+// StopCleanup stops the background cleanup goroutine.
+// Safe to call concurrently and multiple times.
 func (sm *SessionManager) StopCleanup() {
-	sm.mu.Lock()
-	defer sm.mu.Unlock()
-
-	// Only close if channel is not nil and not already closed
-	if sm.stopCleanup != nil {
-		select {
-		case <-sm.stopCleanup:
-			// Already closed, do nothing
-		default:
-			close(sm.stopCleanup)
-		}
-	}
-
-	// Wait for cleanup goroutine to finish (outside the lock)
-	sm.mu.Unlock()
+	sm.stopOnce.Do(func() {
+		close(sm.stopCleanup)
+	})
 	sm.cleanupWg.Wait()
-	sm.mu.Lock()
 }
 
 // GetMemoryStats returns the current memory statistics for sessions

@@ -34,6 +34,16 @@ const (
 	DefaultRateLimit      = 100     // Default messages per minute per user
 	DefaultAdminRateLimit = 20      // Default admin requests per minute
 	MaxRetryAttempts      = 3       // Maximum retry attempts for transient errors
+	MaxEventsPerUser      = 1000    // Maximum rate limit events tracked per user
+	MaxUsersTracked       = 100000  // Maximum distinct users in rate limiter map
+	PublicEndpointRate    = 60      // Requests per minute for public endpoints (healthz, readyz, metrics)
+)
+
+// HTTP Server Timeouts (for standalone server mode)
+const (
+	HTTPReadTimeout  = 15 * time.Second  // Maximum time to read the entire request
+	HTTPWriteTimeout = 60 * time.Second  // Maximum time to write the response (includes streaming)
+	HTTPIdleTimeout  = 120 * time.Second // Maximum time to keep idle connections alive
 )
 
 // Durations for background operations

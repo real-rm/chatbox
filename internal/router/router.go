@@ -387,14 +387,15 @@ func (mr *MessageRouter) handleHelpRequest(conn *websocket.Connection, msg *mess
 	// Send notification to admins
 	// No else needed: optional operation (fire-and-forget), only send if service is available
 	if mr.notificationService != nil {
-		go func() {
-			// No else needed: optional operation (fire-and-forget), failure is logged but not fatal
-			if err := mr.notificationService.SendHelpRequestAlert(sess.UserID, msg.SessionID); err != nil {
+		userID := sess.UserID
+		sessionID := msg.SessionID
+		util.SafeGo(mr.logger, "helpRequestNotification", func() {
+			if err := mr.notificationService.SendHelpRequestAlert(userID, sessionID); err != nil {
 				util.LogError(mr.logger, "router", "send help request notification", err,
-					"session_id", msg.SessionID,
-					"user_id", sess.UserID)
+					"session_id", sessionID,
+					"user_id", userID)
 			}
-		}()
+		})
 	}
 
 	// Send confirmation message back to user
@@ -650,7 +651,12 @@ func (mr *MessageRouter) handleVoiceMessage(conn *websocket.Connection, msg *mes
 	// Forward audio file reference to LLM for transcription/processing if LLM service is available
 	// No else needed: optional operation (fire-and-forget), only process if LLM service is available
 	if mr.llmService != nil && sess.ModelID != "" {
-		go mr.processVoiceMessageWithLLM(msg.SessionID, msg.FileURL, sess.ModelID)
+		sessionID := msg.SessionID
+		fileURL := msg.FileURL
+		modelID := sess.ModelID
+		util.SafeGo(mr.logger, "voiceMessageLLM", func() {
+			mr.processVoiceMessageWithLLM(sessionID, fileURL, modelID)
+		})
 	}
 
 	return nil
@@ -893,13 +899,11 @@ func (mr *MessageRouter) sendToConnection(sessionID string, msg *message.Message
 		return fmt.Errorf("failed to marshal message: %w", err)
 	}
 
-	// Send to connection's send channel
-	select {
-	case conn.Send() <- data:
-		return nil
-	default:
-		return fmt.Errorf("connection send channel is full for session %s", sessionID)
+	// Send to connection using SafeSend to avoid panic on closed channel
+	if !conn.SafeSend(data) {
+		return fmt.Errorf("connection send channel is full or closing for session %s", sessionID)
 	}
+	return nil
 }
 
 // BroadcastToSession sends a message to all participants in a session
@@ -943,10 +947,8 @@ func (mr *MessageRouter) BroadcastToSession(sessionID string, msg *message.Messa
 				return chaterrors.ErrInvalidMessageFormat("failed to marshal message", err)
 			}
 
-			select {
-			case adminConn.Send() <- data:
-			default:
-				mr.logger.Warn("Admin connection send channel full", "admin_id", sess.AssistingAdminID)
+			if !adminConn.SafeSend(data) {
+				mr.logger.Warn("Admin connection send channel full or closing", "admin_id", sess.AssistingAdminID)
 			}
 		}
 	}

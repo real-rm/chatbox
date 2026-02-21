@@ -43,12 +43,13 @@ func init() {
 
 var (
 	// Global references for graceful shutdown
-	globalWSHandler     *websocket.Handler
-	globalSessionMgr    *session.SessionManager
-	globalMessageRouter *router.MessageRouter
-	globalAdminLimiter  *ratelimit.MessageLimiter
-	globalLogger        *golog.Logger
-	shutdownMu          sync.Mutex
+	globalWSHandler      *websocket.Handler
+	globalSessionMgr     *session.SessionManager
+	globalMessageRouter  *router.MessageRouter
+	globalAdminLimiter   *ratelimit.MessageLimiter
+	globalPublicLimiter  *ratelimit.MessageLimiter
+	globalLogger         *golog.Logger
+	shutdownMu           sync.Mutex
 )
 
 // Register registers the chatbox service with the gomain router.
@@ -278,7 +279,14 @@ func Register(r *gin.Engine, config *goconfig.ConfigAccessor, logger *golog.Logg
 	// Create WebSocket handler with router
 	wsHandler := websocket.NewHandler(validator, messageRouter, chatboxLogger, maxMessageSize)
 
+	// Create public endpoint rate limiter (per-IP, prevents abuse of healthz/readyz/metrics)
+	publicLimiter := ratelimit.NewMessageLimiter(1*time.Minute, constants.PublicEndpointRate)
+	publicLimiter.StartCleanup()
+
 	// Configure allowed origins for WebSocket connections
+	// SECURITY: When no origins are configured, ALL origins are accepted.
+	// This is acceptable only in development. In production, always configure
+	// allowed_origins to prevent cross-site WebSocket hijacking.
 	allowedOriginsStr, err := config.ConfigStringWithDefault("chatbox.allowed_origins", "")
 	// No else needed: optional operation (configuration with fallback logging)
 	if err == nil && allowedOriginsStr != "" {
@@ -297,6 +305,7 @@ func Register(r *gin.Engine, config *goconfig.ConfigAccessor, logger *golog.Logg
 	globalSessionMgr = sessionManager
 	globalMessageRouter = messageRouter
 	globalAdminLimiter = adminLimiter
+	globalPublicLimiter = publicLimiter
 	globalLogger = chatboxLogger
 	shutdownMu.Unlock()
 
@@ -355,13 +364,13 @@ func Register(r *gin.Engine, config *goconfig.ConfigAccessor, logger *golog.Logg
 			adminGroup.POST("/takeover/:sessionID", handleAdminTakeover(messageRouter, chatboxLogger))
 		}
 
-		// Health check endpoints
-		chatGroup.GET("/healthz", handleHealthCheck)
-		chatGroup.GET("/readyz", handleReadyCheck(mongo, chatboxLogger))
+		// Health check endpoints (rate limited to prevent abuse)
+		chatGroup.GET("/healthz", publicRateLimitMiddleware(publicLimiter, chatboxLogger), handleHealthCheck)
+		chatGroup.GET("/readyz", publicRateLimitMiddleware(publicLimiter, chatboxLogger), handleReadyCheck(mongo, chatboxLogger))
 	}
 
-	// Prometheus metrics endpoint (public, no authentication required)
-	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
+	// Prometheus metrics endpoint (public, rate limited)
+	r.GET("/metrics", publicRateLimitMiddleware(publicLimiter, chatboxLogger), gin.WrapH(promhttp.Handler()))
 
 	chatboxLogger.Info("Chatbox service registered successfully",
 		"websocket_endpoint", pathPrefix+"/ws",
@@ -371,6 +380,36 @@ func Register(r *gin.Engine, config *goconfig.ConfigAccessor, logger *golog.Logg
 	)
 
 	return nil
+}
+
+// publicRateLimitMiddleware creates a Gin middleware for rate limiting public endpoints
+// (healthz, readyz, metrics) by client IP to prevent abuse.
+func publicRateLimitMiddleware(limiter *ratelimit.MessageLimiter, logger *golog.Logger) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// Use X-Forwarded-For if present (behind proxy), otherwise use RemoteAddr
+		clientIP := c.GetHeader("X-Forwarded-For")
+		if clientIP == "" {
+			clientIP = c.Request.RemoteAddr
+		}
+
+		if !limiter.Allow(clientIP) {
+			retryAfter := limiter.GetRetryAfter(clientIP)
+			retryAfterSeconds := (retryAfter + constants.MillisecondsPerSecond - 1) / constants.MillisecondsPerSecond
+			if retryAfterSeconds < constants.MinRetryAfterSeconds {
+				retryAfterSeconds = constants.MinRetryAfterSeconds
+			}
+			c.Header(constants.HeaderRetryAfter, fmt.Sprintf("%d", retryAfterSeconds))
+
+			c.JSON(constants.StatusTooManyRequests, gin.H{
+				"error":   "rate_limit_exceeded",
+				"message": constants.ErrMsgRateLimitExceeded,
+			})
+			c.Abort()
+			return
+		}
+
+		c.Next()
+	}
 }
 
 // validateEncryptionKey checks if the encryption key is exactly 32 bytes
@@ -927,6 +966,11 @@ func Shutdown(ctx context.Context) error {
 	// No else needed: optional operation (cleanup stop)
 	if globalAdminLimiter != nil {
 		globalAdminLimiter.StopCleanup()
+	}
+
+	// Stop public rate limiter cleanup
+	if globalPublicLimiter != nil {
+		globalPublicLimiter.StopCleanup()
 	}
 
 	// Close all WebSocket connections with context deadline

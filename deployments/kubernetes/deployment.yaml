@@ -185,7 +185,7 @@ spec:
         # Security context for container
         securityContext:
           allowPrivilegeEscalation: false
-          readOnlyRootFilesystem: false  # Set to true if app doesn't need to write to filesystem
+          readOnlyRootFilesystem: true
           capabilities:
             drop:
             - ALL

@@ -1,10 +1,13 @@
 package ratelimit
 
 import (
+	"fmt"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestConnectionLimiter_Allow(t *testing.T) {
@@ -178,4 +181,89 @@ func TestConnectionLimiter_ConcurrentAccess(t *testing.T) {
 
 	// Should have exactly 50 connections (the limit)
 	assert.Equal(t, 50, cl.GetCount("user1"))
+}
+
+// TestStopCleanup_ConcurrentSafety verifies that calling StopCleanup
+// concurrently from multiple goroutines does not panic or race.
+func TestStopCleanup_ConcurrentSafety(t *testing.T) {
+	ml := NewMessageLimiter(100*time.Millisecond, 10)
+	ml.cleanupInterval = 10 * time.Millisecond
+	ml.StartCleanup()
+
+	// Add some events while cleanup is running
+	for i := 0; i < 5; i++ {
+		ml.Allow(fmt.Sprintf("user-%d", i))
+	}
+
+	// Call StopCleanup concurrently from multiple goroutines
+	var wg sync.WaitGroup
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			ml.StopCleanup()
+		}()
+	}
+
+	// Also call Allow concurrently with StopCleanup
+	for i := 0; i < 5; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			ml.Allow(fmt.Sprintf("concurrent-user-%d", idx))
+		}(i)
+	}
+
+	wg.Wait()
+}
+
+// TestStopCleanup_DoubleCallSafe verifies that calling StopCleanup
+// twice does not panic.
+func TestStopCleanup_DoubleCallSafe(t *testing.T) {
+	ml := NewMessageLimiter(1*time.Second, 10)
+	ml.StartCleanup()
+
+	// Should not panic on double call
+	ml.StopCleanup()
+	ml.StopCleanup()
+}
+
+// TestBoundedEvents_MaxEventsPerUser verifies that the events map is bounded
+// per user to prevent unbounded memory growth.
+func TestBoundedEvents_MaxEventsPerUser(t *testing.T) {
+	// Create limiter with high limit but we'll check event storage is bounded
+	ml := NewMessageLimiter(1*time.Hour, 2000) // long window, high limit
+
+	// Add more events than MaxEventsPerUser
+	for i := 0; i < 1500; i++ {
+		ml.Allow("flood-user")
+	}
+
+	ml.mu.RLock()
+	eventCount := len(ml.events["flood-user"])
+	ml.mu.RUnlock()
+
+	require.LessOrEqual(t, eventCount, 1000,
+		"events per user should be bounded to MaxEventsPerUser (1000)")
+}
+
+// TestBoundedEvents_MaxUsersTracked verifies that new users are rejected
+// when the total tracked user count exceeds MaxUsersTracked.
+func TestBoundedEvents_MaxUsersTracked(t *testing.T) {
+	ml := NewMessageLimiter(1*time.Hour, 100)
+
+	// Create fewer users for test speed but verify the mechanism works
+	// The constant MaxUsersTracked is 100000, so we test the code path
+	// by checking that Allow returns false for new users when map is at capacity
+
+	// Manually fill the events map to exceed capacity
+	ml.mu.Lock()
+	for i := 0; i < 100001; i++ {
+		ml.events[fmt.Sprintf("user-%d", i)] = []time.Time{time.Now()}
+	}
+	ml.mu.Unlock()
+
+	// New user should be rate-limited (denied) when over MaxUsersTracked
+	allowed := ml.Allow("brand-new-user")
+	assert.False(t, allowed, "new user should be denied when MaxUsersTracked exceeded")
 }

@@ -1,6 +1,7 @@
 package session
 
 import (
+	"sync"
 	"testing"
 	"time"
 
@@ -302,4 +303,70 @@ func TestGetMemoryStats_ThreadSafe(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		<-done
 	}
+}
+
+// TestStopCleanup_ConcurrentSafety verifies that calling StopCleanup
+// concurrently from multiple goroutines does not panic or race.
+// This test must be run with -race to verify the fix.
+func TestStopCleanup_ConcurrentSafety(t *testing.T) {
+	logger, err := golog.InitLog(golog.LogConfig{
+		Dir:            t.TempDir(),
+		Level:          "error",
+		StandardOutput: false,
+	})
+	require.NoError(t, err)
+	defer logger.Close()
+
+	sm := NewSessionManager(15*time.Minute, logger)
+	sm.cleanupInterval = 10 * time.Millisecond
+	sm.sessionTTL = 50 * time.Millisecond
+
+	sm.StartCleanup()
+
+	// Create some sessions while cleanup is running
+	for i := 0; i < 5; i++ {
+		sess, err := sm.CreateSession("user-" + string(rune('a'+i)))
+		require.NoError(t, err)
+		_ = sm.EndSession(sess.ID)
+	}
+
+	// Call StopCleanup concurrently from multiple goroutines
+	var wg sync.WaitGroup
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			sm.StopCleanup()
+		}()
+	}
+
+	// Also call GetSession/CreateSession concurrently with StopCleanup
+	for i := 0; i < 5; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			_, _, _ = sm.GetMemoryStats()
+		}(i)
+	}
+
+	wg.Wait()
+}
+
+// TestStopCleanup_DoubleCallSafe verifies that calling StopCleanup
+// twice does not panic.
+func TestStopCleanup_DoubleCallSafe(t *testing.T) {
+	logger, err := golog.InitLog(golog.LogConfig{
+		Dir:            t.TempDir(),
+		Level:          "error",
+		StandardOutput: false,
+	})
+	require.NoError(t, err)
+	defer logger.Close()
+
+	sm := NewSessionManager(15*time.Minute, logger)
+	sm.StartCleanup()
+
+	// Should not panic on double call
+	sm.StopCleanup()
+	sm.StopCleanup()
 }

@@ -8,24 +8,27 @@ RUN apk add --no-cache git ca-certificates tzdata
 # Set working directory
 WORKDIR /build
 
-# Configure Git to use HTTPS with token for private repos
-# GITHUB_TOKEN should be passed as a build argument
-# For CI: Use a Personal Access Token with 'repo' scope as GO_MODULES_TOKEN secret
-# For local builds: docker build --build-arg GITHUB_TOKEN=<your-pat> .
-ARG GITHUB_TOKEN
+# Private Go modules configuration
 ENV GOPRIVATE=github.com/real-rm/*
-
-# Configure git credentials for Go module downloads
-RUN if [ -n "$GITHUB_TOKEN" ]; then \
-        git config --global url."https://${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"; \
-        git config --global credential.helper store; \
-    fi
 
 # Copy go mod files
 COPY go.mod go.sum ./
 
-# Download dependencies
-RUN go mod download
+# Download dependencies using BuildKit secret mount (preferred).
+# The token is mounted at /run/secrets/github_token and never stored in a layer.
+# Build with: docker build --secret id=github_token,env=GITHUB_TOKEN .
+# Or:         docker build --secret id=github_token,src=~/.github_token .
+# Fallback:   docker build --build-arg GITHUB_TOKEN=<token> .  (LESS SECURE - token may persist in layer cache)
+ARG GITHUB_TOKEN
+RUN --mount=type=secret,id=github_token \
+    if [ -s /run/secrets/github_token ]; then \
+        GITHUB_TOKEN=$(cat /run/secrets/github_token) && \
+        git config --global url."https://${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"; \
+    elif [ -n "$GITHUB_TOKEN" ]; then \
+        git config --global url."https://${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"; \
+    fi && \
+    go mod download && \
+    git config --global --unset-all url."https://${GITHUB_TOKEN}@github.com/".insteadOf 2>/dev/null || true
 
 # Copy source code
 COPY . .

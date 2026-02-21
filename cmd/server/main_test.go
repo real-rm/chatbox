@@ -1,6 +1,7 @@
 package main
 
 import (
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -1177,6 +1178,35 @@ func TestStartup(t *testing.T) {
 		assert.Greater(t, port, 0)
 
 		t.Log("Configuration loading order validated")
+	})
+}
+
+// TestNewHTTPServer verifies that NewHTTPServer returns a server with proper timeouts
+func TestNewHTTPServer(t *testing.T) {
+	t.Run("HasNonZeroTimeouts", func(t *testing.T) {
+		srv := NewHTTPServer(":8080", nil)
+
+		assert.Equal(t, ":8080", srv.Addr)
+		assert.Equal(t, constants.HTTPReadTimeout, srv.ReadTimeout, "ReadTimeout should match constant")
+		assert.Equal(t, constants.HTTPWriteTimeout, srv.WriteTimeout, "WriteTimeout should match constant")
+		assert.Equal(t, constants.HTTPIdleTimeout, srv.IdleTimeout, "IdleTimeout should match constant")
+	})
+
+	t.Run("AcceptsCustomHandler", func(t *testing.T) {
+		handler := http.NewServeMux()
+		srv := NewHTTPServer(":9090", handler)
+
+		assert.Equal(t, ":9090", srv.Addr)
+		assert.Equal(t, handler, srv.Handler)
+	})
+
+	t.Run("AcceptsNilHandler", func(t *testing.T) {
+		srv := NewHTTPServer(":8080", nil)
+
+		assert.Nil(t, srv.Handler)
+		assert.NotZero(t, srv.ReadTimeout)
+		assert.NotZero(t, srv.WriteTimeout)
+		assert.NotZero(t, srv.IdleTimeout)
 	})
 }
 

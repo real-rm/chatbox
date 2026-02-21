@@ -698,3 +698,65 @@ func TestHandler_SetReadLimitCalled(t *testing.T) {
 		})
 	}
 }
+
+// TestSafeSend_NormalSend verifies SafeSend delivers data when connection is open.
+func TestSafeSend_NormalSend(t *testing.T) {
+	conn := NewConnection("user1", []string{"user"})
+
+	ok := conn.SafeSend([]byte("hello"))
+	assert.True(t, ok, "SafeSend should succeed on open connection")
+
+	// Verify data arrived
+	select {
+	case msg := <-conn.ReceiveForTest():
+		assert.Equal(t, "hello", string(msg))
+	default:
+		t.Fatal("expected message in channel")
+	}
+}
+
+// TestSafeSend_ClosedChannel verifies SafeSend returns false and does not panic
+// when the connection is closing.
+func TestSafeSend_ClosedChannel(t *testing.T) {
+	conn := NewConnection("user1", []string{"user"})
+	conn.closing.Store(true)
+	close(conn.send)
+
+	// Must not panic
+	ok := conn.SafeSend([]byte("hello"))
+	assert.False(t, ok, "SafeSend should return false when closing")
+}
+
+// TestSafeSend_FullChannel verifies SafeSend returns false when channel is full.
+func TestSafeSend_FullChannel(t *testing.T) {
+	conn := &Connection{
+		UserID: "user1",
+		send:   make(chan []byte, 1), // buffer of 1
+	}
+
+	// Fill the channel
+	conn.send <- []byte("first")
+
+	// Should return false (channel full, not blocking)
+	ok := conn.SafeSend([]byte("second"))
+	assert.False(t, ok, "SafeSend should return false when channel is full")
+}
+
+// TestIsOpenOrigin_NoOriginsConfigured verifies IsOpenOrigin returns true
+// when no allowed origins are set.
+func TestIsOpenOrigin_NoOriginsConfigured(t *testing.T) {
+	validator := auth.NewJWTValidator("test-secret")
+	handler := NewHandler(validator, nil, testLogger(), 1048576)
+
+	assert.True(t, handler.IsOpenOrigin(), "should be true when no origins configured")
+}
+
+// TestIsOpenOrigin_WithOriginsConfigured verifies IsOpenOrigin returns false
+// when allowed origins are set.
+func TestIsOpenOrigin_WithOriginsConfigured(t *testing.T) {
+	validator := auth.NewJWTValidator("test-secret")
+	handler := NewHandler(validator, nil, testLogger(), 1048576)
+	handler.SetAllowedOrigins([]string{"https://example.com"})
+
+	assert.False(t, handler.IsOpenOrigin(), "should be false when origins are configured")
+}

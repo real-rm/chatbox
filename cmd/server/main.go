@@ -2,6 +2,7 @@ package main
 
 import (
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -84,6 +85,18 @@ func runWithSignalChannel(sigChan chan os.Signal) error {
 	logger.Info("Shutting down gracefully")
 
 	return nil
+}
+
+// NewHTTPServer creates an HTTP server with production-safe timeout defaults.
+// Use this when running chatbox as a standalone server (not via gomain).
+func NewHTTPServer(addr string, handler http.Handler) *http.Server {
+	return &http.Server{
+		Addr:         addr,
+		Handler:      handler,
+		ReadTimeout:  constants.HTTPReadTimeout,
+		WriteTimeout: constants.HTTPWriteTimeout,
+		IdleTimeout:  constants.HTTPIdleTimeout,
+	}
 }
 
 func main() {

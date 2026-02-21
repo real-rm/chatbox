@@ -5,6 +5,8 @@ package ratelimit
 import (
 	"sync"
 	"time"
+
+	"github.com/real-rm/chatbox/internal/constants"
 )
 
 // ConnectionLimiter limits the number of concurrent connections per user
@@ -68,6 +70,7 @@ type MessageLimiter struct {
 	cleanupInterval time.Duration
 	stopCleanup     chan struct{}
 	cleanupWg       sync.WaitGroup
+	stopOnce        sync.Once
 }
 
 // NewMessageLimiter creates a new message rate limiter
@@ -92,6 +95,13 @@ func (ml *MessageLimiter) Allow(userID string) bool {
 	now := time.Now()
 	cutoff := now.Add(-ml.window)
 
+	// Reject new users when the total tracked user count exceeds the limit
+	if _, exists := ml.events[userID]; !exists {
+		if len(ml.events) >= constants.MaxUsersTracked {
+			return false
+		}
+	}
+
 	// Get existing events for this user
 	events := ml.events[userID]
 
@@ -105,11 +115,19 @@ func (ml *MessageLimiter) Allow(userID string) bool {
 
 	// Check if we're under the limit
 	if len(recentEvents) >= ml.limit {
+		// Trim before storing to prevent unbounded growth
+		if len(recentEvents) > constants.MaxEventsPerUser {
+			recentEvents = recentEvents[len(recentEvents)-constants.MaxEventsPerUser:]
+		}
+		ml.events[userID] = recentEvents
 		return false
 	}
 
-	// Add this event
+	// Add this event and trim to MaxEventsPerUser to prevent unbounded growth
 	recentEvents = append(recentEvents, now)
+	if len(recentEvents) > constants.MaxEventsPerUser {
+		recentEvents = recentEvents[len(recentEvents)-constants.MaxEventsPerUser:]
+	}
 	ml.events[userID] = recentEvents
 
 	return true
@@ -223,24 +241,11 @@ func (ml *MessageLimiter) getEventCount() int {
 	return count
 }
 
-// StopCleanup stops the cleanup goroutine and waits for it to finish
-// CRITICAL FIX C3: Use sync.Once to prevent double-close panic
+// StopCleanup stops the cleanup goroutine and waits for it to finish.
+// Safe to call concurrently and multiple times.
 func (ml *MessageLimiter) StopCleanup() {
-	ml.mu.Lock()
-	defer ml.mu.Unlock()
-
-	// Only close if channel is not nil and not already closed
-	if ml.stopCleanup != nil {
-		select {
-		case <-ml.stopCleanup:
-			// Already closed, do nothing
-		default:
-			close(ml.stopCleanup)
-		}
-	}
-
-	// Wait for cleanup goroutine to finish (outside the lock)
-	ml.mu.Unlock()
+	ml.stopOnce.Do(func() {
+		close(ml.stopCleanup)
+	})
 	ml.cleanupWg.Wait()
-	ml.mu.Lock()
 }

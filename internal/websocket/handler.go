@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -68,6 +69,10 @@ type Connection struct {
 
 	// send is a buffered channel for outbound messages
 	send chan []byte
+
+	// closing indicates the connection is being torn down.
+	// Set before closing the send channel to prevent send-on-closed-channel panics.
+	closing atomic.Bool
 
 	// mu protects concurrent access to the connection
 	mu sync.RWMutex
@@ -150,6 +155,18 @@ func (h *Handler) SetAllowedOrigins(origins []string) {
 	h.logger.Info("Configured allowed origins",
 		"count", len(origins),
 		"origins", origins)
+}
+
+// IsOpenOrigin returns true when no allowed origins are configured,
+// meaning all origins are accepted. Callers can use this to log security
+// warnings or enforce stricter policies at the application level.
+// SECURITY: When true, any website can establish WebSocket connections.
+// This is acceptable only when the service sits behind a reverse proxy
+// that performs its own origin validation.
+func (h *Handler) IsOpenOrigin() bool {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return len(h.allowedOrigins) == 0
 }
 
 // checkOrigin validates the origin of a WebSocket upgrade request
@@ -250,9 +267,9 @@ func (h *Handler) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		"user_id", claims.UserID,
 		"component", "websocket")
 
-	// Start read and write pumps in goroutines
-	go connection.readPump(h)
-	go connection.writePump()
+	// Start read and write pumps in goroutines with panic recovery
+	util.SafeGo(h.logger, "readPump", func() { connection.readPump(h) })
+	util.SafeGo(h.logger, "writePump", func() { connection.writePump() })
 }
 
 // createConnection creates a new Connection with user context from JWT claims
@@ -325,6 +342,7 @@ func (h *Handler) unregisterConnection(conn *Connection) {
 	if userConns, ok := h.connections[conn.UserID]; ok {
 		if _, exists := userConns[conn.ConnectionID]; exists {
 			delete(userConns, conn.ConnectionID)
+			conn.closing.Store(true)
 			close(conn.send)
 
 			// Release connection from rate limiter for each connection
@@ -384,13 +402,12 @@ func (h *Handler) notifyConnectionLimit(userID string) {
 
 	// Send notification to all user's connections using the snapshot
 	for _, entry := range snapshot {
-		select {
-		case entry.conn.send <- notificationBytes:
+		if entry.conn.SafeSend(notificationBytes) {
 			h.logger.Debug("Sent connection limit notification",
 				"user_id", userID,
 				"connection_id", entry.id)
-		default:
-			h.logger.Warn("Failed to send connection limit notification, channel full",
+		} else {
+			h.logger.Warn("Failed to send connection limit notification, channel full or closing",
 				"user_id", userID,
 				"connection_id", entry.id)
 		}
@@ -476,6 +493,27 @@ func (c *Connection) Close() error {
 		return c.conn.Close()
 	}
 	return nil
+}
+
+// SetClosing marks the connection as closing.
+// After this call, SafeSend will return false.
+func (c *Connection) SetClosing() {
+	c.closing.Store(true)
+}
+
+// SafeSend attempts to send data to the connection's send channel.
+// Returns false if the connection is closing or the channel is full.
+// This is the preferred method for sending data to avoid panics on closed channels.
+func (c *Connection) SafeSend(data []byte) bool {
+	if c.closing.Load() {
+		return false
+	}
+	select {
+	case c.send <- data:
+		return true
+	default:
+		return false
+	}
 }
 
 // Send returns the send channel for this connection

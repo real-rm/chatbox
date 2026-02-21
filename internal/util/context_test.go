@@ -78,3 +78,45 @@ func TestContextTimeout(t *testing.T) {
 		t.Errorf("Expected context.DeadlineExceeded, got %v", ctx.Err())
 	}
 }
+
+func TestNewContextWithTraceID(t *testing.T) {
+	ctx := NewContextWithTraceID(context.Background())
+
+	traceID := TraceIDFromContext(ctx)
+	if traceID == "" {
+		t.Fatal("expected non-empty trace ID")
+	}
+	if len(traceID) != 32 {
+		t.Errorf("expected 32-char hex trace ID, got %d chars: %s", len(traceID), traceID)
+	}
+}
+
+func TestTraceIDFromContext_Empty(t *testing.T) {
+	ctx := context.Background()
+	traceID := TraceIDFromContext(ctx)
+	if traceID != "" {
+		t.Errorf("expected empty trace ID from bare context, got %q", traceID)
+	}
+}
+
+func TestContextWithTraceID_Custom(t *testing.T) {
+	customID := "abc123def456"
+	ctx := ContextWithTraceID(context.Background(), customID)
+
+	got := TraceIDFromContext(ctx)
+	if got != customID {
+		t.Errorf("expected %q, got %q", customID, got)
+	}
+}
+
+func TestTraceID_Uniqueness(t *testing.T) {
+	ids := make(map[string]bool)
+	for i := 0; i < 100; i++ {
+		ctx := NewContextWithTraceID(context.Background())
+		id := TraceIDFromContext(ctx)
+		if ids[id] {
+			t.Fatalf("duplicate trace ID generated: %s", id)
+		}
+		ids[id] = true
+	}
+}

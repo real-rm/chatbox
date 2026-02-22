@@ -94,16 +94,16 @@ test:
     # Create test user in MongoDB
     - |
       apt-get install -y wget gnupg
-      wget -qO - https://www.mongodb.org/static/pgp/server-6.0.asc | apt-key add -
-      echo "deb http://repo.mongodb.org/apt/debian bullseye/mongodb-org/6.0 main" | tee /etc/apt/sources.list.d/mongodb-org-6.0.list
+      wget -qO /usr/share/keyrings/mongodb-server-6.0.gpg https://www.mongodb.org/static/pgp/server-6.0.asc
+      echo "deb [ signed-by=/usr/share/keyrings/mongodb-server-6.0.gpg ] http://repo.mongodb.org/apt/debian bullseye/mongodb-org/6.0 main" | tee /etc/apt/sources.list.d/mongodb-org-6.0.list
       apt-get update
       apt-get install -y mongodb-mongosh
-      mongosh "mongodb://admin:admin@mongo:27017/admin" --eval 'db.createUser({user: "chatbox", pwd: "ChatBox123", roles: [{role: "readWrite", db: "chatbox"}, {role: "dbAdmin", db: "chatbox"}]})'
+      mongosh "mongodb://admin:admin@mongo:27017/admin" --eval 'try { db.createUser({user: "chatbox", pwd: "ChatBox123", roles: [{role: "readWrite", db: "chatbox"}, {role: "dbAdmin", db: "chatbox"}]}) } catch(e) { print("User already exists: " + e) }'
   script:
     # Run all tests with race detector
     # NOTE: Some storage tests are currently failing due to a sorting bug (see KNOWN_ISSUES.md)
     # These failures do not affect core functionality but should be fixed before production
-    - go test -race -v ./...
+    - go test -race -v -timeout 5m ./...
   only:
     - main
     - master
@@ -129,25 +129,25 @@ coverage:
     # Create test user in MongoDB
     - |
       apt-get install -y wget gnupg
-      wget -qO - https://www.mongodb.org/static/pgp/server-6.0.asc | apt-key add -
-      echo "deb http://repo.mongodb.org/apt/debian bullseye/mongodb-org/6.0 main" | tee /etc/apt/sources.list.d/mongodb-org-6.0.list
+      wget -qO /usr/share/keyrings/mongodb-server-6.0.gpg https://www.mongodb.org/static/pgp/server-6.0.asc
+      echo "deb [ signed-by=/usr/share/keyrings/mongodb-server-6.0.gpg ] http://repo.mongodb.org/apt/debian bullseye/mongodb-org/6.0 main" | tee /etc/apt/sources.list.d/mongodb-org-6.0.list
       apt-get update
       apt-get install -y mongodb-mongosh
-      mongosh "mongodb://admin:admin@mongo:27017/admin" --eval 'db.createUser({user: "chatbox", pwd: "ChatBox123", roles: [{role: "readWrite", db: "chatbox"}, {role: "dbAdmin", db: "chatbox"}]})'
+      mongosh "mongodb://admin:admin@mongo:27017/admin" --eval 'try { db.createUser({user: "chatbox", pwd: "ChatBox123", roles: [{role: "readWrite", db: "chatbox"}, {role: "dbAdmin", db: "chatbox"}]}) } catch(e) { print("User already exists: " + e) }'
   script:
     # Run tests with coverage for cmd/server
     - echo "Testing cmd/server coverage..."
-    - go test -cover -coverprofile=cmd_server_coverage.out ./cmd/server
+    - go test -cover -timeout 5m -coverprofile=cmd_server_coverage.out ./cmd/server
     - go tool cover -func=cmd_server_coverage.out | grep total | awk '{print "cmd/server coverage: " $3}'
     
     # Run tests with coverage for internal/storage
     - echo "Testing internal/storage coverage..."
-    - go test -cover -coverprofile=storage_coverage.out ./internal/storage
+    - go test -cover -timeout 5m -coverprofile=storage_coverage.out ./internal/storage
     - go tool cover -func=storage_coverage.out | grep total | awk '{print "internal/storage coverage: " $3}'
     
     # Run tests with coverage for chatbox.go
     - echo "Testing chatbox.go coverage..."
-    - go test -cover -coverprofile=chatbox_coverage.out .
+    - go test -cover -timeout 5m -coverprofile=chatbox_coverage.out .
     - go tool cover -func=chatbox_coverage.out | grep total | awk '{print "chatbox.go coverage: " $3}'
     
     # Check coverage thresholds (80% minimum)
@@ -173,9 +173,9 @@ coverage:
       # Check chatbox.go coverage
       CHATBOX_COV=$(go tool cover -func=chatbox_coverage.out | grep chatbox.go | awk '{print $3}' | sed 's/%//')
       echo "chatbox.go coverage: ${CHATBOX_COV}%"
-      if (( $(echo "$CHATBOX_COV < 30" | bc -l) )); then
-        echo "ERROR: chatbox.go coverage ${CHATBOX_COV}% is below 30% threshold"
-        echo "NOTE: Target threshold is 80%, incrementally raising from 20% → 30%"
+      if (( $(echo "$CHATBOX_COV < 40" | bc -l) )); then
+        echo "ERROR: chatbox.go coverage ${CHATBOX_COV}% is below 40% threshold"
+        echo "NOTE: Target threshold is 80%, incrementally raising from 30% → 40%"
         exit 1
       fi
       
@@ -185,6 +185,10 @@ coverage:
     - go tool cover -html=cmd_server_coverage.out -o cmd_server_coverage.html
     - go tool cover -html=storage_coverage.out -o storage_coverage.html
     - go tool cover -html=chatbox_coverage.out -o chatbox_coverage.html
+
+    # Generate Cobertura XML for GitLab merge request coverage visualization
+    - go install github.com/boumenot/gocover-cobertura@latest
+    - gocover-cobertura < chatbox_coverage.out > coverage.xml
   artifacts:
     paths:
       - cmd_server_coverage.out

@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/real-rm/chatbox/internal/constants"
 	"github.com/real-rm/chatbox/internal/metrics"
 	"github.com/real-rm/goconfig"
 	"github.com/real-rm/golog"
@@ -304,15 +305,15 @@ func (s *LLMService) SendMessage(ctx context.Context, modelID string, messages [
 
 	// Implement retry logic with exponential backoff
 	var lastErr error
-	maxRetries := 3
-	baseDelay := 1 * time.Second
+	maxRetries := constants.MaxRetryAttempts
+	baseDelay := constants.LLMInitialRetryDelay
 
 	for attempt := 0; attempt < maxRetries; attempt++ {
 		if attempt > 0 {
 			// Calculate exponential backoff delay
 			delay := baseDelay * time.Duration(1<<uint(attempt-1))
-			if delay > 30*time.Second {
-				delay = 30 * time.Second // Cap at 30 seconds
+			if delay > constants.LLMMaxRetryDelay {
+				delay = constants.LLMMaxRetryDelay
 			}
 
 			s.logger.Info("Retrying LLM request", "model_id", modelID, "attempt", attempt+1, "delay", delay)
@@ -390,15 +391,15 @@ func (s *LLMService) StreamMessage(ctx context.Context, modelID string, messages
 
 	// Implement retry logic with exponential backoff for stream establishment
 	var lastErr error
-	maxRetries := 3
-	baseDelay := 1 * time.Second
+	maxRetries := constants.MaxRetryAttempts
+	baseDelay := constants.LLMInitialRetryDelay
 
 	for attempt := 0; attempt < maxRetries; attempt++ {
 		if attempt > 0 {
 			// Calculate exponential backoff delay
 			delay := baseDelay * time.Duration(1<<uint(attempt-1))
-			if delay > 30*time.Second {
-				delay = 30 * time.Second // Cap at 30 seconds
+			if delay > constants.LLMMaxRetryDelay {
+				delay = constants.LLMMaxRetryDelay
 			}
 
 			s.logger.Info("Retrying LLM stream request", "model_id", modelID, "attempt", attempt+1, "delay", delay)

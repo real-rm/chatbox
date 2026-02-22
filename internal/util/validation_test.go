@@ -155,6 +155,40 @@ func TestValidatePositive(t *testing.T) {
 	}
 }
 
+func TestValidateFileURL(t *testing.T) {
+	tests := []struct {
+		name    string
+		url     string
+		wantErr bool
+	}{
+		{"empty URL allowed", "", false},
+		{"valid HTTPS URL", "https://example.com/files/photo.jpg", false},
+		{"valid HTTP URL", "http://cdn.example.com/file.pdf", false},
+		{"javascript scheme rejected", "javascript:alert(1)", true},
+		{"data scheme rejected", "data:text/html,<h1>Hello</h1>", true},
+		{"file scheme rejected", "file:///etc/passwd", true},
+		{"ftp scheme rejected", "ftp://example.com/file.txt", true},
+		{"private IP 10.x rejected", "http://10.0.0.1/file.txt", true},
+		{"private IP 172.16.x rejected", "http://172.16.0.1/file.txt", true},
+		{"private IP 192.168.x rejected", "http://192.168.1.1/file.txt", true},
+		{"localhost rejected", "http://127.0.0.1/file.txt", true},
+		{"link-local rejected", "http://169.254.1.1/file.txt", true},
+		{"no hostname rejected", "http:///path", true},
+		{"URL too long", "https://example.com/" + strings.Repeat("a", 2048), true},
+		{"valid domain with path", "https://storage.googleapis.com/bucket/file.png", false},
+		{"valid URL with query params", "https://cdn.example.com/file?token=abc", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateFileURL(tt.url)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ValidateFileURL(%q) error = %v, wantErr %v", tt.url, err, tt.wantErr)
+			}
+		})
+	}
+}
+
 // TestValidateTimeRange verifies that ValidateTimeRange always returns an
 // error (current implementation is a placeholder returning "not implemented").
 func TestValidateTimeRange(t *testing.T) {

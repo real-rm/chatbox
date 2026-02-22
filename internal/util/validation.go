@@ -3,6 +3,9 @@ package util
 import (
 	"errors"
 	"fmt"
+	"net"
+	"net/url"
+	"strings"
 )
 
 // ValidateNotEmpty checks if a string is not empty and returns an error if it is.
@@ -118,4 +121,68 @@ func ValidatePositive(value int, fieldName string) error {
 func ValidateTimeRange(start, end interface{}) error {
 	// This is a placeholder - actual implementation would depend on time.Time comparison
 	return errors.New("not implemented")
+}
+
+// MaxFileURLLength is the maximum allowed length for file URLs.
+const MaxFileURLLength = 2048
+
+// privateNetworks contains CIDR ranges for private/internal IPs.
+var privateNetworks = func() []*net.IPNet {
+	cidrs := []string{
+		"10.0.0.0/8",
+		"172.16.0.0/12",
+		"192.168.0.0/16",
+		"127.0.0.0/8",
+		"169.254.0.0/16",
+		"::1/128",
+		"fc00::/7",
+	}
+	var nets []*net.IPNet
+	for _, cidr := range cidrs {
+		_, ipNet, _ := net.ParseCIDR(cidr)
+		if ipNet != nil {
+			nets = append(nets, ipNet)
+		}
+	}
+	return nets
+}()
+
+// ValidateFileURL validates that a URL is safe for storage.
+// Rejects dangerous schemes, private/internal IPs, and overly long URLs.
+func ValidateFileURL(rawURL string) error {
+	if rawURL == "" {
+		return nil // Empty URL is allowed (optional field)
+	}
+
+	if len(rawURL) > MaxFileURLLength {
+		return fmt.Errorf("URL exceeds maximum length of %d characters", MaxFileURLLength)
+	}
+
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("invalid URL: %w", err)
+	}
+
+	// Allow only http and https schemes
+	scheme := strings.ToLower(u.Scheme)
+	if scheme != "http" && scheme != "https" {
+		return fmt.Errorf("URL scheme %q is not allowed; only http and https are permitted", u.Scheme)
+	}
+
+	// Reject URLs with no host
+	if u.Hostname() == "" {
+		return errors.New("URL must have a hostname")
+	}
+
+	// Reject private/internal IPs (SSRF protection)
+	ip := net.ParseIP(u.Hostname())
+	if ip != nil {
+		for _, ipNet := range privateNetworks {
+			if ipNet.Contains(ip) {
+				return fmt.Errorf("URL host %q resolves to a private/internal IP address", u.Hostname())
+			}
+		}
+	}
+
+	return nil
 }

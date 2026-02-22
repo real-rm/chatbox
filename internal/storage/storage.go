@@ -1018,9 +1018,9 @@ func sortByMessageCount(sessions []*SessionMetadata, ascending bool) {
 }
 
 // GetSessionMetrics calculates aggregated metrics for all sessions within a time period
-// Returns metrics including total sessions, active sessions, token usage, and response times
+// using a MongoDB aggregation pipeline instead of loading all docs into memory.
+// Returns metrics including total sessions, active sessions, token usage, and response times.
 func (s *StorageService) GetSessionMetrics(startTime, endTime time.Time) (*Metrics, error) {
-	// No else needed: early return pattern (guard clause)
 	if endTime.Before(startTime) {
 		return nil, errors.New("end time must be after start time")
 	}
@@ -1033,138 +1033,62 @@ func (s *StorageService) GetSessionMetrics(startTime, endTime time.Time) (*Metri
 	ctx, cancel := util.NewTimeoutContext(constants.MetricsTimeout)
 	defer cancel()
 
-	// Build query filter for sessions within time range
-	filter := bson.M{
-		constants.MongoFieldTimestamp: bson.M{
-			"$gte": startTime,
-			"$lte": endTime,
-		},
+	// Use aggregation pipeline to compute metrics in the database
+	pipeline := mongo.Pipeline{
+		// Match sessions in time range
+		{{Key: "$match", Value: bson.M{
+			constants.MongoFieldTimestamp: bson.M{
+				"$gte": startTime,
+				"$lte": endTime,
+			},
+		}}},
+		// Limit to prevent OOM on unbounded datasets
+		{{Key: "$limit", Value: int64(constants.MaxSessionLimit)}},
+		// Group and aggregate
+		{{Key: "$group", Value: bson.M{
+			"_id":                nil,
+			"totalSessions":     bson.M{"$sum": 1},
+			"activeSessions":    bson.M{"$sum": bson.M{"$cond": bson.A{bson.M{"$eq": bson.A{bson.M{"$type": "$" + constants.MongoFieldEndTime}, "missing"}}, 1, 0}}},
+			"adminAssisted":     bson.M{"$sum": bson.M{"$cond": bson.A{"$" + constants.MongoFieldAdminAssisted, 1, 0}}},
+			"totalTokens":       bson.M{"$sum": "$" + constants.MongoFieldTotalTokens},
+			"maxResponseTime":   bson.M{"$max": "$maxRespTime"},
+			"avgResponseTime":   bson.M{"$avg": "$avgRespTime"},
+		}}},
 	}
 
-	// Execute query using gomongo
-	cursor, err := s.collection.Find(ctx, filter)
-	// No else needed: early return pattern (guard clause)
+	cursor, err := s.collection.Aggregate(ctx, pipeline)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get session metrics: %w", err)
 	}
 	defer cursor.Close(ctx)
 
-	// Initialize metrics
-	metrics := &Metrics{
-		TotalSessions:      0,
-		ActiveSessions:     0,
-		AvgConcurrent:      0,
-		MaxConcurrent:      0,
-		TotalTokens:        0,
-		AvgResponseTime:    0,
-		MaxResponseTime:    0,
-		AdminAssistedCount: 0,
+	result := &Metrics{}
+
+	if cursor.Next(ctx) {
+		var aggResult struct {
+			TotalSessions    int     `bson:"totalSessions"`
+			ActiveSessions   int     `bson:"activeSessions"`
+			AdminAssisted    int     `bson:"adminAssisted"`
+			TotalTokens      int     `bson:"totalTokens"`
+			MaxResponseTime  int64   `bson:"maxResponseTime"`
+			AvgResponseTime  float64 `bson:"avgResponseTime"`
+		}
+		if err := cursor.Decode(&aggResult); err != nil {
+			return nil, fmt.Errorf("failed to decode metrics: %w", err)
+		}
+		result.TotalSessions = aggResult.TotalSessions
+		result.ActiveSessions = aggResult.ActiveSessions
+		result.AdminAssistedCount = aggResult.AdminAssisted
+		result.TotalTokens = aggResult.TotalTokens
+		result.MaxResponseTime = aggResult.MaxResponseTime
+		result.AvgResponseTime = int64(aggResult.AvgResponseTime)
 	}
 
-	// Track concurrent sessions over time for average calculation
-	// Map of timestamp -> count of active sessions at that time
-	concurrentMap := make(map[int64]int)
-
-	var totalResponseTime int64
-	var responseTimeCount int
-
-	// Process each session
-	for cursor.Next(ctx) {
-		var doc SessionDocument
-		// No else needed: early return pattern (guard clause)
-		if err := cursor.Decode(&doc); err != nil {
-			return nil, fmt.Errorf("failed to decode session document: %w", err)
-		}
-
-		metrics.TotalSessions++
-
-		// Count active sessions (no end time)
-		// No else needed: optional operation (only count if active)
-		if doc.EndTime == nil {
-			metrics.ActiveSessions++
-		}
-
-		// Count admin-assisted sessions
-		// No else needed: optional operation (only count if assisted)
-		if doc.AdminAssisted {
-			metrics.AdminAssistedCount++
-		}
-
-		// Aggregate token usage
-		metrics.TotalTokens += doc.TotalTokens
-
-		// Track max response time
-		// No else needed: optional operation (only update if larger)
-		if doc.MaxResponseTime > metrics.MaxResponseTime {
-			metrics.MaxResponseTime = doc.MaxResponseTime
-		}
-
-		// Aggregate average response times
-		// No else needed: optional operation (only aggregate if exists)
-		if doc.AvgResponseTime > 0 {
-			totalResponseTime += doc.AvgResponseTime
-			responseTimeCount++
-		}
-
-		// Track concurrent sessions
-		// Increment at start time, decrement at end time
-		startUnix := doc.StartTime.Unix()
-		concurrentMap[startUnix]++
-
-		// No else needed: optional operation (only decrement if session ended)
-		if doc.EndTime != nil {
-			endUnix := doc.EndTime.Unix()
-			concurrentMap[endUnix]--
-		}
-	}
-
-	// No else needed: early return pattern (guard clause)
 	if err := cursor.Err(); err != nil {
 		return nil, fmt.Errorf("cursor error: %w", err)
 	}
 
-	// Calculate average response time
-	// No else needed: optional operation (only calculate if data exists)
-	if responseTimeCount > 0 {
-		metrics.AvgResponseTime = totalResponseTime / int64(responseTimeCount)
-	}
-
-	// Calculate max concurrent and average concurrent sessions
-	// No else needed: optional operation (only calculate if data exists)
-	if len(concurrentMap) > 0 {
-		// Sort timestamps
-		timestamps := make([]int64, 0, len(concurrentMap))
-		for ts := range concurrentMap {
-			timestamps = append(timestamps, ts)
-		}
-
-		// Sort timestamps using efficient O(n log n) algorithm
-		sort.Slice(timestamps, func(i, j int) bool {
-			return timestamps[i] < timestamps[j]
-		})
-
-		// Calculate running concurrent count
-		currentConcurrent := 0
-		var totalConcurrent int64
-		sampleCount := 0
-
-		for _, ts := range timestamps {
-			currentConcurrent += concurrentMap[ts]
-			// No else needed: optional operation (only update if larger)
-			if currentConcurrent > metrics.MaxConcurrent {
-				metrics.MaxConcurrent = currentConcurrent
-			}
-			totalConcurrent += int64(currentConcurrent)
-			sampleCount++
-		}
-
-		// No else needed: optional operation (only calculate if samples exist)
-		if sampleCount > 0 {
-			metrics.AvgConcurrent = float64(totalConcurrent) / float64(sampleCount)
-		}
-	}
-
-	return metrics, nil
+	return result, nil
 }
 
 // GetTokenUsage calculates the total token usage across all sessions within a time period
@@ -1217,6 +1141,42 @@ func (s *StorageService) GetTokenUsage(startTime, endTime time.Time) (int, error
 	}
 
 	return result.TotalTokens, nil
+}
+
+// LoadActiveSessions returns all sessions that have no end time (still active).
+// Used by SessionManager.RehydrateFromStorage to restore sessions on startup.
+func (s *StorageService) LoadActiveSessions() ([]*session.Session, error) {
+	ctx, cancel := util.NewTimeoutContext(constants.LongContextTimeout)
+	defer cancel()
+
+	filter := bson.M{
+		constants.MongoFieldEndTime: bson.M{"$exists": false},
+	}
+
+	queryOpts := gomongo.QueryOptions{
+		Limit: int64(constants.MaxSessionLimit),
+	}
+
+	cursor, err := s.collection.Find(ctx, filter, queryOpts)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load active sessions: %w", err)
+	}
+	defer cursor.Close(ctx)
+
+	var sessions []*session.Session
+	for cursor.Next(ctx) {
+		var doc SessionDocument
+		if err := cursor.Decode(&doc); err != nil {
+			return nil, fmt.Errorf("failed to decode session document: %w", err)
+		}
+		sessions = append(sessions, s.documentToSession(&doc))
+	}
+
+	if err := cursor.Err(); err != nil {
+		return nil, fmt.Errorf("cursor error: %w", err)
+	}
+
+	return sessions, nil
 }
 
 // retryOperation executes an operation with retry logic for transient errors

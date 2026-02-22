@@ -83,7 +83,12 @@ type Session struct {
 	mu sync.RWMutex
 }
 
-// SessionManager manages active sessions
+// SessionManager manages active sessions in memory.
+// NOTE: In-memory sessions are NOT automatically synchronized across pods.
+// On startup, call RehydrateFromStorage() to load active sessions from MongoDB.
+// For horizontal scaling, configure K8s sticky sessions (sessionAffinity: ClientIP
+// and ingress cookie affinity) to pin WebSocket connections to a single pod.
+// True multi-pod session sharing requires a Redis-backed session store.
 type SessionManager struct {
 	sessions         map[string]*Session // sessionID -> Session
 	userSessions     map[string]string   // userID -> active sessionID
@@ -99,6 +104,13 @@ type SessionManager struct {
 	stopOnce        sync.Once
 }
 
+// StorageLoader provides the ability to load active sessions from persistent storage.
+// This interface avoids a circular dependency between session and storage packages.
+type StorageLoader interface {
+	// LoadActiveSessions returns all sessions that have no end time (still active).
+	LoadActiveSessions() ([]*Session, error)
+}
+
 // NewSessionManager creates a new session manager
 func NewSessionManager(reconnectTimeout time.Duration, logger *golog.Logger) *SessionManager {
 	sessionLogger := logger.WithGroup("session")
@@ -111,6 +123,32 @@ func NewSessionManager(reconnectTimeout time.Duration, logger *golog.Logger) *Se
 		sessionTTL:       15 * time.Minute, // Default: remove sessions 15 minutes after EndTime
 		stopCleanup:      make(chan struct{}),
 	}
+}
+
+// RehydrateFromStorage loads active sessions from persistent storage into the
+// in-memory session map. This should be called once during startup, after
+// creating the SessionManager, to restore sessions that survived a pod restart.
+func (sm *SessionManager) RehydrateFromStorage(loader StorageLoader) error {
+	sessions, err := loader.LoadActiveSessions()
+	if err != nil {
+		return fmt.Errorf("failed to load active sessions: %w", err)
+	}
+
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+
+	loaded := 0
+	for _, sess := range sessions {
+		if sess == nil || sess.ID == "" || sess.UserID == "" {
+			continue
+		}
+		sm.sessions[sess.ID] = sess
+		sm.userSessions[sess.UserID] = sess.ID
+		loaded++
+	}
+
+	sm.logger.Info("Rehydrated sessions from storage", "loaded", loaded, "total_found", len(sessions))
+	return nil
 }
 
 // CreateSession creates a new session for a user.
@@ -221,10 +259,12 @@ func (sm *SessionManager) RestoreSession(userID, sessionID string) (*Session, er
 		}
 	}
 
-	// Restore session
+	// Restore session — acquire session.mu per lock ordering (sm.mu → session.mu)
+	session.mu.Lock()
 	session.IsActive = true
 	session.LastActivity = time.Now()
 	session.EndTime = nil
+	session.mu.Unlock()
 
 	// Restore user mapping
 	sm.userSessions[userID] = sessionID
@@ -247,10 +287,12 @@ func (sm *SessionManager) EndSession(sessionID string) error {
 		return fmt.Errorf("%w: %s", ErrSessionNotFound, sessionID)
 	}
 
-	// Mark session as inactive
+	// Mark session as inactive — acquire session.mu per lock ordering (sm.mu → session.mu)
+	session.mu.Lock()
 	now := time.Now()
 	session.IsActive = false
 	session.EndTime = &now
+	session.mu.Unlock()
 
 	// Remove user mapping
 	delete(sm.userSessions, session.UserID)
@@ -476,9 +518,11 @@ func (sm *SessionManager) AddMessage(sessionID string, msg *Message) error {
 		return fmt.Errorf("%w: %s", ErrSessionNotFound, sessionID)
 	}
 
-	// Add message to session
+	// Add message to session — acquire session.mu per lock ordering (sm.mu → session.mu)
+	session.mu.Lock()
 	session.Messages = append(session.Messages, msg)
 	session.LastActivity = time.Now()
+	session.mu.Unlock()
 
 	sm.logger.Debug("Message added to session",
 		"session_id", sessionID,

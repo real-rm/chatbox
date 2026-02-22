@@ -17,7 +17,7 @@ import (
 // process should remove it from the sessions map.
 func TestProperty_SessionCleanupRemovesExpiredSessions(t *testing.T) {
 	parameters := gopter.DefaultTestParameters()
-	parameters.MinSuccessfulTests = 20 // Reduced from 100 for faster execution
+	parameters.MinSuccessfulTests = 50
 	properties := gopter.NewProperties(parameters)
 
 	properties.Property("expired sessions are removed after TTL", prop.ForAll(
@@ -284,7 +284,7 @@ func TestProperty_SessionCleanupRespectsTimeWindow(t *testing.T) {
 // sessions map, regardless of how long it has been active.
 func TestProperty_ActiveSessionsNeverCleanedUp(t *testing.T) {
 	parameters := gopter.DefaultTestParameters()
-	parameters.MinSuccessfulTests = 20 // Reduced from 100 for faster execution
+	parameters.MinSuccessfulTests = 50
 	properties := gopter.NewProperties(parameters)
 
 	properties.Property("active sessions are never removed by cleanup", prop.ForAll(

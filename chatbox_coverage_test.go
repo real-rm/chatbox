@@ -196,7 +196,7 @@ func TestRegister_RouteSetup(t *testing.T) {
 		"/chatbox/admin/takeover/:sessionID",
 		"/chatbox/healthz",
 		"/chatbox/readyz",
-		"/metrics",
+		"/chatbox/metrics/prometheus",
 	}
 
 	routeMap := make(map[string]bool)

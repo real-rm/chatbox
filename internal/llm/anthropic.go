@@ -110,7 +110,7 @@ func (p *AnthropicProvider) SendMessage(ctx context.Context, req *LLMRequest) (*
 	reqBody := anthropicRequest{
 		Model:     p.model,
 		Messages:  messages,
-		MaxTokens: 4096, // Default max tokens
+		MaxTokens: constants.DefaultAnthropicMaxTokens,
 		Stream:    false,
 	}
 
@@ -180,7 +180,7 @@ func (p *AnthropicProvider) StreamMessage(ctx context.Context, req *LLMRequest) 
 	reqBody := anthropicRequest{
 		Model:     p.model,
 		Messages:  messages,
-		MaxTokens: 4096,
+		MaxTokens: constants.DefaultAnthropicMaxTokens,
 		Stream:    true,
 	}
 

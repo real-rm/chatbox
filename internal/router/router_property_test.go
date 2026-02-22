@@ -446,6 +446,8 @@ func TestProperty_VoiceMessageRouting(t *testing.T) {
 			}
 			if fileURL == "" {
 				fileURL = "https://example.com/audio.mp3"
+			} else {
+				fileURL = "https://example.com/" + fileURL
 			}
 
 			logger := createTestLogger()

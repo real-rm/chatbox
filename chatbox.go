@@ -6,6 +6,7 @@ package chatbox
 import (
 	"context"
 	"fmt"
+	"net"
 	"os"
 	"strings"
 	"sync"
@@ -80,6 +81,9 @@ func Register(r *gin.Engine, config *goconfig.ConfigAccessor, logger *golog.Logg
 		// No else needed: early return pattern (guard clause)
 		if err != nil {
 			return fmt.Errorf("failed to get JWT secret: %w", err)
+		}
+		if containsPlaceholder(jwtSecret) {
+			return fmt.Errorf("JWT_SECRET contains placeholder value — set a real secret before deploying")
 		}
 	}
 
@@ -156,6 +160,9 @@ func Register(r *gin.Engine, config *goconfig.ConfigAccessor, logger *golog.Logg
 		if err != nil {
 			return fmt.Errorf("failed to get encryption key: %w", err)
 		}
+		if encryptionKeyStr != "" && containsPlaceholder(encryptionKeyStr) {
+			return fmt.Errorf("ENCRYPTION_KEY contains placeholder value — set a real key before deploying")
+		}
 	}
 	// No else needed: optional operation (logging based on configuration state)
 	if encryptionKeyStr != "" {
@@ -218,6 +225,13 @@ func Register(r *gin.Engine, config *goconfig.ConfigAccessor, logger *golog.Logg
 
 	// Create session manager
 	sessionManager := session.NewSessionManager(reconnectTimeout, chatboxLogger)
+
+	// Rehydrate active sessions from MongoDB into the in-memory map.
+	// This restores sessions that survived a pod restart (see C2: horizontal scaling).
+	if err := sessionManager.RehydrateFromStorage(storageService); err != nil {
+		chatboxLogger.Warn("Failed to rehydrate sessions from storage", "error", err)
+		// Non-fatal: sessions will be recreated when users reconnect
+	}
 
 	// Start cleanup goroutine for expired sessions
 	sessionManager.StartCleanup()
@@ -348,6 +362,21 @@ func Register(r *gin.Engine, config *goconfig.ConfigAccessor, logger *golog.Logg
 		chatboxLogger.Warn("No CORS origins configured, CORS middleware not enabled")
 	}
 
+	// Configure trusted proxies to prevent X-Forwarded-For spoofing.
+	// c.ClientIP() will only trust X-Forwarded-For from these networks.
+	trustedProxiesStr, _ := config.ConfigStringWithDefault("chatbox.trusted_proxies", constants.DefaultTrustedProxies)
+	if trustedProxiesStr != "" {
+		proxies := strings.Split(trustedProxiesStr, ",")
+		for i, p := range proxies {
+			proxies[i] = strings.TrimSpace(p)
+		}
+		if err := r.SetTrustedProxies(proxies); err != nil {
+			chatboxLogger.Warn("Failed to set trusted proxies", "error", err)
+		} else {
+			chatboxLogger.Info("Trusted proxies configured", "proxies", proxies)
+		}
+	}
+
 	// Apply metrics middleware to record HTTP request duration
 	r.Use(metricsMiddleware())
 
@@ -380,14 +409,29 @@ func Register(r *gin.Engine, config *goconfig.ConfigAccessor, logger *golog.Logg
 		chatGroup.GET("/readyz", publicRateLimitMiddleware(publicLimiter, chatboxLogger), handleReadyCheck(mongo, llmService, chatboxLogger))
 	}
 
-	// Prometheus metrics endpoint (public, rate limited)
-	r.GET("/metrics", publicRateLimitMiddleware(publicLimiter, chatboxLogger), gin.WrapH(promhttp.Handler()))
+	// Prometheus metrics endpoint — under prefix, restricted to configured networks
+	metricsAllowedStr, _ := config.ConfigStringWithDefault("chatbox.metrics_allowed_networks", constants.DefaultMetricsAllowedNetworks)
+	metricsNets := parseNetworks(metricsAllowedStr, chatboxLogger)
+	chatGroup.GET("/metrics/prometheus",
+		metricsNetworkMiddleware(metricsNets, chatboxLogger),
+		publicRateLimitMiddleware(publicLimiter, chatboxLogger),
+		gin.WrapH(promhttp.Handler()),
+	)
+
+	// Warn if MongoDB URI appears to have no authentication (L4)
+	mongoURI, _ := config.ConfigStringWithDefault("database.uri", "")
+	if mongoURI == "" {
+		mongoURI, _ = config.ConfigStringWithDefault("MONGO_URI", "")
+	}
+	if mongoURI != "" && !strings.Contains(mongoURI, "@") {
+		chatboxLogger.Warn("MongoDB URI does not contain authentication credentials — ensure auth is configured for production")
+	}
 
 	chatboxLogger.Info("Chatbox service registered successfully",
 		"websocket_endpoint", pathPrefix+"/ws",
 		"admin_endpoints", pathPrefix+"/admin/*",
 		"health_endpoints", pathPrefix+"/healthz, "+pathPrefix+"/readyz",
-		"metrics_endpoint", "/metrics",
+		"metrics_endpoint", pathPrefix+"/metrics/prometheus",
 	)
 
 	return nil
@@ -409,11 +453,8 @@ func metricsMiddleware() gin.HandlerFunc {
 // (healthz, readyz, metrics) by client IP to prevent abuse.
 func publicRateLimitMiddleware(limiter *ratelimit.MessageLimiter, logger *golog.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Use X-Forwarded-For if present (behind proxy), otherwise use RemoteAddr
-		clientIP := c.GetHeader("X-Forwarded-For")
-		if clientIP == "" {
-			clientIP = c.Request.RemoteAddr
-		}
+		// Use Gin's ClientIP() which respects trusted proxies to prevent X-Forwarded-For spoofing
+		clientIP := c.ClientIP()
 
 		if !limiter.Allow(clientIP) {
 			retryAfter := limiter.GetRetryAfter(clientIP)
@@ -648,6 +689,16 @@ func handleListSessions(storageService *storage.StorageService, sessionManager *
 		startTimeFromStr := c.Query("start_time_from") // RFC3339 format
 		startTimeToStr := c.Query("start_time_to")     // RFC3339 format
 
+		// Validate sort parameters against whitelist
+		if !constants.ValidSortFields[sortBy] {
+			httperrors.RespondBadRequest(c, fmt.Sprintf("invalid sort_by field %q; allowed: start_time, end_time, message_count, total_tokens, user_id", sortBy))
+			return
+		}
+		if !constants.ValidSortOrders[sortOrder] {
+			httperrors.RespondBadRequest(c, fmt.Sprintf("invalid sort_order %q; allowed: asc, desc", sortOrder))
+			return
+		}
+
 		// Parse limit
 		limit := constants.DefaultSessionLimit
 		// No else needed: optional operation (limit parsing with validation)
@@ -861,11 +912,10 @@ func handleAdminTakeover(messageRouter *router.MessageRouter, logger *golog.Logg
 			return
 		}
 
-		// Create a mock admin connection for the takeover
-		// In a real implementation, this would be a WebSocket connection
-		// For now, we'll just mark the session as admin-assisted
+		// Create an admin connection for the takeover
 		adminConn := websocket.NewConnection(claims.UserID, claims.Roles)
-		adminConn.Name = claims.Name // Set admin name from JWT claims
+		adminConn.Name = claims.Name
+		adminConn.ConnectionID = fmt.Sprintf("admin-%s-%d", claims.UserID, time.Now().UnixNano())
 
 		// Handle admin takeover
 		// No else needed: early return pattern (guard clause)
@@ -1065,9 +1115,63 @@ func validateJWTSecret(secret string) error {
 	return nil
 }
 
+// parseNetworks parses a comma-separated list of CIDR network strings.
+func parseNetworks(networksStr string, logger *golog.Logger) []*net.IPNet {
+	var nets []*net.IPNet
+	for _, cidr := range strings.Split(networksStr, ",") {
+		cidr = strings.TrimSpace(cidr)
+		if cidr == "" {
+			continue
+		}
+		_, ipNet, err := net.ParseCIDR(cidr)
+		if err != nil {
+			logger.Warn("Invalid CIDR in metrics_allowed_networks", "cidr", cidr, "error", err)
+			continue
+		}
+		nets = append(nets, ipNet)
+	}
+	return nets
+}
+
+// metricsNetworkMiddleware restricts access to the metrics endpoint to configured networks.
+func metricsNetworkMiddleware(allowedNets []*net.IPNet, logger *golog.Logger) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// If no networks configured, allow all (development mode)
+		if len(allowedNets) == 0 {
+			c.Next()
+			return
+		}
+
+		clientIP := net.ParseIP(c.ClientIP())
+		if clientIP == nil {
+			logger.Warn("Could not parse client IP for metrics access", "ip", c.ClientIP())
+			httperrors.RespondForbidden(c)
+			c.Abort()
+			return
+		}
+
+		for _, ipNet := range allowedNets {
+			if ipNet.Contains(clientIP) {
+				c.Next()
+				return
+			}
+		}
+
+		logger.Warn("Metrics access denied from unauthorized network",
+			"client_ip", c.ClientIP(),
+			"component", "metrics")
+		httperrors.RespondForbidden(c)
+		c.Abort()
+	}
+}
+
 // containsPlaceholder checks if a configuration value still contains
 // a deployment placeholder that should have been replaced.
 func containsPlaceholder(value string) bool {
 	upper := strings.ToUpper(value)
-	return strings.Contains(upper, "REPLACE_WITH") || strings.Contains(upper, "PLACEHOLDER")
+	return strings.Contains(upper, "REPLACE_WITH") ||
+		strings.Contains(upper, "PLACEHOLDER") ||
+		strings.Contains(upper, "CHANGE-ME") ||
+		strings.Contains(upper, "CHANGE_ME") ||
+		strings.Contains(upper, "YOUR-")
 }

@@ -137,7 +137,7 @@ func TestProperty_ValidMessageRoutingToLLM(t *testing.T) {
 	}
 
 	parameters := gopter.DefaultTestParameters()
-	parameters.MinSuccessfulTests = 20
+	parameters.MinSuccessfulTests = 50
 	properties := gopter.NewProperties(parameters)
 
 	properties.Property("valid messages are routed to LLM provider", prop.ForAll(
@@ -253,7 +253,7 @@ func TestProperty_LLMResponseDelivery(t *testing.T) {
 	}
 
 	parameters := gopter.DefaultTestParameters()
-	parameters.MinSuccessfulTests = 20
+	parameters.MinSuccessfulTests = 50
 	properties := gopter.NewProperties(parameters)
 
 	properties.Property("LLM responses are delivered correctly", prop.ForAll(
@@ -375,7 +375,7 @@ func TestProperty_ResponseTimeTracking(t *testing.T) {
 	}
 
 	parameters := gopter.DefaultTestParameters()
-	parameters.MinSuccessfulTests = 20
+	parameters.MinSuccessfulTests = 50
 	properties := gopter.NewProperties(parameters)
 
 	properties.Property("response time is tracked for all LLM requests", prop.ForAll(
@@ -495,7 +495,7 @@ func TestProperty_LLMRequestContextInclusion(t *testing.T) {
 	}
 
 	parameters := gopter.DefaultTestParameters()
-	parameters.MinSuccessfulTests = 20
+	parameters.MinSuccessfulTests = 50
 	properties := gopter.NewProperties(parameters)
 
 	properties.Property("LLM requests include session context and user message", prop.ForAll(
@@ -637,7 +637,7 @@ func TestProperty_StreamingResponseForwarding(t *testing.T) {
 	}
 
 	parameters := gopter.DefaultTestParameters()
-	parameters.MinSuccessfulTests = 20
+	parameters.MinSuccessfulTests = 50
 	properties := gopter.NewProperties(parameters)
 
 	properties.Property("streaming responses are forwarded in real-time", prop.ForAll(
@@ -775,7 +775,7 @@ func TestProperty_LLMBackendRetryLogic(t *testing.T) {
 	}
 
 	parameters := gopter.DefaultTestParameters()
-	parameters.MinSuccessfulTests = 5 // Reduced from 10 to minimize test time with exponential backoff
+	parameters.MinSuccessfulTests = 10 // Kept low: each iteration includes real 1-3s backoff delays
 	properties := gopter.NewProperties(parameters)
 
 	properties.Property("LLM backend failures trigger retry with exponential backoff", prop.ForAll(
@@ -896,7 +896,7 @@ func TestProperty_ModelSelectionPersistence(t *testing.T) {
 	}
 
 	parameters := gopter.DefaultTestParameters()
-	parameters.MinSuccessfulTests = 20
+	parameters.MinSuccessfulTests = 50
 	properties := gopter.NewProperties(parameters)
 
 	properties.Property("selected model is used for all subsequent requests", prop.ForAll(
@@ -1057,7 +1057,7 @@ func TestProperty_TokenUsageTrackingAndStorage(t *testing.T) {
 	}
 
 	parameters := gopter.DefaultTestParameters()
-	parameters.MinSuccessfulTests = 20
+	parameters.MinSuccessfulTests = 50
 	properties := gopter.NewProperties(parameters)
 
 	properties.Property("token usage is tracked and accumulated correctly", prop.ForAll(

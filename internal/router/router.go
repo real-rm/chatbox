@@ -528,6 +528,13 @@ func (mr *MessageRouter) handleFileUpload(conn *websocket.Connection, msg *messa
 		return chaterrors.ErrMissingField("file_id")
 	}
 
+	// Validate file URL if provided
+	if msg.FileURL != "" {
+		if err := util.ValidateFileURL(msg.FileURL); err != nil {
+			return chaterrors.NewValidationError(chaterrors.ErrCodeInvalidFormat, "Invalid file URL", err)
+		}
+	}
+
 	// Verify session exists
 	sess, err := mr.sessionManager.GetSession(msg.SessionID)
 	if err != nil {
@@ -597,6 +604,13 @@ func (mr *MessageRouter) handleVoiceMessage(conn *websocket.Connection, msg *mes
 	// Validate file information
 	if msg.FileID == "" {
 		return chaterrors.ErrMissingField("file_id")
+	}
+
+	// Validate file URL if provided
+	if msg.FileURL != "" {
+		if err := util.ValidateFileURL(msg.FileURL); err != nil {
+			return chaterrors.NewValidationError(chaterrors.ErrCodeInvalidFormat, "Invalid file URL", err)
+		}
 	}
 
 	// Verify session exists

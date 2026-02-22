@@ -131,6 +131,7 @@ const (
 var WeakSecrets = []string{
 	"secret", "test", "test123", "password", "admin",
 	"changeme", "default", "example", "demo", "12345",
+	"placeholder",
 }
 
 // Minimum Security Requirements
@@ -164,4 +165,33 @@ const (
 const (
 	MillisecondsPerSecond = 1000
 	MinRetryAfterSeconds  = 1 // Minimum retry-after value in seconds
+)
+
+// Network configuration defaults
+const (
+	DefaultTrustedProxies        = "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+	DefaultMetricsAllowedNetworks = "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,127.0.0.0/8"
+)
+
+// Valid sort fields and orders for admin session queries
+var ValidSortFields = map[string]bool{
+	"start_time":    true,
+	"end_time":      true,
+	"message_count": true,
+	"total_tokens":  true,
+	"user_id":       true,
+}
+
+var ValidSortOrders = map[string]bool{
+	"asc":  true,
+	"desc": true,
+}
+
+// Default Anthropic max tokens
+const DefaultAnthropicMaxTokens = 4096
+
+// LLM retry configuration
+const (
+	LLMInitialRetryDelay = 1 * time.Second  // Base delay for LLM retry exponential backoff
+	LLMMaxRetryDelay     = 30 * time.Second // Cap for exponential backoff in LLM retries
 )

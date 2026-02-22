@@ -26,9 +26,25 @@ jobs:
       - name: Check formatting
         run: gofmt -l . | tee /dev/stderr | (! read)
 
+  test:
+    name: Run Tests
+    needs: lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      - name: Run tests
+        run: go test -race -short -timeout 5m ./...
+
   docker-build:
     name: Test Docker Build
-    needs: lint
+    needs: [lint, test]
     runs-on: ubuntu-latest
     permissions:
       contents: read

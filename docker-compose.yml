@@ -1,8 +1,6 @@
 # Docker Compose for local development and testing
 # This file provides a complete local environment with all dependencies
 
-version: '3.8'
-
 services:
   # MongoDB for session storage
   mongodb:
@@ -21,7 +19,7 @@ services:
     networks:
       - chatbox-network
     healthcheck:
-      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/chat --quiet
+      test: mongosh "mongodb://admin:password@localhost:27017/admin" --eval "db.runCommand('ping').ok" --quiet
       interval: 10s
       timeout: 5s
       retries: 5
@@ -78,6 +76,11 @@ services:
       - "8025:8025"  # Web UI
     networks:
       - chatbox-network
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8025"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
 
   # Chatbox WebSocket service
   chatbox:
@@ -146,7 +149,7 @@ services:
     networks:
       - chatbox-network
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/chat/healthz"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/chatbox/healthz"]
       interval: 10s
       timeout: 3s
       retries: 3

@@ -572,10 +572,7 @@ func (c *Connection) sendErrorResponse(code chaterrors.ErrorCode, msg string) {
 		Timestamp: time.Now(),
 	}
 	if errorBytes, err := json.Marshal(errorMsg); err == nil {
-		select {
-		case c.send <- errorBytes:
-		default:
-		}
+		c.SafeSend(errorBytes)
 	}
 }
 

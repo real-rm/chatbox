@@ -90,11 +90,11 @@ clean: ## Clean build artifacts
 
 test: ## Run all tests
 	@echo "$(COLOR_GREEN)Running all tests...$(COLOR_RESET)"
-	$(GOTEST) -v -timeout $(TEST_TIMEOUT) ./...
+	$(GOTEST) -v -race -timeout $(TEST_TIMEOUT) ./...
 
 test-unit: ## Run unit tests only (skip integration tests)
 	@echo "$(COLOR_GREEN)Running unit tests...$(COLOR_RESET)"
-	$(GOTEST) -v -short -timeout $(TEST_TIMEOUT) ./...
+	$(GOTEST) -v -race -short -timeout $(TEST_TIMEOUT) ./...
 
 test-integration: ## Run integration tests only
 	@echo "$(COLOR_GREEN)Running integration tests...$(COLOR_RESET)"
@@ -144,25 +144,25 @@ docker-run: ## Run Docker container
 	@echo "$(COLOR_GREEN)Running Docker container...$(COLOR_RESET)"
 	docker run -p 8080:8080 --env-file .env $(DOCKER_IMAGE)
 
-docker-compose-up: ## Start services with docker-compose
-	@echo "$(COLOR_GREEN)Starting services with docker-compose...$(COLOR_RESET)"
-	docker-compose up -d
+docker-compose-up: ## Start services with docker compose
+	@echo "$(COLOR_GREEN)Starting services with docker compose...$(COLOR_RESET)"
+	docker compose up -d
 	@echo "$(COLOR_GREEN)Services started!$(COLOR_RESET)"
 	@echo "$(COLOR_YELLOW)Run 'make docker-compose-logs' to view logs$(COLOR_RESET)"
 
-docker-compose-down: ## Stop services with docker-compose
-	@echo "$(COLOR_YELLOW)Stopping services with docker-compose...$(COLOR_RESET)"
-	docker-compose down
+docker-compose-down: ## Stop services with docker compose
+	@echo "$(COLOR_YELLOW)Stopping services with docker compose...$(COLOR_RESET)"
+	docker compose down
 	@echo "$(COLOR_GREEN)Services stopped!$(COLOR_RESET)"
 
-docker-compose-logs: ## View docker-compose logs
-	docker-compose logs -f
+docker-compose-logs: ## View docker compose logs
+	docker compose logs -f
 
-docker-compose-test: docker-compose-up ## Run tests against docker-compose environment
+docker-compose-test: docker-compose-up ## Run tests against docker compose environment
 	@echo "$(COLOR_GREEN)Waiting for services to be ready...$(COLOR_RESET)"
 	@sleep 5
 	@echo "$(COLOR_GREEN)Running integration tests...$(COLOR_RESET)"
-	./test_integration.sh || true
+	./scripts/testing/test_integration.sh
 	@$(MAKE) docker-compose-down
 
 ##@ Kubernetes
@@ -180,11 +180,18 @@ k8s-deploy: ## Deploy to Kubernetes
 	kubectl apply -f $(K8S_DIR)/secret.yaml
 	kubectl apply -f $(K8S_DIR)/deployment.yaml
 	kubectl apply -f $(K8S_DIR)/service.yaml
+	kubectl apply -f $(K8S_DIR)/hpa.yaml
+	kubectl apply -f $(K8S_DIR)/pdb.yaml
+	kubectl apply -f $(K8S_DIR)/networkpolicy.yaml
+	kubectl rollout status deployment/chatbox-websocket -n $(K8S_NAMESPACE) --timeout=120s
 	@echo "$(COLOR_GREEN)Deployment complete!$(COLOR_RESET)"
 	@echo "$(COLOR_YELLOW)Run 'make k8s-status' to check deployment status$(COLOR_RESET)"
 
 k8s-delete: ## Delete Kubernetes resources
 	@echo "$(COLOR_YELLOW)Deleting Kubernetes resources...$(COLOR_RESET)"
+	kubectl delete -f $(K8S_DIR)/networkpolicy.yaml --ignore-not-found=true
+	kubectl delete -f $(K8S_DIR)/pdb.yaml --ignore-not-found=true
+	kubectl delete -f $(K8S_DIR)/hpa.yaml --ignore-not-found=true
 	kubectl delete -f $(K8S_DIR)/service.yaml --ignore-not-found=true
 	kubectl delete -f $(K8S_DIR)/deployment.yaml --ignore-not-found=true
 	kubectl delete -f $(K8S_DIR)/secret.yaml --ignore-not-found=true
@@ -202,15 +209,15 @@ k8s-logs: ## View Kubernetes pod logs
 
 k8s-describe: ## Describe Kubernetes resources
 	@echo "$(COLOR_BLUE)Describing deployment...$(COLOR_RESET)"
-	kubectl describe deployment chatbox -n $(K8S_NAMESPACE)
+	kubectl describe deployment chatbox-websocket -n $(K8S_NAMESPACE)
 	@echo ""
 	@echo "$(COLOR_BLUE)Describing service...$(COLOR_RESET)"
-	kubectl describe service chatbox -n $(K8S_NAMESPACE)
+	kubectl describe service chatbox-websocket -n $(K8S_NAMESPACE)
 
 k8s-restart: ## Restart Kubernetes deployment
 	@echo "$(COLOR_GREEN)Restarting deployment...$(COLOR_RESET)"
-	kubectl rollout restart deployment/chatbox -n $(K8S_NAMESPACE)
-	kubectl rollout status deployment/chatbox -n $(K8S_NAMESPACE)
+	kubectl rollout restart deployment/chatbox-websocket -n $(K8S_NAMESPACE)
+	kubectl rollout status deployment/chatbox-websocket -n $(K8S_NAMESPACE)
 
 ##@ CI/CD
 

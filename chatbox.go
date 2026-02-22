@@ -5,6 +5,7 @@ package chatbox
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -17,9 +18,10 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/real-rm/chatbox/internal/auth"
-	"github.com/real-rm/chatbox/internal/metrics"
 	"github.com/real-rm/chatbox/internal/constants"
+	chaterrors "github.com/real-rm/chatbox/internal/errors"
 	"github.com/real-rm/chatbox/internal/httperrors"
+	"github.com/real-rm/chatbox/internal/metrics"
 	"github.com/real-rm/chatbox/internal/llm"
 	"github.com/real-rm/chatbox/internal/notification"
 	"github.com/real-rm/chatbox/internal/ratelimit"
@@ -949,20 +951,36 @@ func handleAdminTakeover(messageRouter *router.MessageRouter, logger *golog.Logg
 			return
 		}
 
-		// Create an admin connection for the takeover
+		// Create an admin connection for the takeover.
+		// NOTE: This connection has no writePump consuming its send channel.
+		// It serves as a session marker for admin assistance tracking.
+		// Messages sent to this connection via BroadcastToSession will buffer
+		// (capacity 256) and be silently dropped when full. For full bidirectional
+		// admin messaging, use WebSocket-based admin takeover instead.
 		adminConn := websocket.NewConnection(claims.UserID, claims.Roles)
 		adminConn.Name = claims.Name
 		adminConn.ConnectionID = fmt.Sprintf("admin-%s-%d", claims.UserID, time.Now().UnixNano())
 
 		// Handle admin takeover
-		// No else needed: early return pattern (guard clause)
 		if err := messageRouter.HandleAdminTakeover(adminConn, sessionID); err != nil {
-			// Log detailed error server-side
 			util.LogError(logger, "http", "initiate admin takeover", err,
 				"session_id", sessionID,
 				"admin_id", claims.UserID)
-			// Send generic error to client
-			httperrors.RespondInternalError(c)
+
+			// Map error to appropriate HTTP status
+			var chatErr *chaterrors.ChatError
+			if errors.As(err, &chatErr) {
+				switch chatErr.Code {
+				case chaterrors.ErrCodeNotFound:
+					httperrors.RespondNotFound(c, "Session not found")
+				case chaterrors.ErrCodeInvalidFormat:
+					httperrors.RespondBadRequest(c, chatErr.Message)
+				default:
+					httperrors.RespondInternalError(c)
+				}
+			} else {
+				httperrors.RespondInternalError(c)
+			}
 			return
 		}
 

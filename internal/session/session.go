@@ -8,6 +8,7 @@ package session
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -48,9 +49,11 @@ type Message struct {
 	Metadata  map[string]string
 }
 
-// Session represents an active user session
+// Session represents an active user session.
+// ID and UserID are immutable after construction -- safe to read without acquiring mu.
+// All other fields require mu.RLock() for reads and mu.Lock() for writes.
 type Session struct {
-	// Identity
+	// Identity (immutable after construction -- no lock required for reads)
 	ID     string
 	UserID string
 	Name   string
@@ -330,9 +333,14 @@ func (sm *SessionManager) cleanupExpiredSessions() {
 	now := time.Now()
 	removed := 0
 
-	for sessionID, session := range sm.sessions {
-		if !session.IsActive && session.EndTime != nil {
-			if now.Sub(*session.EndTime) > sm.sessionTTL {
+	for sessionID, sess := range sm.sessions {
+		sess.mu.RLock()
+		isActive := sess.IsActive
+		endTime := sess.EndTime
+		sess.mu.RUnlock()
+
+		if !isActive && endTime != nil {
+			if now.Sub(*endTime) > sm.sessionTTL {
 				delete(sm.sessions, sessionID)
 				removed++
 			}
@@ -359,9 +367,12 @@ func (sm *SessionManager) GetMemoryStats() (active, inactive, total int) {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
 
-	for _, session := range sm.sessions {
+	for _, sess := range sm.sessions {
 		total++
-		if session.IsActive {
+		sess.mu.RLock()
+		isActive := sess.IsActive
+		sess.mu.RUnlock()
+		if isActive {
 			active++
 		} else {
 			inactive++
@@ -386,9 +397,11 @@ func (sm *SessionManager) SetSessionNameFromMessage(sessionID, message string) e
 	}
 
 	// Only set name if it's empty (first message)
+	session.mu.Lock()
 	if session.Name == "" {
 		session.Name = GenerateSessionName(message, 50)
 	}
+	session.mu.Unlock()
 
 	return nil
 }
@@ -401,7 +414,7 @@ func GenerateSessionName(firstMessage string, maxLength int) string {
 	const ellipsis = "..."
 
 	// Trim whitespace
-	message := trimWhitespace(firstMessage)
+	message := strings.TrimSpace(firstMessage)
 
 	// Return default if empty
 	if message == "" {
@@ -444,46 +457,20 @@ func truncateAtWordBoundary(s string, maxLen int) string {
 
 	// If we found a space, truncate there
 	if lastSpace > 0 {
-		return trimWhitespace(truncated[:lastSpace])
+		return strings.TrimSpace(truncated[:lastSpace])
 	}
 
 	// No space found, just truncate at maxLen
 	return truncated
 }
 
-// trimWhitespace removes leading and trailing whitespace including newlines and tabs
-func trimWhitespace(s string) string {
-	// Simple implementation without gohelper for now
-	start := 0
-	end := len(s)
-
-	// Trim leading whitespace
-	for start < end {
-		c := s[start]
-		if c != ' ' && c != '\t' && c != '\n' && c != '\r' {
-			break
-		}
-		start++
-	}
-
-	// Trim trailing whitespace
-	for end > start {
-		c := s[end-1]
-		if c != ' ' && c != '\t' && c != '\n' && c != '\r' {
-			break
-		}
-		end--
-	}
-
-	return s[start:end]
-}
 
 // extractFirstSentenceOrLine extracts the first sentence (ending with . ? !) or first line
 func extractFirstSentenceOrLine(s string) string {
 	// Check for newline first
 	for i := 0; i < len(s); i++ {
 		if s[i] == '\n' || s[i] == '\r' {
-			return trimWhitespace(s[:i])
+			return strings.TrimSpace(s[:i])
 		}
 	}
 
@@ -491,7 +478,7 @@ func extractFirstSentenceOrLine(s string) string {
 	for i := 0; i < len(s); i++ {
 		if s[i] == '.' || s[i] == '?' || s[i] == '!' {
 			// Include the punctuation
-			return trimWhitespace(s[:i+1])
+			return strings.TrimSpace(s[:i+1])
 		}
 	}
 
@@ -802,6 +789,11 @@ func (sm *SessionManager) MarkAdminAssisted(sessionID, adminID, adminName string
 
 	session.mu.Lock()
 	defer session.mu.Unlock()
+
+	// Atomic check-and-set: reject if a different admin is already assisting
+	if session.AssistingAdminID != "" && session.AssistingAdminID != adminID {
+		return fmt.Errorf("session already assisted by admin %s (%s)", session.AssistingAdminName, session.AssistingAdminID)
+	}
 
 	session.AdminAssisted = true
 	session.AssistingAdminID = adminID

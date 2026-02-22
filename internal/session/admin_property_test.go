@@ -225,21 +225,19 @@ func TestProperty_AdminSessionLocking(t *testing.T) {
 				return false
 			}
 
-			// Second admin tries to take over - should succeed (overwrite)
-			// Note: The actual locking logic should be in the router layer
-			// The session manager just stores the current admin
+			// Second admin tries to take over - should be rejected (atomic check-and-set)
 			err = sm.MarkAdminAssisted(session.ID, admin2ID, admin2Name)
-			if err != nil {
-				return false
+			if err == nil {
+				return false // should have been rejected
 			}
 
-			// Verify second admin is now assisting
+			// Verify first admin is still assisting (not overwritten)
 			storedAdminID, storedAdminName, err = sm.GetAssistingAdmin(session.ID)
 			if err != nil {
 				return false
 			}
 
-			return storedAdminID == admin2ID && storedAdminName == admin2Name
+			return storedAdminID == admin1ID && storedAdminName == admin1Name
 		},
 		gen.Identifier(),
 		gen.Identifier(),

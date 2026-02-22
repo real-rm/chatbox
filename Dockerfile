@@ -38,13 +38,14 @@ COPY . .
 # Build the application
 # CGO_ENABLED=0 for static binary
 # -ldflags="-w -s" to reduce binary size
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+ARG TARGETARCH=amd64
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build \
     -ldflags="-w -s" \
     -o chatbox-server \
     ./cmd/server
 
 # Stage 2: Create minimal runtime image
-FROM alpine:3.19
+FROM alpine:3.21
 
 # Install runtime dependencies
 RUN apk add --no-cache ca-certificates tzdata

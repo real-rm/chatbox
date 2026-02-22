@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"html"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -419,40 +420,19 @@ func buildHelpRequestHTML(userID, sessionID, adminURL string) string {
 	`, safeUserID, safeSessionID, timestamp, linkSection)
 }
 
-// splitAndTrim splits a string by comma and trims whitespace
+// splitAndTrim splits a string by comma and trims whitespace from each part
 func splitAndTrim(s string) []string {
 	if s == "" {
 		return []string{}
 	}
-
-	parts := []string{}
-	for i := 0; i < len(s); {
-		// Find next comma
-		end := i
-		for end < len(s) && s[end] != ',' {
-			end++
+	parts := strings.Split(s, ",")
+	result := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if t := strings.TrimSpace(p); t != "" {
+			result = append(result, t)
 		}
-
-		// Extract and trim
-		part := s[i:end]
-		// Manual trim
-		start := 0
-		for start < len(part) && (part[start] == ' ' || part[start] == '\t' || part[start] == '\n' || part[start] == '\r') {
-			start++
-		}
-		trimEnd := len(part)
-		for trimEnd > start && (part[trimEnd-1] == ' ' || part[trimEnd-1] == '\t' || part[trimEnd-1] == '\n' || part[trimEnd-1] == '\r') {
-			trimEnd--
-		}
-
-		if trimEnd > start {
-			parts = append(parts, part[start:trimEnd])
-		}
-
-		i = end + 1
 	}
-
-	return parts
+	return result
 }
 
 // ValidateEmails validates a list of email addresses using gomail's validation

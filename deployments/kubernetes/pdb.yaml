@@ -2,6 +2,7 @@ apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
   name: chatbox-pdb
+  namespace: default
   labels:
     app: chatbox
     component: websocket

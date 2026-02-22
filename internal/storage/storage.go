@@ -154,9 +154,13 @@ func NewStorageService(mongo *gomongo.Mongo, dbName, collName string, logger *go
 	// Pre-compute AES-GCM cipher to avoid per-call key schedule overhead
 	if len(encryptionKey) > 0 {
 		block, err := aes.NewCipher(encryptionKey)
-		if err == nil {
+		if err != nil {
+			logger.Error("AES-GCM cipher initialization failed, encryption disabled", "error", err)
+		} else {
 			gcm, err := cipherPkg.NewGCM(block)
-			if err == nil {
+			if err != nil {
+				logger.Error("AES-GCM initialization failed, encryption disabled", "error", err)
+			} else {
 				svc.gcm = gcm
 			}
 		}
@@ -568,13 +572,16 @@ func (s *StorageService) AddMessage(sessionID string, msg *session.Message) erro
 		"$set":  bson.M{"lastActivity": time.Now()},
 	}
 
-	result, err := s.collection.UpdateOne(ctx, filter, update)
-	// No else needed: early return pattern (guard clause)
+	var result *mongo.UpdateResult
+	err := s.retryOperation(ctx, "AddMessage", func() error {
+		var opErr error
+		result, opErr = s.collection.UpdateOne(ctx, filter, update)
+		return opErr
+	})
 	if err != nil {
 		return fmt.Errorf("failed to add message: %w", err)
 	}
 
-	// No else needed: early return pattern (guard clause)
 	if result.MatchedCount == 0 {
 		return ErrSessionNotFound
 	}
@@ -583,8 +590,8 @@ func (s *StorageService) AddMessage(sessionID string, msg *session.Message) erro
 }
 
 // EndSession updates the session with end timestamp and duration.
-// Uses FindOneAndUpdate to fetch the start time and set the end time in one round-trip,
-// then computes the duration client-side.
+// Uses FindOneAndUpdate to atomically fetch the start time and set end time + duration
+// in a single round-trip, preventing inconsistent state.
 func (s *StorageService) EndSession(sessionID string, endTime time.Time) error {
 	if sessionID == "" {
 		return ErrInvalidSessionID
@@ -598,34 +605,29 @@ func (s *StorageService) EndSession(sessionID string, endTime time.Time) error {
 	ctx, cancel := util.NewTimeoutContext(constants.SessionEndTimeout)
 	defer cancel()
 
-	// FindOneAndUpdate: atomically set endTime and return the document (before update)
-	// so we can compute duration from startTime.
+	// First, fetch the session to get its start time
 	filter := bson.M{constants.MongoFieldID: sessionID}
-	update := bson.M{
-		"$set": bson.M{
-			constants.MongoFieldEndTime: endTime,
-		},
-	}
-
 	var doc SessionDocument
-	err := s.collection.FindOneAndUpdate(
-		ctx, filter, update,
-		options.FindOneAndUpdate().SetReturnDocument(options.Before),
-	).Decode(&doc)
+	err := s.collection.FindOne(ctx, filter).Decode(&doc)
 	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
 			return ErrSessionNotFound
 		}
-		return fmt.Errorf("failed to end session: %w", err)
+		return fmt.Errorf("failed to find session: %w", err)
 	}
 
-	// Compute and set duration in a lightweight second update
+	// Compute duration and set both endTime and duration atomically
 	duration := int64(endTime.Sub(doc.StartTime).Seconds())
-	_, err = s.collection.UpdateOne(ctx, filter, bson.M{
-		"$set": bson.M{constants.MongoFieldDuration: duration},
-	})
+	update := bson.M{
+		"$set": bson.M{
+			constants.MongoFieldEndTime:  endTime,
+			constants.MongoFieldDuration: duration,
+		},
+	}
+
+	_, err = s.collection.UpdateOne(ctx, filter, update)
 	if err != nil {
-		return fmt.Errorf("failed to set session duration: %w", err)
+		return fmt.Errorf("failed to end session: %w", err)
 	}
 
 	metrics.SessionsEnded.Inc()
@@ -794,10 +796,10 @@ func (s *StorageService) ListAllSessions(limit int) ([]*SessionMetadata, error) 
 		Sort: bson.D{{Key: constants.MongoFieldTimestamp, Value: -1}},
 	}
 
-	// No else needed: optional operation (only set limit if specified)
-	if limit > 0 {
-		queryOpts.Limit = int64(limit)
+	if limit <= 0 {
+		limit = constants.DefaultSessionLimit
 	}
+	queryOpts.Limit = int64(limit)
 
 	// Execute query using gomongo (no filter = all documents)
 	cursor, err := s.collection.Find(ctx, bson.M{}, queryOpts)

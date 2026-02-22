@@ -10,8 +10,9 @@ variables:
   DOCKER_DRIVER: overlay2
   DOCKER_TLS_CERTDIR: "/certs"
   IMAGE_TAG: $CI_REGISTRY_IMAGE:$CI_COMMIT_SHORT_SHA
+  GOPRIVATE: "github.com/real-rm/*"
 
-# Shared MongoDB setup (M12: extracted from duplicated before_script blocks)
+# Shared MongoDB setup
 .mongo-setup: &mongo-setup
   - apt-get update && apt-get install -y netcat-openbsd
   - until nc -z mongo 27017; do echo "Waiting for MongoDB..."; sleep 1; done
@@ -23,37 +24,36 @@ variables:
     apt-get install -y mongodb-mongosh
     mongosh "mongodb://admin:admin@mongo:27017/admin" --eval 'try { db.createUser({user: "chatbox", pwd: "ChatBox123", roles: [{role: "readWrite", db: "chatbox"}, {role: "dbAdmin", db: "chatbox"}]}) } catch(e) { print("User already exists: " + e) }'
 
+# Shared Go private module setup
+.go-private-setup: &go-private-setup
+  - git config --global url."https://${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"
+
 # Docker build job
 docker-build:
   stage: build
-  image: docker:24-dind
+  image: docker:24
   services:
     - docker:24-dind
   before_script:
     - docker info
   script:
-    # Build the Docker image with BuildKit secrets for private modules
     - |
       DOCKER_BUILDKIT=1 docker build \
         --secret id=github_token,env=GITHUB_TOKEN \
         -t chatbox-websocket:ci-test \
         .
-    # Verify image was created
     - docker images | grep chatbox-websocket
-    # Test that the image runs
     - docker run --rm chatbox-websocket:ci-test --version || docker run --rm chatbox-websocket:ci-test --help || echo "Image created successfully"
-  only:
-    - main
-    - master
-    - develop
-    - merge_requests
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH =~ /^(main|master|develop)$/'
   tags:
     - docker
 
 # Optional: Build and push to registry
 docker-build-push:
   stage: build
-  image: docker:24-dind
+  image: docker:24
   services:
     - docker:24-dind
   before_script:
@@ -67,28 +67,31 @@ docker-build-push:
         .
     - docker push $IMAGE_TAG
     - docker push $CI_REGISTRY_IMAGE:latest
-  only:
-    - main
-    - master
+  rules:
+    - if: '$CI_COMMIT_BRANCH =~ /^(main|master)$/'
+      when: manual
   tags:
     - docker
-  when: manual
 
 # Static analysis job
 lint:
   stage: lint
   image: golang:1.24
+  cache:
+    key: go-mod-${CI_COMMIT_REF_SLUG}
+    paths:
+      - .go/pkg/mod/
+  variables:
+    GOPATH: ${CI_PROJECT_DIR}/.go
+  before_script: *go-private-setup
   script:
     - go vet ./...
     - gofmt -l . | tee /dev/stderr | (! read)
-    # M11: Security scanning with govulncheck
     - go install golang.org/x/vuln/cmd/govulncheck@latest
     - govulncheck ./...
-  only:
-    - main
-    - master
-    - develop
-    - merge_requests
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH =~ /^(main|master|develop)$/'
   tags:
     - docker
 
@@ -98,41 +101,48 @@ test:
   image: golang:1.24
   services:
     - mongo:7.0
+  cache:
+    key: go-mod-${CI_COMMIT_REF_SLUG}
+    paths:
+      - .go/pkg/mod/
   variables:
+    GOPATH: ${CI_PROJECT_DIR}/.go
     MONGO_INITDB_ROOT_USERNAME: admin
     MONGO_INITDB_ROOT_PASSWORD: admin
     MONGO_URI: "mongodb://chatbox:ChatBox123@mongo:27017/chatbox?authSource=admin"
-  before_script: *mongo-setup
+  before_script:
+    - *go-private-setup
+    - *mongo-setup
   script:
     - go test -race -v -timeout 5m ./...
-  only:
-    - main
-    - master
-    - develop
-    - merge_requests
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH =~ /^(main|master|develop)$/'
   tags:
     - docker
 
-# Coverage measurement job (M10: full module coverage)
+# Coverage measurement job
 coverage:
   stage: coverage
   image: golang:1.24
   services:
     - mongo:7.0
+  cache:
+    key: go-mod-${CI_COMMIT_REF_SLUG}
+    paths:
+      - .go/pkg/mod/
   variables:
+    GOPATH: ${CI_PROJECT_DIR}/.go
     MONGO_INITDB_ROOT_USERNAME: admin
     MONGO_INITDB_ROOT_PASSWORD: admin
     MONGO_URI: "mongodb://chatbox:ChatBox123@mongo:27017/chatbox?authSource=admin"
-  before_script: *mongo-setup
+  before_script:
+    - *go-private-setup
+    - *mongo-setup
   script:
-    # Run tests with coverage for the full module
     - go test -cover -timeout 5m -coverprofile=coverage.out ./...
     - go tool cover -func=coverage.out | grep total | awk '{print "Total coverage: " $3}'
-
-    # Generate HTML coverage report
     - go tool cover -html=coverage.out -o coverage.html
-
-    # Generate Cobertura XML for GitLab merge request coverage visualization
     - go install github.com/boumenot/gocover-cobertura@latest
     - gocover-cobertura < coverage.out > coverage.xml
   artifacts:
@@ -145,10 +155,8 @@ coverage:
         path: coverage.xml
     expire_in: 30 days
   coverage: '/total:\s+\(statements\)\s+(\d+\.\d+)%/'
-  only:
-    - main
-    - master
-    - develop
-    - merge_requests
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH =~ /^(main|master|develop)$/'
   tags:
     - docker

@@ -1,6 +1,7 @@
 package session
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -313,7 +314,7 @@ func TestProperty_AutomaticSessionNameGeneration(t *testing.T) {
 			}
 
 			// If message is empty or whitespace, should get default name
-			if len(trimWhitespace(firstMessage)) == 0 {
+			if len(strings.TrimSpace(firstMessage)) == 0 {
 				if retrieved.Name != "New Chat" {
 					return false
 				}

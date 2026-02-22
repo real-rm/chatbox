@@ -156,10 +156,10 @@ spec:
             memory: 1Gi
         
         # Liveness probe - checks if container is alive
-        # NOTE: Probe paths must match CHATBOX_PATH_PREFIX env var (default: /chatbox → /chat prefix in routes)
+        # NOTE: Probe paths must match CHATBOX_PATH_PREFIX env var (default: /chatbox)
         livenessProbe:
           httpGet:
-            path: /chat/healthz
+            path: /chatbox/healthz
             port: 8080
             scheme: HTTP
           initialDelaySeconds: 15
@@ -171,7 +171,7 @@ spec:
         # Readiness probe - checks if container is ready to serve traffic
         readinessProbe:
           httpGet:
-            path: /chat/readyz
+            path: /chatbox/readyz
             port: 8080
             scheme: HTTP
           initialDelaySeconds: 5
@@ -183,7 +183,7 @@ spec:
         # Startup probe - gives container time to start (useful for slow starts)
         startupProbe:
           httpGet:
-            path: /chat/healthz
+            path: /chatbox/healthz
             port: 8080
             scheme: HTTP
           initialDelaySeconds: 0

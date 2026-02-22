@@ -376,7 +376,7 @@ func TestEdgeCase_AdminTakeoverAlreadyAssisted(t *testing.T) {
 	var chatErr *chaterrors.ChatError
 	if assert.ErrorAs(t, err, &chatErr) {
 		assert.Equal(t, chaterrors.ErrCodeInvalidFormat, chatErr.Code)
-		assert.Contains(t, chatErr.Message, "already being assisted")
+		assert.Contains(t, chatErr.Message, "already assisted")
 	}
 }
 

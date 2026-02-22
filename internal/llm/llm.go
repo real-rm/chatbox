@@ -433,7 +433,11 @@ func (s *LLMService) StreamMessage(ctx context.Context, modelID string, messages
 						metrics.LLMLatency.WithLabelValues(providerName).Observe(duration.Seconds())
 						firstChunk = false
 					}
-					wrappedChan <- chunk
+					select {
+					case wrappedChan <- chunk:
+					case <-ctx.Done():
+						return
+					}
 				}
 			}()
 			return wrappedChan, nil

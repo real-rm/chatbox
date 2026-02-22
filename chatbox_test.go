@@ -203,7 +203,7 @@ func TestReadyCheckWithMongoDB(t *testing.T) {
 		router := gin.New()
 
 		// Register the ready check handler with nil MongoDB
-		router.GET("/readyz", handleReadyCheck(nil, testLogger))
+		router.GET("/readyz", handleReadyCheck(nil, nil, testLogger))
 
 		// Create a test request
 		w := performRequest(router, "GET", "/readyz", nil)
@@ -262,7 +262,7 @@ func TestReadyCheckWithMongoDB(t *testing.T) {
 
 			// Test with nil mongo
 			router := gin.New()
-			router.GET("/readyz", handleReadyCheck(nil, logger))
+			router.GET("/readyz", handleReadyCheck(nil, nil, logger))
 			w := performRequest(router, "GET", "/readyz", nil)
 			assert.Equal(t, 503, w.Code)
 			return
@@ -271,7 +271,7 @@ func TestReadyCheckWithMongoDB(t *testing.T) {
 		// If initialization succeeded (connection pool created but not tested yet),
 		// the Ping() call in the handler should fail
 		router := gin.New()
-		router.GET("/readyz", handleReadyCheck(mongo, logger))
+		router.GET("/readyz", handleReadyCheck(mongo, nil, logger))
 
 		w := performRequest(router, "GET", "/readyz", nil)
 
@@ -323,7 +323,7 @@ func TestReadyCheckWithMongoDB(t *testing.T) {
 
 		// Create a test router
 		router := gin.New()
-		router.GET("/readyz", handleReadyCheck(mongo, logger))
+		router.GET("/readyz", handleReadyCheck(mongo, nil, logger))
 
 		w := performRequest(router, "GET", "/readyz", nil)
 
@@ -683,7 +683,7 @@ func TestHandleReadyCheck(t *testing.T) {
 		logger := CreateTestLogger(t)
 		defer logger.Close()
 
-		handler := handleReadyCheck(nil, logger)
+		handler := handleReadyCheck(nil, nil, logger)
 
 		router := gin.New()
 		router.GET("/readyz", handler)
@@ -700,7 +700,7 @@ func TestHandleReadyCheck(t *testing.T) {
 		logger := CreateTestLogger(t)
 		defer logger.Close()
 
-		handler := handleReadyCheck(nil, logger)
+		handler := handleReadyCheck(nil, nil, logger)
 
 		router := gin.New()
 		router.GET("/readyz", handler)
@@ -726,7 +726,7 @@ func TestHandleReadyCheck(t *testing.T) {
 		logger := CreateTestLogger(t)
 		defer logger.Close()
 
-		handler := handleReadyCheck(nil, logger)
+		handler := handleReadyCheck(nil, nil, logger)
 
 		router := gin.New()
 		router.GET("/readyz", handler)

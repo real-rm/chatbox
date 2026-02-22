@@ -89,7 +89,8 @@ func NewConnection(userID string, roles []string) *Connection {
 	}
 }
 
-// GetUserID returns the user ID for this connection
+// GetUserID returns the user ID for this connection.
+// UserID is immutable after construction (set in NewConnection), so no mutex is needed.
 func (c *Connection) GetUserID() string {
 	return c.UserID
 }
@@ -101,7 +102,8 @@ func (c *Connection) GetSessionID() string {
 	return c.SessionID
 }
 
-// GetRoles returns the roles for this connection
+// GetRoles returns the roles for this connection.
+// Roles is immutable after construction (set in NewConnection), so no mutex is needed.
 func (c *Connection) GetRoles() []string {
 	return c.Roles
 }

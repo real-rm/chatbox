@@ -290,6 +290,9 @@ func Register(r *gin.Engine, config *goconfig.ConfigAccessor, logger *golog.Logg
 	allowedOriginsStr, err := config.ConfigStringWithDefault("chatbox.allowed_origins", "")
 	// No else needed: optional operation (configuration with fallback logging)
 	if err == nil && allowedOriginsStr != "" {
+		if containsPlaceholder(allowedOriginsStr) {
+			return fmt.Errorf("chatbox.allowed_origins contains placeholder value %q — set actual origins before deploying", allowedOriginsStr)
+		}
 		origins := strings.Split(allowedOriginsStr, ",")
 		for i, origin := range origins {
 			origins[i] = strings.TrimSpace(origin)
@@ -314,6 +317,9 @@ func Register(r *gin.Engine, config *goconfig.ConfigAccessor, logger *golog.Logg
 	corsOriginsStr, err := config.ConfigStringWithDefault("chatbox.cors_allowed_origins", "")
 	// No else needed: optional operation (CORS configuration with fallback logging)
 	if err == nil && corsOriginsStr != "" {
+		if containsPlaceholder(corsOriginsStr) {
+			return fmt.Errorf("chatbox.cors_allowed_origins contains placeholder value %q — set actual origins before deploying", corsOriginsStr)
+		}
 		// Parse allowed origins from comma-separated string
 		allowedOrigins := strings.Split(corsOriginsStr, ",")
 		for i, origin := range allowedOrigins {
@@ -366,7 +372,7 @@ func Register(r *gin.Engine, config *goconfig.ConfigAccessor, logger *golog.Logg
 
 		// Health check endpoints (rate limited to prevent abuse)
 		chatGroup.GET("/healthz", publicRateLimitMiddleware(publicLimiter, chatboxLogger), handleHealthCheck)
-		chatGroup.GET("/readyz", publicRateLimitMiddleware(publicLimiter, chatboxLogger), handleReadyCheck(mongo, chatboxLogger))
+		chatGroup.GET("/readyz", publicRateLimitMiddleware(publicLimiter, chatboxLogger), handleReadyCheck(mongo, llmService, chatboxLogger))
 	}
 
 	// Prometheus metrics endpoint (public, rate limited)
@@ -878,7 +884,7 @@ func handleHealthCheck(c *gin.Context) {
 // handleReadyCheck returns a handler for readiness probe endpoint.
 // This endpoint checks if the application is ready to serve traffic.
 // It performs comprehensive checks on all critical dependencies.
-func handleReadyCheck(mongo *gomongo.Mongo, logger *golog.Logger) gin.HandlerFunc {
+func handleReadyCheck(mongo *gomongo.Mongo, llmService *llm.LLMService, logger *golog.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		checks := make(map[string]interface{})
 		allReady := true
@@ -916,6 +922,29 @@ func handleReadyCheck(mongo *gomongo.Mongo, logger *golog.Logger) gin.HandlerFun
 			} else {
 				checks["mongodb"] = map[string]interface{}{
 					"status": "ready",
+				}
+			}
+		}
+
+		// Check LLM provider availability
+		if llmService == nil {
+			checks["llm"] = map[string]interface{}{
+				"status": "not ready",
+				"reason": "LLM service not initialized",
+			}
+			allReady = false
+		} else {
+			models := llmService.GetAvailableModels()
+			if len(models) == 0 {
+				checks["llm"] = map[string]interface{}{
+					"status": "not ready",
+					"reason": "No LLM providers configured",
+				}
+				allReady = false
+			} else {
+				checks["llm"] = map[string]interface{}{
+					"status":          "ready",
+					"providers_count": len(models),
 				}
 			}
 		}
@@ -1023,4 +1052,11 @@ func validateJWTSecret(secret string) error {
 	}
 
 	return nil
+}
+
+// containsPlaceholder checks if a configuration value still contains
+// a deployment placeholder that should have been replaced.
+func containsPlaceholder(value string) bool {
+	upper := strings.ToUpper(value)
+	return strings.Contains(upper, "REPLACE_WITH") || strings.Contains(upper, "PLACEHOLDER")
 }

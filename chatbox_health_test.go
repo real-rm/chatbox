@@ -72,7 +72,7 @@ func TestMongoDBHealthCheck_Integration(t *testing.T) {
 
 		// Create router and register handler
 		router := gin.New()
-		router.GET("/readyz", handleReadyCheck(mongo, logger))
+		router.GET("/readyz", handleReadyCheck(mongo, nil, logger))
 
 		// Make request
 		req, _ := http.NewRequest("GET", "/readyz", nil)
@@ -105,7 +105,7 @@ func TestMongoDBHealthCheck_Down(t *testing.T) {
 
 		// Create router with nil MongoDB
 		router := gin.New()
-		router.GET("/readyz", handleReadyCheck(nil, testLogger))
+		router.GET("/readyz", handleReadyCheck(nil, nil, testLogger))
 
 		// Make request
 		req, _ := http.NewRequest("GET", "/readyz", nil)
@@ -164,7 +164,7 @@ func TestMongoDBHealthCheck_Down(t *testing.T) {
 			t.Log("MongoDB initialization failed as expected:", err)
 
 			router := gin.New()
-			router.GET("/readyz", handleReadyCheck(nil, logger))
+			router.GET("/readyz", handleReadyCheck(nil, nil, logger))
 
 			req, _ := http.NewRequest("GET", "/readyz", nil)
 			w := httptest.NewRecorder()
@@ -177,7 +177,7 @@ func TestMongoDBHealthCheck_Down(t *testing.T) {
 
 		// If initialization succeeded (lazy connection), the Ping should fail
 		router := gin.New()
-		router.GET("/readyz", handleReadyCheck(mongo, logger))
+		router.GET("/readyz", handleReadyCheck(mongo, nil, logger))
 
 		req, _ := http.NewRequest("GET", "/readyz", nil)
 		w := httptest.NewRecorder()
@@ -208,7 +208,7 @@ func TestMongoDBHealthCheck_Timeout(t *testing.T) {
 
 		// Create router with nil MongoDB (fast path)
 		router := gin.New()
-		router.GET("/readyz", handleReadyCheck(nil, testLogger))
+		router.GET("/readyz", handleReadyCheck(nil, nil, testLogger))
 
 		// Make request and measure time
 		start := time.Now()

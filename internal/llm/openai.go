@@ -209,7 +209,10 @@ func (p *OpenAIProvider) StreamMessage(ctx context.Context, req *LLMRequest) (<-
 
 			// Check for stream end
 			if data == "[DONE]" {
-				chunkChan <- &LLMChunk{Content: "", Done: true}
+				select {
+				case chunkChan <- &LLMChunk{Content: "", Done: true}:
+				case <-ctx.Done():
+				}
 				return
 			}
 
@@ -223,13 +226,20 @@ func (p *OpenAIProvider) StreamMessage(ctx context.Context, req *LLMRequest) (<-
 			if len(chunkResp.Choices) > 0 {
 				content := chunkResp.Choices[0].Delta.Content
 				if content != "" {
-					chunkChan <- &LLMChunk{Content: content, Done: false}
+					select {
+					case chunkChan <- &LLMChunk{Content: content, Done: false}:
+					case <-ctx.Done():
+						return
+					}
 				}
 			}
 		}
 
 		// Send final chunk if not already sent
-		chunkChan <- &LLMChunk{Content: "", Done: true}
+		select {
+		case chunkChan <- &LLMChunk{Content: "", Done: true}:
+		case <-ctx.Done():
+		}
 	}()
 
 	return chunkChan, nil

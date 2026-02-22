@@ -79,4 +79,31 @@ var (
 		Name: "chatbox_tokens_used_total",
 		Help: "Total number of LLM tokens used by provider",
 	}, []string{"provider"})
+
+	// MongoDBOperationDuration tracks the latency of MongoDB operations
+	MongoDBOperationDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "chatbox_mongodb_operation_seconds",
+		Help:    "Latency of MongoDB operations in seconds",
+		Buckets: prometheus.DefBuckets,
+	}, []string{"operation"})
+
+	// RateLimitBlocked tracks the total number of requests blocked by rate limiting
+	RateLimitBlocked = promauto.NewCounterVec(prometheus.CounterOpts{
+		Name: "chatbox_ratelimit_blocked_total",
+		Help: "Total number of requests blocked by rate limiting",
+	}, []string{"limiter"})
+
+	// WebSocketConnectionDuration tracks the duration of WebSocket connections
+	WebSocketConnectionDuration = promauto.NewHistogram(prometheus.HistogramOpts{
+		Name:    "chatbox_websocket_connection_duration_seconds",
+		Help:    "Duration of WebSocket connections in seconds",
+		Buckets: []float64{1, 5, 15, 30, 60, 120, 300, 600, 1800, 3600},
+	})
+
+	// HTTPRequestDuration tracks the latency of HTTP requests by endpoint
+	HTTPRequestDuration = promauto.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "chatbox_http_request_duration_seconds",
+		Help:    "Latency of HTTP requests in seconds",
+		Buckets: prometheus.DefBuckets,
+	}, []string{"endpoint", "method"})
 )

@@ -1250,7 +1250,7 @@ func TestHandleReadyCheck_Success(t *testing.T) {
 	mongo := setupTestMongo(t)
 
 	router := gin.New()
-	router.GET("/readyz", handleReadyCheck(mongo, logger))
+	router.GET("/readyz", handleReadyCheck(mongo, nil, logger))
 
 	req := httptest.NewRequest("GET", "/readyz", nil)
 	w := httptest.NewRecorder()
@@ -1276,7 +1276,7 @@ func TestHandleReadyCheck_MongoNil(t *testing.T) {
 	logger := setupTestLogger(t)
 
 	router := gin.New()
-	router.GET("/readyz", handleReadyCheck(nil, logger))
+	router.GET("/readyz", handleReadyCheck(nil, nil, logger))
 
 	req := httptest.NewRequest("GET", "/readyz", nil)
 	w := httptest.NewRecorder()
@@ -1699,7 +1699,7 @@ func TestProperty_HTTPHandlersProcessValidRequests(t *testing.T) {
 
 			// Register endpoints
 			router.GET("/healthz", handleHealthCheck)
-			router.GET("/readyz", handleReadyCheck(mongo, logger))
+			router.GET("/readyz", handleReadyCheck(mongo, nil, logger))
 			router.GET("/sessions", userAuthMiddleware(validator, logger), handleUserSessions(storageService, logger))
 
 			adminGroup := router.Group("/admin")
@@ -2110,7 +2110,7 @@ func TestConcurrentHTTPRequests_DifferentEndpoints(t *testing.T) {
 
 	router := gin.New()
 	router.GET("/healthz", handleHealthCheck)
-	router.GET("/readyz", handleReadyCheck(mongo, logger))
+	router.GET("/readyz", handleReadyCheck(mongo, nil, logger))
 	router.GET("/sessions", userAuthMiddleware(validator, logger), handleUserSessions(storageService, logger))
 
 	adminGroup := router.Group("/admin")
@@ -2300,7 +2300,7 @@ func TestProperty_ConcurrentHTTPRequestsAreThreadSafe(t *testing.T) {
 	// Set up router with all endpoints
 	r := gin.New()
 	r.GET("/healthz", handleHealthCheck)
-	r.GET("/readyz", handleReadyCheck(mongo, logger))
+	r.GET("/readyz", handleReadyCheck(mongo, nil, logger))
 	r.GET("/sessions", userAuthMiddleware(validator, logger), handleUserSessions(storageService, logger))
 
 	adminGroup := r.Group("/admin")
@@ -2777,7 +2777,7 @@ connectTimeout = "100ms"
 		// If initialization fails, we still test the nil path
 		t.Logf("MongoDB initialization failed: %v", err)
 		router := gin.New()
-		router.GET("/readyz", handleReadyCheck(nil, logger))
+		router.GET("/readyz", handleReadyCheck(nil, nil, logger))
 
 		req := httptest.NewRequest("GET", "/readyz", nil)
 		w := httptest.NewRecorder()
@@ -2792,7 +2792,7 @@ connectTimeout = "100ms"
 	// If initialization succeeded (lazy connection), test the ping failure
 	t.Log("MongoDB initialized, testing ping failure")
 	router := gin.New()
-	router.GET("/readyz", handleReadyCheck(mongo, logger))
+	router.GET("/readyz", handleReadyCheck(mongo, nil, logger))
 
 	req := httptest.NewRequest("GET", "/readyz", nil)
 	w := httptest.NewRecorder()

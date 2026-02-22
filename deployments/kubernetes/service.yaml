@@ -129,8 +129,10 @@ metadata:
     nginx.ingress.kubernetes.io/limit-connections: "10"
     
     # CORS (if needed)
+    # SECURITY: Set cors-allow-origin to your production domain(s) before deployment.
+    # Example: "https://chat.example.com,https://admin.example.com"
     nginx.ingress.kubernetes.io/enable-cors: "true"
-    nginx.ingress.kubernetes.io/cors-allow-origin: "*"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "REPLACE_WITH_PRODUCTION_ORIGINS"
     nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, OPTIONS"
     nginx.ingress.kubernetes.io/cors-allow-headers: "Authorization, Content-Type"
     

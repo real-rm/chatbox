@@ -252,16 +252,26 @@ func (p *AnthropicProvider) StreamMessage(ctx context.Context, req *LLMRequest) 
 			switch event.Type {
 			case "content_block_delta":
 				if event.Delta.Text != "" {
-					chunkChan <- &LLMChunk{Content: event.Delta.Text, Done: false}
+					select {
+					case chunkChan <- &LLMChunk{Content: event.Delta.Text, Done: false}:
+					case <-ctx.Done():
+						return
+					}
 				}
 			case "message_stop":
-				chunkChan <- &LLMChunk{Content: "", Done: true}
+				select {
+				case chunkChan <- &LLMChunk{Content: "", Done: true}:
+				case <-ctx.Done():
+				}
 				return
 			}
 		}
 
 		// Send final chunk if not already sent
-		chunkChan <- &LLMChunk{Content: "", Done: true}
+		select {
+		case chunkChan <- &LLMChunk{Content: "", Done: true}:
+		case <-ctx.Done():
+		}
 	}()
 
 	return chunkChan, nil

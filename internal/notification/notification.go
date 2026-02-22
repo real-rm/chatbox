@@ -3,6 +3,7 @@ package notification
 import (
 	"context"
 	"fmt"
+	"html"
 	"os"
 	"sync"
 	"time"
@@ -393,9 +394,12 @@ func (ns *NotificationService) getAdminPhones() ([]string, error) {
 // If adminURL is empty, no link is rendered (safe fallback).
 func buildHelpRequestHTML(userID, sessionID, adminURL string) string {
 	timestamp := time.Now().Format(time.RFC3339)
+	safeUserID := html.EscapeString(userID)
+	safeSessionID := html.EscapeString(sessionID)
 	linkSection := "<p>Please check the admin panel to view this session.</p>"
 	if adminURL != "" {
-		linkSection = fmt.Sprintf(`<p><a href="%s/%s">View Session</a></p>`, adminURL, sessionID)
+		safeAdminURL := html.EscapeString(adminURL)
+		linkSection = fmt.Sprintf(`<p><a href="%s/%s">View Session</a></p>`, safeAdminURL, safeSessionID)
 	}
 	return fmt.Sprintf(`
 		<h2>User Help Request</h2>
@@ -406,7 +410,7 @@ func buildHelpRequestHTML(userID, sessionID, adminURL string) string {
 			<li><strong>Time:</strong> %s</li>
 		</ul>
 		%s
-	`, userID, sessionID, timestamp, linkSection)
+	`, safeUserID, safeSessionID, timestamp, linkSection)
 }
 
 // splitAndTrim splits a string by comma and trims whitespace

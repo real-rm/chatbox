@@ -71,8 +71,10 @@ USER chatbox
 EXPOSE 8080
 
 # Health check
+# Uses CHATBOX_PATH_PREFIX env var (default: /chat) to support custom path prefixes
+ENV CHATBOX_PATH_PREFIX=/chat
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:8080/chat/healthz || exit 1
+    CMD wget --no-verbose --tries=1 --spider http://localhost:8080${CHATBOX_PATH_PREFIX}/healthz || exit 1
 
 # Run the application
 ENTRYPOINT ["/app/chatbox-server"]

@@ -208,21 +208,34 @@ func (p *DifyProvider) StreamMessage(ctx context.Context, req *LLMRequest) (<-ch
 			case "message":
 				// Streaming chunk with answer content
 				if event.Answer != "" {
-					chunkChan <- &LLMChunk{Content: event.Answer, Done: false}
+					select {
+					case chunkChan <- &LLMChunk{Content: event.Answer, Done: false}:
+					case <-ctx.Done():
+						return
+					}
 				}
 			case "message_end":
 				// End of stream
-				chunkChan <- &LLMChunk{Content: "", Done: true}
+				select {
+				case chunkChan <- &LLMChunk{Content: "", Done: true}:
+				case <-ctx.Done():
+				}
 				return
 			case "error":
 				// Error event
-				chunkChan <- &LLMChunk{Content: "", Done: true}
+				select {
+				case chunkChan <- &LLMChunk{Content: "", Done: true}:
+				case <-ctx.Done():
+				}
 				return
 			}
 		}
 
 		// Send final chunk if not already sent
-		chunkChan <- &LLMChunk{Content: "", Done: true}
+		select {
+		case chunkChan <- &LLMChunk{Content: "", Done: true}:
+		case <-ctx.Done():
+		}
 	}()
 
 	return chunkChan, nil

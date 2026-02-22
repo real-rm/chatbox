@@ -4,7 +4,6 @@ stages:
   - lint
   - build
   - test
-  - coverage
 
 variables:
   DOCKER_DRIVER: overlay2
@@ -76,7 +75,7 @@ docker-build-push:
 # Static analysis job
 lint:
   stage: lint
-  image: golang:1.24
+  image: golang:1.24.4
   cache:
     key: go-mod-${CI_COMMIT_REF_SLUG}
     paths:
@@ -96,9 +95,10 @@ lint:
     - docker
 
 # Test job with race detector
+# Combined test + coverage job (avoids running all tests twice)
 test:
   stage: test
-  image: golang:1.24
+  image: golang:1.24.4
   services:
     - mongo:7.0
   cache:
@@ -114,33 +114,7 @@ test:
     - *go-private-setup
     - *mongo-setup
   script:
-    - go test -race -v -timeout 5m ./...
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-    - if: '$CI_COMMIT_BRANCH =~ /^(main|master|develop)$/'
-  tags:
-    - docker
-
-# Coverage measurement job
-coverage:
-  stage: coverage
-  image: golang:1.24
-  services:
-    - mongo:7.0
-  cache:
-    key: go-mod-${CI_COMMIT_REF_SLUG}
-    paths:
-      - .go/pkg/mod/
-  variables:
-    GOPATH: ${CI_PROJECT_DIR}/.go
-    MONGO_INITDB_ROOT_USERNAME: admin
-    MONGO_INITDB_ROOT_PASSWORD: admin
-    MONGO_URI: "mongodb://chatbox:ChatBox123@mongo:27017/chatbox?authSource=admin"
-  before_script:
-    - *go-private-setup
-    - *mongo-setup
-  script:
-    - go test -cover -timeout 5m -coverprofile=coverage.out ./...
+    - go test -race -cover -timeout 5m -coverprofile=coverage.out ./...
     - go tool cover -func=coverage.out | grep total | awk '{print "Total coverage: " $3}'
     - go tool cover -html=coverage.out -o coverage.html
     - go install github.com/boumenot/gocover-cobertura@latest

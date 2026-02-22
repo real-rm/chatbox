@@ -9,6 +9,7 @@ metadata:
 data:
   # Server Configuration
   SERVER_PORT: "8080"
+  CHATBOX_PATH_PREFIX: "/chatbox"
   RECONNECT_TIMEOUT: "15m"
   MAX_CONNECTIONS: "10000"
   RATE_LIMIT: "100"

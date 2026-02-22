@@ -53,8 +53,12 @@ func (rl *RateLimiter) Allow(eventKey string) bool {
 	now := time.Now()
 	cutoff := now.Add(-rl.window)
 
-	// Get existing events for this key
+	// Cap map growth: reject new keys when at capacity
+	const maxTrackedEvents = 100000
 	events := rl.events[eventKey]
+	if events == nil && len(rl.events) >= maxTrackedEvents {
+		return false
+	}
 
 	// Filter out old events
 	var recentEvents []time.Time

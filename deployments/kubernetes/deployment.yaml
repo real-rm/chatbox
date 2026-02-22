@@ -33,7 +33,7 @@ spec:
         # Prometheus scraping annotations (if using Prometheus)
         prometheus.io/scrape: "true"
         prometheus.io/port: "8080"
-        prometheus.io/path: "/metrics"
+        prometheus.io/path: "/chatbox/metrics/prometheus"
     
     spec:
       # Service account for Kubernetes API access (if needed)

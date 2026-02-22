@@ -238,7 +238,7 @@ logs: ## View application logs
 
 clean-logs: ## Clean log files
 	@echo "$(COLOR_YELLOW)Cleaning log files...$(COLOR_RESET)"
-	rm -f logs/*.log
+	@if [ -d logs ]; then rm -f logs/*.log; fi
 	@echo "$(COLOR_GREEN)Logs cleaned!$(COLOR_RESET)"
 
 version: ## Show Go version

@@ -25,6 +25,13 @@ func NewTimeoutContext(timeout time.Duration) (context.Context, context.CancelFu
 	return context.WithTimeout(context.Background(), timeout)
 }
 
+// NewTimeoutContextFrom creates a context with the specified timeout derived from
+// a parent context, preserving the parent's cancellation signals and values.
+// Use this in request-scoped code where the caller provides a context.
+func NewTimeoutContextFrom(parent context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(parent, timeout)
+}
+
 // NewDefaultTimeoutContext creates a new context with a default 10-second timeout.
 // Use this for standard database operations.
 func NewDefaultTimeoutContext() (context.Context, context.CancelFunc) {

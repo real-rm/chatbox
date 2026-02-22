@@ -122,7 +122,7 @@ metadata:
     nginx.ingress.kubernetes.io/session-cookie-name: "chatbox-affinity"
     nginx.ingress.kubernetes.io/session-cookie-max-age: "10800"
     nginx.ingress.kubernetes.io/session-cookie-expires: "10800"
-    nginx.ingress.kubernetes.io/session-cookie-path: "/chat"
+    nginx.ingress.kubernetes.io/session-cookie-path: "/chatbox"
     
     # Rate limiting (optional)
     nginx.ingress.kubernetes.io/limit-rps: "100"
@@ -151,7 +151,7 @@ spec:
   - host: chat.example.com
     http:
       paths:
-      - path: /chat(/|$)(.*)
+      - path: /chatbox(/|$)(.*)
         pathType: ImplementationSpecific
         backend:
           service:

@@ -16,6 +16,7 @@ const (
 	DefaultContextTimeout   = 10 * time.Second  // Standard database operations
 	LongContextTimeout      = 30 * time.Second  // Complex queries and index creation
 	DefaultLLMStreamTimeout = 120 * time.Second // LLM streaming requests
+	LLMClientTimeout        = 60 * time.Second  // HTTP client timeout for LLM API calls
 	MongoIndexTimeout       = 30 * time.Second  // MongoDB index creation
 	ShortTimeout            = 2 * time.Second   // Quick operations like health checks
 	MessageAddTimeout       = 5 * time.Second   // Adding messages to sessions

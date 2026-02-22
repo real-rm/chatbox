@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/url"
 	"strings"
+	"time"
 )
 
 // ValidateNotEmpty checks if a string is not empty and returns an error if it is.
@@ -119,8 +120,24 @@ func ValidatePositive(value int, fieldName string) error {
 //	    return err
 //	}
 func ValidateTimeRange(start, end interface{}) error {
-	// This is a placeholder - actual implementation would depend on time.Time comparison
-	return errors.New("not implemented")
+	startTime, ok := start.(time.Time)
+	if !ok {
+		return errors.New("start must be a time.Time value")
+	}
+	endTime, ok := end.(time.Time)
+	if !ok {
+		return errors.New("end must be a time.Time value")
+	}
+	if startTime.IsZero() {
+		return errors.New("start time cannot be zero")
+	}
+	if endTime.IsZero() {
+		return errors.New("end time cannot be zero")
+	}
+	if !endTime.After(startTime) {
+		return errors.New("end time must be after start time")
+	}
+	return nil
 }
 
 // MaxFileURLLength is the maximum allowed length for file URLs.

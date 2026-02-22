@@ -37,6 +37,8 @@ var (
 	ErrNegativeTokens = errors.New("token count cannot be negative")
 	// ErrNegativeDuration is returned when trying to record negative duration
 	ErrNegativeDuration = errors.New("duration cannot be negative")
+	// ErrAlreadyAssisted is returned when a different admin is already assisting
+	ErrAlreadyAssisted = errors.New("session already assisted by another admin")
 )
 
 // Message represents a chat message
@@ -791,7 +793,7 @@ func (sm *SessionManager) MarkAdminAssisted(sessionID, adminID, adminName string
 
 	// Atomic check-and-set: reject if a different admin is already assisting
 	if session.AssistingAdminID != "" && session.AssistingAdminID != adminID {
-		return fmt.Errorf("session already assisted by admin %s (%s)", session.AssistingAdminName, session.AssistingAdminID)
+		return fmt.Errorf("%w: %s (%s)", ErrAlreadyAssisted, session.AssistingAdminName, session.AssistingAdminID)
 	}
 
 	session.AdminAssisted = true

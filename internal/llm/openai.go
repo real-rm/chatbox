@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/real-rm/chatbox/internal/constants"
+	"github.com/real-rm/chatbox/internal/metrics"
 )
 
 // OpenAIProvider implements the LLMProvider interface for OpenAI API
@@ -30,7 +31,7 @@ func NewOpenAIProvider(apiKey, endpoint, model string) *OpenAIProvider {
 		endpoint: endpoint,
 		model:    model,
 		client: &http.Client{
-			Timeout: 60 * time.Second,
+			Timeout: constants.LLMClientTimeout,
 		},
 		streamClient: &http.Client{
 			Timeout: 0, // no deadline; the caller's context controls cancellation
@@ -234,6 +235,11 @@ func (p *OpenAIProvider) StreamMessage(ctx context.Context, req *LLMRequest) (<-
 					}
 				}
 			}
+		}
+
+		// Check for scanner errors (e.g. truncated stream from network failure)
+		if scanErr := scanner.Err(); scanErr != nil {
+			metrics.LLMErrors.WithLabelValues("openai").Inc()
 		}
 
 		// Send final chunk if not already sent

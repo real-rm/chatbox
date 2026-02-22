@@ -3,6 +3,7 @@ package util
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestValidateNotEmpty(t *testing.T) {
@@ -189,9 +190,9 @@ func TestValidateFileURL(t *testing.T) {
 	}
 }
 
-// TestValidateTimeRange verifies that ValidateTimeRange always returns an
-// error (current implementation is a placeholder returning "not implemented").
+// TestValidateTimeRange verifies time range validation with various inputs.
 func TestValidateTimeRange(t *testing.T) {
+	now := time.Now()
 	tests := []struct {
 		name    string
 		start   interface{}
@@ -199,33 +200,51 @@ func TestValidateTimeRange(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name:    "nil start and nil end — still returns error",
+			name:    "valid range",
+			start:   now.Add(-time.Hour),
+			end:     now,
+			wantErr: false,
+		},
+		{
+			name:    "nil start — not a time.Time",
 			start:   nil,
 			end:     nil,
 			wantErr: true,
 		},
 		{
-			name:    "zero values — still returns error",
-			start:   0,
-			end:     0,
-			wantErr: true,
-		},
-		{
-			name:    "string values — still returns error",
+			name:    "string values — not a time.Time",
 			start:   "2024-01-01",
 			end:     "2024-12-31",
 			wantErr: true,
 		},
 		{
-			name:    "integer range — still returns error",
+			name:    "integer values — not a time.Time",
 			start:   1,
 			end:     100,
 			wantErr: true,
 		},
 		{
-			name:    "inverted range — still returns error",
-			start:   100,
-			end:     1,
+			name:    "zero start time",
+			start:   time.Time{},
+			end:     now,
+			wantErr: true,
+		},
+		{
+			name:    "zero end time",
+			start:   now,
+			end:     time.Time{},
+			wantErr: true,
+		},
+		{
+			name:    "inverted range — end before start",
+			start:   now,
+			end:     now.Add(-time.Hour),
+			wantErr: true,
+		},
+		{
+			name:    "equal times — end not after start",
+			start:   now,
+			end:     now,
 			wantErr: true,
 		},
 	}

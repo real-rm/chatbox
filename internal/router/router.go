@@ -235,6 +235,9 @@ func (mr *MessageRouter) HandleUserMessage(conn *websocket.Connection, msg *mess
 	}
 	mr.persistMessage(msg.SessionID, userSessionMsg)
 
+	// Set session name from first user message (no-op if name already set)
+	mr.sessionManager.SetSessionNameFromMessage(msg.SessionID, msg.Content)
+
 	// Send loading indicator to client
 	loadingMsg := &message.Message{
 		Type:      message.TypeLoading,
@@ -1023,30 +1026,32 @@ func (mr *MessageRouter) HandleAIVoiceResponse(sessionID string, audioFileURL st
 
 // sendToConnection sends a message to a specific session's connection
 func (mr *MessageRouter) sendToConnection(sessionID string, msg *message.Message) error {
-	mr.mu.RLock()
-	conn, exists := mr.connections[sessionID]
-	mr.mu.RUnlock()
-
-	// No else needed: early return pattern (guard clause)
-	if !exists {
-		return fmt.Errorf("%w: session %s", ErrConnectionNotFound, sessionID)
-	}
-
-	// Marshal message to JSON
 	data, err := util.MarshalJSON(msg)
 	if err != nil {
 		return fmt.Errorf("failed to marshal message: %w", err)
 	}
+	return mr.sendRawToConnection(sessionID, data)
+}
 
-	// Send to connection using SafeSend to avoid panic on closed channel
+// sendRawToConnection sends pre-marshaled bytes to a specific session's connection
+func (mr *MessageRouter) sendRawToConnection(sessionID string, data []byte) error {
+	mr.mu.RLock()
+	conn, exists := mr.connections[sessionID]
+	mr.mu.RUnlock()
+
+	if !exists {
+		return fmt.Errorf("%w: session %s", ErrConnectionNotFound, sessionID)
+	}
+
 	if !conn.SafeSend(data) {
 		return fmt.Errorf("connection send channel is full or closing for session %s", sessionID)
 	}
 	return nil
 }
 
-// BroadcastToSession sends a message to all participants in a session
-// This includes the user and any admin who has taken over the session
+// BroadcastToSession sends a message to all participants in a session.
+// This includes the user and any admin who has taken over the session.
+// The message is marshaled once and reused for all recipients.
 func (mr *MessageRouter) BroadcastToSession(sessionID string, msg *message.Message) error {
 	if msg == nil {
 		return ErrNilMessage
@@ -1065,9 +1070,15 @@ func (mr *MessageRouter) BroadcastToSession(sessionID string, msg *message.Messa
 		)
 	}
 
+	// Marshal once, reuse for all recipients
+	data, err := util.MarshalJSON(msg)
+	if err != nil {
+		return chaterrors.ErrInvalidMessageFormat("failed to marshal message", err)
+	}
+
 	// Send to user connection
 	// No else needed: optional operation (fire-and-forget), failure is logged but not fatal
-	if err := mr.sendToConnection(sessionID, msg); err != nil {
+	if err := mr.sendRawToConnection(sessionID, data); err != nil {
 		mr.logger.Warn("Failed to send to user connection", "error", err, "session_id", sessionID)
 	}
 
@@ -1081,12 +1092,6 @@ func (mr *MessageRouter) BroadcastToSession(sessionID string, msg *message.Messa
 
 		// No else needed: optional operation, only send if admin connection exists
 		if exists {
-			data, err := util.MarshalJSON(msg)
-			// No else needed: early return pattern (guard clause)
-			if err != nil {
-				return chaterrors.ErrInvalidMessageFormat("failed to marshal message", err)
-			}
-
 			if !adminConn.SafeSend(data) {
 				mr.logger.Warn("Admin connection send channel full or closing", "admin_id", assistingAdminID)
 			}
@@ -1141,8 +1146,8 @@ func (mr *MessageRouter) HandleAdminTakeover(adminConn *websocket.Connection, se
 	// prevents TOCTOU race where two admins could both pass a pre-check)
 	if err := mr.sessionManager.MarkAdminAssisted(sessionID, adminConn.UserID, adminName); err != nil {
 		util.LogError(mr.logger, "router", "mark admin assisted", err, "session_id", sessionID)
-		// Check if it's an "already assisted" error (contains "already assisted")
-		if strings.Contains(err.Error(), "already assisted") {
+		// Check if it's an "already assisted" error via sentinel
+		if errors.Is(err, session.ErrAlreadyAssisted) {
 			return chaterrors.NewValidationError(
 				chaterrors.ErrCodeInvalidFormat,
 				err.Error(),

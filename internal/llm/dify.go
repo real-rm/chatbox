@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/real-rm/chatbox/internal/constants"
+	"github.com/real-rm/chatbox/internal/metrics"
 	"github.com/real-rm/gohelper"
 )
 
@@ -31,7 +32,7 @@ func NewDifyProvider(apiKey, endpoint, model string) *DifyProvider {
 		endpoint: endpoint,
 		model:    model,
 		client: &http.Client{
-			Timeout: 60 * time.Second,
+			Timeout: constants.LLMClientTimeout,
 		},
 		streamClient: &http.Client{
 			Timeout: 0, // no deadline; the caller's context controls cancellation
@@ -230,6 +231,11 @@ func (p *DifyProvider) StreamMessage(ctx context.Context, req *LLMRequest) (<-ch
 				}
 				return
 			}
+		}
+
+		// Check for scanner errors (e.g. truncated stream from network failure)
+		if scanErr := scanner.Err(); scanErr != nil {
+			metrics.LLMErrors.WithLabelValues("dify").Inc()
 		}
 
 		// Send final chunk if not already sent

@@ -11,6 +11,7 @@ const (
 	MaxContentLength  = 10000 // Maximum content length in characters
 	MaxMetadataLength = 1000  // Maximum metadata value length
 	MaxFileIDLength   = 255   // Maximum file ID length
+	MaxFileURLLength  = 2048  // Maximum file URL length
 	MaxModelIDLength  = 100   // Maximum model ID length
 )
 
@@ -153,6 +154,13 @@ func (m *Message) validateFieldLengths() error {
 		return &ValidationError{
 			Field:   "file_id",
 			Message: fmt.Sprintf("file_id exceeds maximum length of %d characters", MaxFileIDLength),
+		}
+	}
+
+	if len(m.FileURL) > MaxFileURLLength {
+		return &ValidationError{
+			Field:   "file_url",
+			Message: fmt.Sprintf("file_url exceeds maximum length of %d characters", MaxFileURLLength),
 		}
 	}
 

@@ -728,13 +728,7 @@ func (c *Connection) readPump(h *Handler) {
 							Timestamp: time.Now(),
 						}
 						if errorBytes, err := json.Marshal(errorMsg); err == nil {
-							select {
-							case c.send <- errorBytes:
-							default:
-								h.logger.Warn("Failed to send registration error, channel full",
-									"user_id", c.UserID,
-									"connection_id", c.ConnectionID)
-							}
+							c.SafeSend(errorBytes)
 						}
 						continue
 					}
@@ -792,13 +786,7 @@ func (c *Connection) readPump(h *Handler) {
 				}
 
 				if errorBytes, err := json.Marshal(errorMsg); err == nil {
-					select {
-					case c.send <- errorBytes:
-					default:
-						h.logger.Warn("Failed to send routing error, channel full",
-							"user_id", c.UserID,
-							"connection_id", c.ConnectionID)
-					}
+					c.SafeSend(errorBytes)
 				} else {
 					util.LogError(h.logger, "websocket", "marshal error message", err,
 						"user_id", c.UserID,
@@ -823,13 +811,7 @@ func (c *Connection) readPump(h *Handler) {
 				Timestamp: time.Now(),
 			}
 			if errorBytes, err := json.Marshal(errorMsg); err == nil {
-				select {
-				case c.send <- errorBytes:
-				default:
-					h.logger.Warn("Failed to send router unavailable error, channel full",
-						"user_id", c.UserID,
-						"connection_id", c.ConnectionID)
-				}
+				c.SafeSend(errorBytes)
 			}
 		}
 	}

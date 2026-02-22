@@ -589,9 +589,9 @@ func (s *StorageService) AddMessage(sessionID string, msg *session.Message) erro
 	return nil
 }
 
-// EndSession updates the session with end timestamp and duration.
-// Uses FindOneAndUpdate to atomically fetch the start time and set end time + duration
-// in a single round-trip, preventing inconsistent state.
+// EndSession updates the session with end timestamp and duration atomically.
+// Uses FindOneAndUpdate (ReturnDocument=Before) to set endTs and read startTime
+// in a single round-trip, then sets computed duration in a second retried call.
 func (s *StorageService) EndSession(sessionID string, endTime time.Time) error {
 	if sessionID == "" {
 		return ErrInvalidSessionID
@@ -605,29 +605,40 @@ func (s *StorageService) EndSession(sessionID string, endTime time.Time) error {
 	ctx, cancel := util.NewTimeoutContext(constants.SessionEndTimeout)
 	defer cancel()
 
-	// First, fetch the session to get its start time
 	filter := bson.M{constants.MongoFieldID: sessionID}
+
+	// Atomically set endTs and return the document (Before state) to read startTime
 	var doc SessionDocument
-	err := s.collection.FindOne(ctx, filter).Decode(&doc)
+	findOpts := options.FindOneAndUpdate().SetReturnDocument(options.Before)
+	endTsUpdate := bson.M{
+		"$set": bson.M{
+			constants.MongoFieldEndTime: endTime,
+		},
+	}
+
+	err := s.retryOperation(ctx, "EndSession.findAndUpdate", func() error {
+		return s.collection.FindOneAndUpdate(ctx, filter, endTsUpdate, findOpts).Decode(&doc)
+	})
 	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
 			return ErrSessionNotFound
 		}
-		return fmt.Errorf("failed to find session: %w", err)
+		return fmt.Errorf("failed to end session: %w", err)
 	}
 
-	// Compute duration and set both endTime and duration atomically
+	// Compute and persist duration (best-effort with retry)
 	duration := int64(endTime.Sub(doc.StartTime).Seconds())
-	update := bson.M{
+	durUpdate := bson.M{
 		"$set": bson.M{
-			constants.MongoFieldEndTime:  endTime,
 			constants.MongoFieldDuration: duration,
 		},
 	}
-
-	_, err = s.collection.UpdateOne(ctx, filter, update)
-	if err != nil {
-		return fmt.Errorf("failed to end session: %w", err)
+	if durErr := s.retryOperation(ctx, "EndSession.setDuration", func() error {
+		_, opErr := s.collection.UpdateOne(ctx, filter, durUpdate)
+		return opErr
+	}); durErr != nil {
+		s.logger.Warn("Failed to set session duration (endTime already persisted)",
+			"session_id", sessionID, "error", durErr)
 	}
 
 	metrics.SessionsEnded.Inc()

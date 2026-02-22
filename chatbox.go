@@ -926,14 +926,8 @@ func handleReadyCheck(mongo *gomongo.Mongo, llmService *llm.LLMService, logger *
 			}
 		}
 
-		// Check LLM provider availability
-		if llmService == nil {
-			checks["llm"] = map[string]interface{}{
-				"status": "not ready",
-				"reason": "LLM service not initialized",
-			}
-			allReady = false
-		} else {
+		// Check LLM provider availability (optional — nil means LLM not configured)
+		if llmService != nil {
 			models := llmService.GetAvailableModels()
 			if len(models) == 0 {
 				checks["llm"] = map[string]interface{}{

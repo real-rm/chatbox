@@ -133,12 +133,15 @@ func runWithSignalChannel(sigChan chan os.Signal) error {
 
 // NewHTTPServer creates an HTTP server with production-safe timeout defaults.
 // Use this when running chatbox as a standalone server (not via gomain).
+// NewHTTPServer creates an HTTP server with production-safe timeout defaults.
+// WriteTimeout is set to 0 because WebSocket connections are long-lived HTTP upgrades;
+// the gorilla/websocket layer manages per-message write deadlines via SetWriteDeadline.
 func NewHTTPServer(addr string, handler http.Handler) *http.Server {
 	return &http.Server{
 		Addr:         addr,
 		Handler:      handler,
 		ReadTimeout:  constants.HTTPReadTimeout,
-		WriteTimeout: constants.HTTPWriteTimeout,
+		WriteTimeout: 0, // WebSocket connections require no HTTP-level write timeout
 		IdleTimeout:  constants.HTTPIdleTimeout,
 	}
 }

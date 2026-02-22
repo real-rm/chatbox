@@ -822,6 +822,9 @@ func handleListSessions(storageService *storage.StorageService, sessionManager *
 			startTimeTo = &t
 		}
 
+		// Translate API sort field name to internal BSON field name
+		internalSortBy := constants.APISortFieldMap[sortBy]
+
 		// Build options for ListAllSessionsWithOptions
 		opts := &storage.SessionListOptions{
 			Limit:         limit,
@@ -831,7 +834,7 @@ func handleListSessions(storageService *storage.StorageService, sessionManager *
 			StartTimeTo:   startTimeTo,
 			AdminAssisted: adminAssisted,
 			Active:        active,
-			SortBy:        sortBy,
+			SortBy:        internalSortBy,
 			SortOrder:     sortOrder,
 		}
 

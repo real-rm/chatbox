@@ -8,11 +8,12 @@ import (
 
 // Validation constants
 const (
-	MaxContentLength  = 10000 // Maximum content length in characters
-	MaxMetadataLength = 1000  // Maximum metadata value length
-	MaxFileIDLength   = 255   // Maximum file ID length
-	MaxFileURLLength  = 2048  // Maximum file URL length
-	MaxModelIDLength  = 100   // Maximum model ID length
+	MaxContentLength   = 10000 // Maximum content length in characters
+	MaxMetadataLength  = 1000  // Maximum metadata value length
+	MaxFileIDLength    = 255   // Maximum file ID length
+	MaxFileURLLength   = 2048  // Maximum file URL length
+	MaxModelIDLength   = 100   // Maximum model ID length
+	MaxSessionIDLength = 128   // Maximum session ID length
 )
 
 // ValidationError represents a validation error
@@ -143,6 +144,13 @@ func (m *Message) validateTypeSpecificFields() error {
 
 // validateFieldLengths validates that field values don't exceed maximum lengths
 func (m *Message) validateFieldLengths() error {
+	if len(m.SessionID) > MaxSessionIDLength {
+		return &ValidationError{
+			Field:   "session_id",
+			Message: fmt.Sprintf("session_id exceeds maximum length of %d characters", MaxSessionIDLength),
+		}
+	}
+
 	if len(m.Content) > MaxContentLength {
 		return &ValidationError{
 			Field:   "content",

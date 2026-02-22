@@ -180,10 +180,10 @@ func ValidateFileURL(rawURL string) error {
 		return fmt.Errorf("invalid URL: %w", err)
 	}
 
-	// Allow only http and https schemes
+	// Allow only https scheme (reject plaintext http in production)
 	scheme := strings.ToLower(u.Scheme)
-	if scheme != "http" && scheme != "https" {
-		return fmt.Errorf("URL scheme %q is not allowed; only http and https are permitted", u.Scheme)
+	if scheme != "https" {
+		return fmt.Errorf("URL scheme %q is not allowed; only https is permitted", u.Scheme)
 	}
 
 	// Reject URLs with no host

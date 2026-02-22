@@ -21,6 +21,7 @@ const (
 	ShortTimeout            = 2 * time.Second   // Quick operations like health checks
 	MessageAddTimeout       = 5 * time.Second   // Adding messages to sessions
 	SessionEndTimeout       = 5 * time.Second   // Ending sessions
+	GracefulShutdownTimeout = 30 * time.Second  // Graceful shutdown deadline
 	HealthCheckTimeout      = 2 * time.Second   // Health check operations
 	MetricsTimeout          = 30 * time.Second  // Metrics aggregation
 	VoiceProcessTimeout     = 60 * time.Second  // Voice message processing
@@ -113,6 +114,7 @@ const (
 	MongoFieldMessages      = "msgs"
 	MongoFieldDuration      = "dur"
 	MongoFieldTotalTokens   = "totalTokens"
+	MongoFieldLastActivity  = "lastActivity"
 )
 
 // MongoDB Index Names
@@ -174,7 +176,16 @@ const (
 	DefaultMetricsAllowedNetworks = "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,127.0.0.0/8"
 )
 
-// Valid sort fields and orders for admin session queries
+// APISortFieldMap translates API-facing sort field names to internal BSON field names.
+var APISortFieldMap = map[string]string{
+	"start_time":    SortByTimestamp,
+	"end_time":      SortByEndTime,
+	"message_count": SortByMessageCount,
+	"total_tokens":  SortByTotalTokens,
+	"user_id":       SortByUserID,
+}
+
+// ValidSortFields is the set of allowed API-facing sort field names.
 var ValidSortFields = map[string]bool{
 	"start_time":    true,
 	"end_time":      true,

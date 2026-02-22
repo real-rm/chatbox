@@ -16,6 +16,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/real-rm/chatbox/internal/auth"
+	"github.com/real-rm/chatbox/internal/constants"
 	chaterrors "github.com/real-rm/chatbox/internal/errors"
 	"github.com/real-rm/chatbox/internal/message"
 	"github.com/real-rm/chatbox/internal/metrics"
@@ -442,10 +443,10 @@ func (h *Handler) notifyConnectionLimit(userID string) {
 // Shutdown gracefully closes all active WebSocket connections
 // It sends close messages to all connected clients and waits for them to close
 // Deprecated: Use ShutdownWithContext instead.
-func (h *Handler) Shutdown() {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+func (h *Handler) Shutdown() error {
+	ctx, cancel := context.WithTimeout(context.Background(), constants.GracefulShutdownTimeout)
 	defer cancel()
-	h.ShutdownWithContext(ctx)
+	return h.ShutdownWithContext(ctx)
 }
 
 // ShutdownWithContext gracefully closes all active WebSocket connections
@@ -740,8 +741,10 @@ func (c *Connection) readPump(h *Handler) {
 				}
 			}
 
-			// No else needed: error handling (logs and sends error response)
-			// Call router with the connection
+			// Call router with the connection.
+			// RouteMessage calls HandleError internally on failure, which sends
+			// the error frame to the client. We only log and increment metrics here
+			// to avoid sending duplicate error frames.
 			if err := h.router.RouteMessage(c, &msg); err != nil {
 				// Log detailed error server-side
 				util.LogError(h.logger, "websocket", "route message", err,
@@ -752,46 +755,6 @@ func (c *Connection) readPump(h *Handler) {
 
 				// Increment message errors metric
 				metrics.MessageErrors.Inc()
-
-				// Check if it's a ChatError for proper error handling
-				var chatErr *chaterrors.ChatError
-				var errorInfo *message.ErrorInfo
-
-				if errors.As(err, &chatErr) {
-					// Use the ChatError's error info
-					errorInfo = chatErr.ToErrorInfo()
-
-					h.logger.Debug("Routing error details",
-						"error_code", chatErr.Code,
-						"error_category", chatErr.Category,
-						"recoverable", chatErr.Recoverable,
-						"user_id", c.UserID,
-						"session_id", c.GetSessionID())
-				} else {
-					// For non-ChatError errors, create a generic error response
-					errorInfo = &message.ErrorInfo{
-						Code:        string(chaterrors.ErrCodeServiceError),
-						Message:     "Failed to process message",
-						Recoverable: true,
-					}
-				}
-
-				// Send error response to client
-				errorMsg := &message.Message{
-					Type:      message.TypeError,
-					SessionID: msg.SessionID,
-					Sender:    message.SenderAI,
-					Error:     errorInfo,
-					Timestamp: time.Now(),
-				}
-
-				if errorBytes, err := json.Marshal(errorMsg); err == nil {
-					c.SafeSend(errorBytes)
-				} else {
-					util.LogError(h.logger, "websocket", "marshal error message", err,
-						"user_id", c.UserID,
-						"connection_id", c.ConnectionID)
-				}
 			}
 		} else {
 			h.logger.Warn("No router configured, message not processed",

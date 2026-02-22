@@ -54,7 +54,7 @@ echo "Generating/collecting secrets..."
 echo ""
 
 JWT_SECRET=$(prompt_secret "JWT_SECRET" "JWT Secret (32+ characters)" "openssl rand -base64 32")
-ENCRYPTION_KEY=$(prompt_secret "ENCRYPTION_KEY" "Encryption Key (exactly 32 bytes for AES-256)" "openssl rand -base64 32")
+ENCRYPTION_KEY=$(prompt_secret "ENCRYPTION_KEY" "Encryption Key (exactly 32 bytes for AES-256)" "openssl rand -hex 16")
 
 echo ""
 echo "AWS S3 Configuration:"

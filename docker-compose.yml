@@ -19,7 +19,7 @@ services:
     networks:
       - chatbox-network
     healthcheck:
-      test: mongosh "mongodb://admin:password@localhost:27017/admin" --eval "db.runCommand('ping').ok" --quiet
+      test: mongosh "mongodb://$$MONGO_INITDB_ROOT_USERNAME:$$MONGO_INITDB_ROOT_PASSWORD@localhost:27017/admin" --eval "db.runCommand('ping').ok" --quiet
       interval: 10s
       timeout: 5s
       retries: 5

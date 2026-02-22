@@ -164,7 +164,7 @@ func TestValidateFileURL(t *testing.T) {
 	}{
 		{"empty URL allowed", "", false},
 		{"valid HTTPS URL", "https://example.com/files/photo.jpg", false},
-		{"valid HTTP URL", "http://cdn.example.com/file.pdf", false},
+		{"HTTP URL rejected (only HTTPS allowed)", "http://cdn.example.com/file.pdf", true},
 		{"javascript scheme rejected", "javascript:alert(1)", true},
 		{"data scheme rejected", "data:text/html,<h1>Hello</h1>", true},
 		{"file scheme rejected", "file:///etc/passwd", true},

@@ -214,8 +214,9 @@ spec:
       - name: temp
         emptyDir: {}
       
-      # Graceful shutdown - give pods time to close connections
-      terminationGracePeriodSeconds: 30
+      # Graceful shutdown - must exceed the application's 30s shutdown timeout
+      # to prevent SIGKILL before graceful shutdown completes
+      terminationGracePeriodSeconds: 60
       
       # DNS policy
       dnsPolicy: ClusterFirst

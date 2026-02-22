@@ -74,6 +74,7 @@ type SessionDocument struct {
 	AssistingAdminName string            `bson:"assistingAdminName,omitempty"`
 	HelpRequested      bool              `bson:"helpRequested"`
 	TotalTokens        int               `bson:"totalTokens"`
+	LastActivity       time.Time         `bson:"lastActivity,omitempty"`
 	MaxResponseTime    int64             `bson:"maxRespTime"`   // milliseconds
 	AvgResponseTime    int64             `bson:"avgRespTime"`   // milliseconds
 	CreatedAt          time.Time         `bson:"_ts,omitempty"` // gomongo automatic timestamp
@@ -517,7 +518,7 @@ func (s *StorageService) documentToSession(doc *SessionDocument) *session.Sessio
 		ModelID:            doc.ModelID,
 		Messages:           messages,
 		StartTime:          doc.StartTime,
-		LastActivity:       doc.StartTime, // Set to start time, will be updated
+		LastActivity:       lastActivityFromDoc(doc),
 		EndTime:            doc.EndTime,
 		IsActive:           isActive,
 		HelpRequested:      doc.HelpRequested,
@@ -527,6 +528,15 @@ func (s *StorageService) documentToSession(doc *SessionDocument) *session.Sessio
 		TotalTokens:        doc.TotalTokens,
 		ResponseTimes:      responseTimes,
 	}
+}
+
+// lastActivityFromDoc returns the best available last activity time from a session document.
+// Prefers the stored lastActivity field; falls back to StartTime if not set.
+func lastActivityFromDoc(doc *SessionDocument) time.Time {
+	if !doc.LastActivity.IsZero() {
+		return doc.LastActivity
+	}
+	return doc.StartTime
 }
 
 // AddMessage adds a message to an existing session and persists it immediately
@@ -569,7 +579,7 @@ func (s *StorageService) AddMessage(sessionID string, msg *session.Message) erro
 	filter := bson.M{constants.MongoFieldID: sessionID}
 	update := bson.M{
 		"$push": bson.M{constants.MongoFieldMessages: msgDoc},
-		"$set":  bson.M{"lastActivity": time.Now()},
+		"$set":  bson.M{constants.MongoFieldLastActivity: time.Now()},
 	}
 
 	var result *mongo.UpdateResult
@@ -1060,8 +1070,7 @@ func (s *StorageService) GetSessionMetrics(startTime, endTime time.Time) (*Metri
 				"$lte": endTime,
 			},
 		}}},
-		// Limit to prevent OOM on unbounded datasets
-		{{Key: "$limit", Value: int64(constants.MaxSessionLimit)}},
+		// No $limit needed: $group reduces to a single summary document
 		// Group and aggregate
 		{{Key: "$group", Value: bson.M{
 			"_id":             nil,
@@ -1109,7 +1118,8 @@ func (s *StorageService) GetSessionMetrics(startTime, endTime time.Time) (*Metri
 	return result, nil
 }
 
-// GetTokenUsage calculates the total token usage across all sessions within a time period
+// GetTokenUsage calculates the total token usage across all sessions within a time period.
+// Deprecated: Use GetSessionMetrics which already returns TotalTokens in its aggregation.
 func (s *StorageService) GetTokenUsage(startTime, endTime time.Time) (int, error) {
 	// No else needed: early return pattern (guard clause)
 	if endTime.Before(startTime) {

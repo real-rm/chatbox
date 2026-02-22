@@ -35,6 +35,9 @@ data:
   WS_ALLOWED_ORIGINS: "REPLACE_WITH_PRODUCTION_ORIGINS"
   
   # Database Configuration (gomongo)
+  # NOTE: For production, override MONGO_URI with credentials via Kubernetes Secret
+  # or set MONGO_USERNAME/MONGO_PASSWORD and build the URI at startup.
+  # Example authenticated URI: "mongodb://user:pass@mongo-service:27017/chat?authSource=admin"
   MONGO_URI: "mongodb://mongo-service:27017/chat"
   MONGO_DATABASE: "chat"
   MONGO_COLLECTION: "sessions"

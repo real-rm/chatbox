@@ -396,7 +396,9 @@ func (mr *MessageRouter) HandleUserMessage(conn *websocket.Connection, msg *mess
 			Timestamp: time.Now(),
 			Sender:    constants.SenderAI,
 		}
-		mr.sessionManager.AddMessage(msg.SessionID, aiSessionMsg)
+		if err := mr.sessionManager.AddMessage(msg.SessionID, aiSessionMsg); err != nil {
+			mr.logger.Warn("Failed to store AI response in session", "error", err, "session_id", msg.SessionID)
+		}
 		mr.persistMessage(msg.SessionID, aiSessionMsg)
 
 		// Estimate token usage (rough estimate: ~4 chars per token)
@@ -1086,8 +1088,9 @@ func (mr *MessageRouter) BroadcastToSession(sessionID string, msg *message.Messa
 	// No else needed: optional operation, only send if admin is assisting
 	assistingAdminID := sess.GetAssistingAdminID()
 	if assistingAdminID != "" {
+		adminConnKey := assistingAdminID + ":" + sessionID
 		mr.mu.RLock()
-		adminConn, exists := mr.adminConns[assistingAdminID]
+		adminConn, exists := mr.adminConns[adminConnKey]
 		mr.mu.RUnlock()
 
 		// No else needed: optional operation, only send if admin connection exists
@@ -1158,8 +1161,10 @@ func (mr *MessageRouter) HandleAdminTakeover(adminConn *websocket.Connection, se
 	}
 
 	// Register admin connection
+	// Key by (adminID, sessionID) to allow the same admin to take over multiple sessions
+	adminConnKey := adminConn.UserID + ":" + sessionID
 	mr.mu.Lock()
-	mr.adminConns[adminConn.UserID] = adminConn
+	mr.adminConns[adminConnKey] = adminConn
 	mr.mu.Unlock()
 
 	// Increment admin takeover metric
@@ -1171,11 +1176,15 @@ func (mr *MessageRouter) HandleAdminTakeover(adminConn *websocket.Connection, se
 		"admin_name", adminName,
 		"user_id", sess.UserID)
 
-	// Send admin join message to user
+	// Send admin join message to user (cap name length to prevent oversized messages)
+	displayName := adminName
+	if len(displayName) > 100 {
+		displayName = displayName[:100]
+	}
 	adminJoinMsg := &message.Message{
 		Type:      message.TypeAdminJoin,
 		SessionID: sessionID,
-		Content:   fmt.Sprintf("Administrator %s has joined the session", adminName),
+		Content:   fmt.Sprintf("Administrator %s has joined the session", displayName),
 		Sender:    message.SenderAdmin,
 		Timestamp: time.Now(),
 		Metadata: map[string]string{
@@ -1227,9 +1236,10 @@ func (mr *MessageRouter) HandleAdminLeave(adminID, sessionID string) error {
 		return chaterrors.ErrDatabaseError(err)
 	}
 
-	// Unregister admin connection
+	// Unregister admin connection (keyed by adminID:sessionID)
+	adminConnKey := adminID + ":" + sessionID
 	mr.mu.Lock()
-	delete(mr.adminConns, adminID)
+	delete(mr.adminConns, adminConnKey)
 	mr.mu.Unlock()
 
 	mr.logger.Info("Admin left session",

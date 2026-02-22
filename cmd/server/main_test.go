@@ -1203,12 +1203,13 @@ func TestStartup(t *testing.T) {
 
 // TestNewHTTPServer verifies that NewHTTPServer returns a server with proper timeouts
 func TestNewHTTPServer(t *testing.T) {
-	t.Run("HasNonZeroTimeouts", func(t *testing.T) {
+	t.Run("HasCorrectTimeouts", func(t *testing.T) {
 		srv := NewHTTPServer(":8080", nil)
 
 		assert.Equal(t, ":8080", srv.Addr)
 		assert.Equal(t, constants.HTTPReadTimeout, srv.ReadTimeout, "ReadTimeout should match constant")
-		assert.Equal(t, constants.HTTPWriteTimeout, srv.WriteTimeout, "WriteTimeout should match constant")
+		// WriteTimeout is 0 because WebSocket connections are long-lived HTTP upgrades
+		assert.Equal(t, time.Duration(0), srv.WriteTimeout, "WriteTimeout should be 0 for WebSocket support")
 		assert.Equal(t, constants.HTTPIdleTimeout, srv.IdleTimeout, "IdleTimeout should match constant")
 	})
 
@@ -1225,7 +1226,8 @@ func TestNewHTTPServer(t *testing.T) {
 
 		assert.Nil(t, srv.Handler)
 		assert.NotZero(t, srv.ReadTimeout)
-		assert.NotZero(t, srv.WriteTimeout)
+		// WriteTimeout is intentionally 0 for WebSocket support
+		assert.Zero(t, srv.WriteTimeout)
 		assert.NotZero(t, srv.IdleTimeout)
 	})
 }

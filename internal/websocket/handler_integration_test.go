@@ -321,7 +321,8 @@ func TestReadPump_InvalidJSON(t *testing.T) {
 	assert.Len(t, router.RoutedMessages(), 0)
 }
 
-// TestReadPump_RoutingErrorHandling tests that routing errors are properly handled and logged
+// TestReadPump_RoutingErrorHandling tests that routing errors are logged but
+// NOT sent as duplicate error frames (RouteMessage.HandleError sends them).
 func TestReadPump_RoutingErrorHandling(t *testing.T) {
 	validator := auth.NewJWTValidator("test-secret")
 
@@ -334,10 +335,6 @@ func TestReadPump_RoutingErrorHandling(t *testing.T) {
 	handler := NewHandler(validator, router, testLogger(), 1048576)
 
 	// Create a test server
-	var (
-		receivedErrorMsgMu sync.Mutex
-		receivedErrorMsg   *message.Message
-	)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		upgrader := websocket.Upgrader{}
 		conn, err := upgrader.Upgrade(w, r, nil)
@@ -384,32 +381,6 @@ func TestReadPump_RoutingErrorHandling(t *testing.T) {
 		close(done)
 	}()
 
-	// Start writePump to capture error messages; exit when done is closed
-	var wgSend sync.WaitGroup
-	wgSend.Add(1)
-	go func() {
-		defer wgSend.Done()
-		for {
-			select {
-			case msg, ok := <-connection.send:
-				if !ok {
-					return
-				}
-				// Parse the error message
-				var errorMsg message.Message
-				if err := json.Unmarshal(msg, &errorMsg); err == nil {
-					if errorMsg.Type == message.TypeError {
-						receivedErrorMsgMu.Lock()
-						receivedErrorMsg = &errorMsg
-						receivedErrorMsgMu.Unlock()
-					}
-				}
-			case <-done:
-				return
-			}
-		}
-	}()
-
 	// Wait for readPump to finish
 	select {
 	case <-done:
@@ -418,18 +389,22 @@ func TestReadPump_RoutingErrorHandling(t *testing.T) {
 		t.Fatal("readPump did not finish in time")
 	}
 
-	// Wait for the send-capture goroutine to exit before reading shared state
-	wgSend.Wait()
+	// Verify that the message was routed (RouteMessage was called)
+	assert.Len(t, router.routedMessages, 1, "message should have been routed")
+	assert.Equal(t, "test-session-error", router.routedMessages[0].SessionID)
 
-	// Verify that an error message was sent
-	receivedErrorMsgMu.Lock()
-	captured := receivedErrorMsg
-	receivedErrorMsgMu.Unlock()
-	require.NotNil(t, captured, "error message should have been sent")
-	assert.Equal(t, message.TypeError, captured.Type)
-	assert.NotNil(t, captured.Error)
-	assert.Equal(t, string(chaterrors.ErrCodeLLMUnavailable), captured.Error.Code)
-	assert.True(t, captured.Error.Recoverable)
+	// Verify that readPump did NOT send a duplicate error frame on the send channel.
+	// Error frames are sent by RouteMessage's internal HandleError, not by readPump.
+	// Note: unregisterConnection closes the send channel, so we must check ok.
+	select {
+	case msg, ok := <-connection.send:
+		if ok && len(msg) > 0 {
+			t.Errorf("readPump should not send error frames (duplicate); got: %s", string(msg))
+		}
+		// ok==false means channel was closed by cleanup — expected behavior
+	default:
+		// Good — no duplicate error frame
+	}
 }
 
 // mockRouterWithError is a mock router that can return errors

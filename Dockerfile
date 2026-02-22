@@ -60,7 +60,9 @@ WORKDIR /app
 # Copy binary from builder
 COPY --from=builder /build/chatbox-server /app/chatbox-server
 
-# Copy configuration template (will be overridden by ConfigMap)
+# Copy configuration template (contains PLACEHOLDER_* values only — never real secrets).
+# In production, all secrets MUST be provided via environment variables or K8s Secrets.
+# WARNING: Do NOT build this image with real secrets in config.toml.
 COPY config.toml /app/config.toml
 
 # Create directories for logs and temp files

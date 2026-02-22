@@ -143,9 +143,9 @@ func Load() (*Config, error) {
 		},
 		Kubernetes: KubernetesConfig{
 			Namespace:      getEnv("K8S_NAMESPACE", "default"),
-			ServiceName:    getEnv("K8S_SERVICE_NAME", "chat-websocket"),
-			ConfigMapName:  getEnv("K8S_CONFIGMAP_NAME", "chat-config"),
-			SecretName:     getEnv("K8S_SECRET_NAME", "chat-secrets"),
+			ServiceName:    getEnv("K8S_SERVICE_NAME", "chatbox-websocket"),
+			ConfigMapName:  getEnv("K8S_CONFIGMAP_NAME", "chatbox-config"),
+			SecretName:     getEnv("K8S_SECRET_NAME", "chatbox-secrets"),
 			EnableK8sProbe: getEnvAsBool("K8S_ENABLE_PROBE", true),
 		},
 	}

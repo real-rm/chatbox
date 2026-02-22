@@ -21,8 +21,8 @@ import (
 	"github.com/real-rm/chatbox/internal/constants"
 	chaterrors "github.com/real-rm/chatbox/internal/errors"
 	"github.com/real-rm/chatbox/internal/httperrors"
-	"github.com/real-rm/chatbox/internal/metrics"
 	"github.com/real-rm/chatbox/internal/llm"
+	"github.com/real-rm/chatbox/internal/metrics"
 	"github.com/real-rm/chatbox/internal/notification"
 	"github.com/real-rm/chatbox/internal/ratelimit"
 	"github.com/real-rm/chatbox/internal/router"
@@ -48,13 +48,13 @@ func init() {
 
 var (
 	// Global references for graceful shutdown
-	globalWSHandler      *websocket.Handler
-	globalSessionMgr     *session.SessionManager
-	globalMessageRouter  *router.MessageRouter
-	globalAdminLimiter   *ratelimit.MessageLimiter
-	globalPublicLimiter  *ratelimit.MessageLimiter
-	globalLogger         *golog.Logger
-	shutdownMu           sync.Mutex
+	globalWSHandler     *websocket.Handler
+	globalSessionMgr    *session.SessionManager
+	globalMessageRouter *router.MessageRouter
+	globalAdminLimiter  *ratelimit.MessageLimiter
+	globalPublicLimiter *ratelimit.MessageLimiter
+	globalLogger        *golog.Logger
+	shutdownMu          sync.Mutex
 )
 
 // Register registers the chatbox service with the gomain router.

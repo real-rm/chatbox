@@ -464,7 +464,6 @@ func truncateAtWordBoundary(s string, maxLen int) string {
 	return truncated
 }
 
-
 // extractFirstSentenceOrLine extracts the first sentence (ending with . ? !) or first line
 func extractFirstSentenceOrLine(s string) string {
 	// Check for newline first

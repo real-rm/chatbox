@@ -55,7 +55,7 @@ type StorageService struct {
 	mongo         *gomongo.Mongo
 	collection    *gomongo.MongoCollection
 	logger        *golog.Logger
-	encryptionKey []byte           // Key for encrypting sensitive fields
+	encryptionKey []byte         // Key for encrypting sensitive fields
 	gcm           cipherPkg.AEAD // Pre-computed AES-GCM cipher (nil if encryption disabled)
 }
 
@@ -1053,13 +1053,13 @@ func (s *StorageService) GetSessionMetrics(startTime, endTime time.Time) (*Metri
 		{{Key: "$limit", Value: int64(constants.MaxSessionLimit)}},
 		// Group and aggregate
 		{{Key: "$group", Value: bson.M{
-			"_id":                nil,
-			"totalSessions":     bson.M{"$sum": 1},
-			"activeSessions":    bson.M{"$sum": bson.M{"$cond": bson.A{bson.M{"$eq": bson.A{bson.M{"$type": "$" + constants.MongoFieldEndTime}, "missing"}}, 1, 0}}},
-			"adminAssisted":     bson.M{"$sum": bson.M{"$cond": bson.A{"$" + constants.MongoFieldAdminAssisted, 1, 0}}},
-			"totalTokens":       bson.M{"$sum": "$" + constants.MongoFieldTotalTokens},
-			"maxResponseTime":   bson.M{"$max": "$maxRespTime"},
-			"avgResponseTime":   bson.M{"$avg": "$avgRespTime"},
+			"_id":             nil,
+			"totalSessions":   bson.M{"$sum": 1},
+			"activeSessions":  bson.M{"$sum": bson.M{"$cond": bson.A{bson.M{"$eq": bson.A{bson.M{"$type": "$" + constants.MongoFieldEndTime}, "missing"}}, 1, 0}}},
+			"adminAssisted":   bson.M{"$sum": bson.M{"$cond": bson.A{"$" + constants.MongoFieldAdminAssisted, 1, 0}}},
+			"totalTokens":     bson.M{"$sum": "$" + constants.MongoFieldTotalTokens},
+			"maxResponseTime": bson.M{"$max": "$maxRespTime"},
+			"avgResponseTime": bson.M{"$avg": "$avgRespTime"},
 		}}},
 	}
 
@@ -1073,12 +1073,12 @@ func (s *StorageService) GetSessionMetrics(startTime, endTime time.Time) (*Metri
 
 	if cursor.Next(ctx) {
 		var aggResult struct {
-			TotalSessions    int     `bson:"totalSessions"`
-			ActiveSessions   int     `bson:"activeSessions"`
-			AdminAssisted    int     `bson:"adminAssisted"`
-			TotalTokens      int     `bson:"totalTokens"`
-			MaxResponseTime  int64   `bson:"maxResponseTime"`
-			AvgResponseTime  float64 `bson:"avgResponseTime"`
+			TotalSessions   int     `bson:"totalSessions"`
+			ActiveSessions  int     `bson:"activeSessions"`
+			AdminAssisted   int     `bson:"adminAssisted"`
+			TotalTokens     int     `bson:"totalTokens"`
+			MaxResponseTime int64   `bson:"maxResponseTime"`
+			AvgResponseTime float64 `bson:"avgResponseTime"`
 		}
 		if err := cursor.Decode(&aggResult); err != nil {
 			return nil, fmt.Errorf("failed to decode metrics: %w", err)

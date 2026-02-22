@@ -66,7 +66,7 @@ type MessageRouter struct {
 	adminConns          map[string]*websocket.Connection // adminID -> Connection
 	mu                  sync.RWMutex
 	logger              *golog.Logger
-	llmStreamTimeout    time.Duration // NEW: for LLM streaming timeout
+	llmStreamTimeout    time.Duration      // NEW: for LLM streaming timeout
 	ctx                 context.Context    // Lifecycle context — cancelled on Shutdown
 	cancel              context.CancelFunc // Cancel function for lifecycle context
 }

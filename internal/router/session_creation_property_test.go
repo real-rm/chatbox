@@ -221,10 +221,9 @@ func TestProperty_DualStorageConsistency(t *testing.T) {
 			router := NewMessageRouter(sm, nil, nil, nil, mockStorage, 120*time.Second, logger)
 
 			conn := mockConnection(userID)
-			sessionID := fmt.Sprintf("session-%s", userID)
 
 			// Create new session
-			sess, err := router.createNewSession(conn, sessionID)
+			sess, err := router.createNewSession(conn)
 			if err != nil {
 				t.Logf("Failed to create session: %v", err)
 				return false
@@ -297,10 +296,9 @@ func TestProperty_UserAssociationCorrectness(t *testing.T) {
 			router := NewMessageRouter(sm, nil, nil, nil, mockStorage, 120*time.Second, logger)
 
 			conn := mockConnection(userID)
-			sessionID := fmt.Sprintf("session-%s", userID)
 
 			// Create new session
-			sess, err := router.createNewSession(conn, sessionID)
+			sess, err := router.createNewSession(conn)
 			if err != nil {
 				t.Logf("Failed to create session: %v", err)
 				return false
@@ -358,10 +356,9 @@ func TestProperty_SessionCreationErrorHandling(t *testing.T) {
 			router := NewMessageRouter(sm, nil, nil, nil, mockStorage, 120*time.Second, logger)
 
 			conn := mockConnection(userID)
-			sessionID := fmt.Sprintf("session-%s", userID)
 
 			// Attempt to create new session
-			sess, err := router.createNewSession(conn, sessionID)
+			sess, err := router.createNewSession(conn)
 
 			// Should return error
 			if err == nil {
@@ -491,10 +488,9 @@ func TestProperty_SessionRestorationFromDatabase(t *testing.T) {
 			router := NewMessageRouter(sm, nil, nil, nil, mockStorage, 120*time.Second, logger)
 
 			conn := mockConnection(userID)
-			sessionID := fmt.Sprintf("session-%s", userID)
 
 			// Create initial session
-			sess, err := router.createNewSession(conn, sessionID)
+			sess, err := router.createNewSession(conn)
 			if err != nil {
 				t.Logf("Failed to create initial session: %v", err)
 				return false

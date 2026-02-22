@@ -63,8 +63,14 @@ func (rl *RateLimiter) Allow(eventKey string) bool {
 		}
 	}
 
+	// Remove keys with no recent events to prevent unbounded map growth
+	if len(recentEvents) == 0 && len(events) > 0 {
+		delete(rl.events, eventKey)
+	}
+
 	// Check if we're under the limit
 	if len(recentEvents) >= rl.limit {
+		rl.events[eventKey] = recentEvents
 		return false
 	}
 
@@ -250,7 +256,7 @@ func (ns *NotificationService) SendCriticalError(errorType, details string, affe
 					<li><strong>Time:</strong> %s</li>
 				</ul>
 				<p>Please investigate immediately.</p>
-			`, errorType, details, affectedUsers, time.Now().Format(time.RFC3339)),
+			`, html.EscapeString(errorType), html.EscapeString(details), affectedUsers, time.Now().Format(time.RFC3339)),
 			Text: fmt.Sprintf("CRITICAL ERROR - Type: %s, Details: %s, Affected Users: %d, Time: %s",
 				errorType, details, affectedUsers, time.Now().Format(time.RFC3339)),
 		}
@@ -318,7 +324,7 @@ func (ns *NotificationService) SendSystemAlert(subject, message string) error {
 	msg := &gomail.EmailMessage{
 		To:      adminEmails,
 		Subject: subject,
-		HTML:    fmt.Sprintf("<p>%s</p><p><em>Time: %s</em></p>", message, time.Now().Format(time.RFC3339)),
+		HTML:    fmt.Sprintf("<p>%s</p><p><em>Time: %s</em></p>", html.EscapeString(message), time.Now().Format(time.RFC3339)),
 		Text:    fmt.Sprintf("%s\nTime: %s", message, time.Now().Format(time.RFC3339)),
 	}
 

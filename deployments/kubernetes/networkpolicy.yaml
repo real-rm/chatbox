@@ -14,12 +14,12 @@ spec:
     - Ingress
     - Egress
   ingress:
-    # Allow traffic from ingress controller only
+    # Allow traffic from ingress controller only (AND logic: both selectors must match)
     - from:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: ingress-nginx
-        - podSelector:
+          podSelector:
             matchLabels:
               app.kubernetes.io/name: ingress-nginx
       ports:

@@ -113,8 +113,10 @@ func NewSessionManager(reconnectTimeout time.Duration, logger *golog.Logger) *Se
 	}
 }
 
-// CreateSession creates a new session for a user
-// Returns error if user ID is empty or user already has an active session
+// CreateSession creates a new session for a user.
+// Returns error if user ID is empty or user already has an active session.
+// NOTE: The returned *Session pointer is shared. Callers must use Session.mu
+// for any field mutations to avoid data races with concurrent goroutines.
 func (sm *SessionManager) CreateSession(userID string) (*Session, error) {
 	if userID == "" {
 		return nil, ErrInvalidUserID
@@ -165,7 +167,9 @@ func (sm *SessionManager) CreateSession(userID string) (*Session, error) {
 	return session, nil
 }
 
-// GetSession retrieves a session by ID
+// GetSession retrieves a session by ID.
+// NOTE: The returned *Session pointer is shared. Callers must use Session.mu
+// for any field mutations to avoid data races with concurrent goroutines.
 func (sm *SessionManager) GetSession(sessionID string) (*Session, error) {
 	if sessionID == "" {
 		return nil, ErrInvalidSessionID
@@ -182,8 +186,10 @@ func (sm *SessionManager) GetSession(sessionID string) (*Session, error) {
 	return session, nil
 }
 
-// RestoreSession restores a session after reconnection
-// Returns error if session not found, timed out, or doesn't belong to user
+// RestoreSession restores a session after reconnection.
+// Returns error if session not found, timed out, or doesn't belong to user.
+// NOTE: The returned *Session pointer is shared. Callers must use Session.mu
+// for any field mutations to avoid data races with concurrent goroutines.
 func (sm *SessionManager) RestoreSession(userID, sessionID string) (*Session, error) {
 	if userID == "" {
 		return nil, ErrInvalidUserID

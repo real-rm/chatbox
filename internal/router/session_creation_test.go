@@ -98,10 +98,9 @@ func TestCreateNewSession_DualStorage(t *testing.T) {
 	router := NewMessageRouter(sm, nil, nil, nil, mockStorage, 120*time.Second, logger)
 
 	conn := mockConnection("user-789")
-	sessionID := "test-session-id"
 
 	// Create new session
-	sess, err := router.createNewSession(conn, sessionID)
+	sess, err := router.createNewSession(conn)
 
 	// Should succeed
 	require.NoError(t, err)
@@ -154,10 +153,9 @@ func TestCreateNewSession_UserIDAssociation(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			conn := mockConnection(tt.userID)
-			sessionID := "test-session"
 
 			// Create new session
-			sess, err := router.createNewSession(conn, sessionID)
+			sess, err := router.createNewSession(conn)
 
 			// Should succeed
 			require.NoError(t, err)
@@ -187,10 +185,9 @@ func TestCreateNewSession_DatabaseFailure(t *testing.T) {
 	router := NewMessageRouter(sm, nil, nil, nil, mockStorage, 120*time.Second, logger)
 
 	conn := mockConnection("user-999")
-	sessionID := "test-session"
 
 	// Attempt to create new session
-	sess, err := router.createNewSession(conn, sessionID)
+	sess, err := router.createNewSession(conn)
 
 	// Should return error
 	require.Error(t, err)
@@ -214,10 +211,9 @@ func TestCreateNewSession_RollbackOnPartialFailure(t *testing.T) {
 	router := NewMessageRouter(sm, nil, nil, nil, mockStorage, 120*time.Second, logger)
 
 	conn := mockConnection("user-rollback")
-	sessionID := "rollback-session"
 
 	// Attempt to create new session (will fail at database step)
-	sess, err := router.createNewSession(conn, sessionID)
+	sess, err := router.createNewSession(conn)
 
 	// Should return error
 	require.Error(t, err)
@@ -227,10 +223,9 @@ func TestCreateNewSession_RollbackOnPartialFailure(t *testing.T) {
 	assert.True(t, mockStorage.createSessionCalled)
 
 	// Verify session was rolled back from memory (SessionManager)
-	// The session should not exist in SessionManager after rollback
-	_, err = sm.GetSession(sessionID)
-	assert.Error(t, err)
-	assert.ErrorIs(t, err, session.ErrSessionNotFound)
+	// After rollback, the session manager should have no active sessions
+	active, _, _ := sm.GetMemoryStats()
+	assert.Equal(t, 0, active)
 }
 
 // TestGetOrCreateSession_ConcurrentCreation tests concurrent session creation safety
@@ -329,10 +324,9 @@ func TestCreateNewSession_SessionMetadata(t *testing.T) {
 	router := NewMessageRouter(sm, nil, nil, nil, mockStorage, 120*time.Second, logger)
 
 	conn := mockConnection("user-metadata")
-	sessionID := "metadata-session"
 
 	// Create new session
-	sess, err := router.createNewSession(conn, sessionID)
+	sess, err := router.createNewSession(conn)
 
 	// Should succeed
 	require.NoError(t, err)

@@ -6,7 +6,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/real-rm/chatbox/internal/constants"
+	"github.com/real-rm/chatbox/internal/metrics"
 )
 
 // ConnectionLimiter limits the number of concurrent connections per user
@@ -31,6 +33,7 @@ func (cl *ConnectionLimiter) Allow(userID string) bool {
 
 	count := cl.connections[userID]
 	if count >= cl.maxPerUser {
+		metrics.RateLimitBlocked.With(prometheus.Labels{"limiter": "connection"}).Inc()
 		return false
 	}
 
@@ -120,6 +123,7 @@ func (ml *MessageLimiter) Allow(userID string) bool {
 			recentEvents = recentEvents[len(recentEvents)-constants.MaxEventsPerUser:]
 		}
 		ml.events[userID] = recentEvents
+		metrics.RateLimitBlocked.With(prometheus.Labels{"limiter": "message"}).Inc()
 		return false
 	}
 

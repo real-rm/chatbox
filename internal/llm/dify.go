@@ -181,6 +181,7 @@ func (p *DifyProvider) StreamMessage(ctx context.Context, req *LLMRequest) (<-ch
 		defer resp.Body.Close()
 
 		scanner := bufio.NewScanner(resp.Body)
+		scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024) // 1MB max to handle large SSE events
 		for scanner.Scan() {
 			line := scanner.Text()
 

@@ -13,8 +13,10 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/real-rm/chatbox/internal/auth"
+	"github.com/real-rm/chatbox/internal/metrics"
 	"github.com/real-rm/chatbox/internal/constants"
 	"github.com/real-rm/chatbox/internal/httperrors"
 	"github.com/real-rm/chatbox/internal/llm"
@@ -346,6 +348,9 @@ func Register(r *gin.Engine, config *goconfig.ConfigAccessor, logger *golog.Logg
 		chatboxLogger.Warn("No CORS origins configured, CORS middleware not enabled")
 	}
 
+	// Apply metrics middleware to record HTTP request duration
+	r.Use(metricsMiddleware())
+
 	chatboxLogger.Info("Using HTTP path prefix", "prefix", pathPrefix)
 
 	// Register routes
@@ -386,6 +391,18 @@ func Register(r *gin.Engine, config *goconfig.ConfigAccessor, logger *golog.Logg
 	)
 
 	return nil
+}
+
+// metricsMiddleware records HTTP request duration for Prometheus monitoring
+func metricsMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		start := time.Now()
+		c.Next()
+		metrics.HTTPRequestDuration.With(prometheus.Labels{
+			"endpoint": c.FullPath(),
+			"method":   c.Request.Method,
+		}).Observe(time.Since(start).Seconds())
+	}
 }
 
 // publicRateLimitMiddleware creates a Gin middleware for rate limiting public endpoints

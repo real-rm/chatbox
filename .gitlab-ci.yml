@@ -1,6 +1,7 @@
 # GitLab CI/CD Configuration for Docker Build Testing
 
 stages:
+  - lint
   - build
   - test
   - coverage
@@ -61,12 +62,27 @@ docker-build-push:
     - docker
   when: manual
 
+# Static analysis job
+lint:
+  stage: lint
+  image: golang:1.24
+  script:
+    - go vet ./...
+    - gofmt -l . | tee /dev/stderr | (! read)
+  only:
+    - main
+    - master
+    - develop
+    - merge_requests
+  tags:
+    - docker
+
 # Test job with race detector
 test:
   stage: test
   image: golang:1.24
   services:
-    - mongo:latest
+    - mongo:7.0
   variables:
     MONGO_INITDB_ROOT_USERNAME: admin
     MONGO_INITDB_ROOT_PASSWORD: admin
@@ -101,7 +117,7 @@ coverage:
   stage: coverage
   image: golang:1.24
   services:
-    - mongo:latest
+    - mongo:7.0
   variables:
     MONGO_INITDB_ROOT_USERNAME: admin
     MONGO_INITDB_ROOT_PASSWORD: admin
@@ -154,13 +170,12 @@ coverage:
         exit 1
       fi
       
-      # Check chatbox.go coverage (temporarily set to 20% until handler tests are fixed)
-      # TODO: Increase to 80% once handler test coverage is improved
+      # Check chatbox.go coverage
       CHATBOX_COV=$(go tool cover -func=chatbox_coverage.out | grep chatbox.go | awk '{print $3}' | sed 's/%//')
       echo "chatbox.go coverage: ${CHATBOX_COV}%"
-      if (( $(echo "$CHATBOX_COV < 20" | bc -l) )); then
-        echo "ERROR: chatbox.go coverage ${CHATBOX_COV}% is below 20% threshold"
-        echo "NOTE: Target threshold is 80%, but temporarily lowered due to handler test issues"
+      if (( $(echo "$CHATBOX_COV < 30" | bc -l) )); then
+        echo "ERROR: chatbox.go coverage ${CHATBOX_COV}% is below 30% threshold"
+        echo "NOTE: Target threshold is 80%, incrementally raising from 20% → 30%"
         exit 1
       fi
       

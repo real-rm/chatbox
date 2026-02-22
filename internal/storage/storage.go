@@ -12,6 +12,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/real-rm/chatbox/internal/constants"
 	"github.com/real-rm/chatbox/internal/metrics"
 	"github.com/real-rm/chatbox/internal/session"
@@ -267,6 +268,11 @@ func (s *StorageService) CreateSession(sess *session.Session) error {
 	if sess.ID == "" {
 		return ErrInvalidSessionID
 	}
+
+	start := time.Now()
+	defer func() {
+		metrics.MongoDBOperationDuration.With(prometheus.Labels{"operation": "create_session"}).Observe(time.Since(start).Seconds())
+	}()
 
 	ctx, cancel := util.NewTimeoutContext(constants.DefaultContextTimeout)
 	defer cancel()
@@ -579,6 +585,11 @@ func (s *StorageService) EndSession(sessionID string, endTime time.Time) error {
 		return ErrInvalidSessionID
 	}
 
+	start := time.Now()
+	defer func() {
+		metrics.MongoDBOperationDuration.With(prometheus.Labels{"operation": "end_session"}).Observe(time.Since(start).Seconds())
+	}()
+
 	ctx, cancel := util.NewTimeoutContext(constants.SessionEndTimeout)
 	defer cancel()
 
@@ -846,6 +857,11 @@ func (s *StorageService) ListAllSessions(limit int) ([]*SessionMetadata, error) 
 // ListAllSessionsWithOptions lists all sessions with filtering, sorting, and pagination
 // This method is designed for admin dashboards to efficiently query large session datasets
 func (s *StorageService) ListAllSessionsWithOptions(opts *SessionListOptions) ([]*SessionMetadata, error) {
+	start := time.Now()
+	defer func() {
+		metrics.MongoDBOperationDuration.With(prometheus.Labels{"operation": "list_all_sessions_with_options"}).Observe(time.Since(start).Seconds())
+	}()
+
 	ctx, cancel := util.NewTimeoutContext(constants.MetricsTimeout)
 	defer cancel()
 
@@ -1008,6 +1024,11 @@ func (s *StorageService) GetSessionMetrics(startTime, endTime time.Time) (*Metri
 	if endTime.Before(startTime) {
 		return nil, errors.New("end time must be after start time")
 	}
+
+	opStart := time.Now()
+	defer func() {
+		metrics.MongoDBOperationDuration.With(prometheus.Labels{"operation": "get_session_metrics"}).Observe(time.Since(opStart).Seconds())
+	}()
 
 	ctx, cancel := util.NewTimeoutContext(constants.MetricsTimeout)
 	defer cancel()

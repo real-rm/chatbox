@@ -1,16 +1,21 @@
 package main
 
 import (
+	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
+	"github.com/gin-gonic/gin"
+	chatbox "github.com/real-rm/chatbox"
+	"github.com/real-rm/chatbox/internal/constants"
 	"github.com/real-rm/goconfig"
 	"github.com/real-rm/golog"
-
-	"github.com/real-rm/chatbox/internal/constants"
+	"github.com/real-rm/gomongo"
 )
 
 // loadConfiguration loads the configuration and returns the config accessor
@@ -80,9 +85,48 @@ func runWithSignalChannel(sigChan chan os.Signal) error {
 	port := getServerPort(cfg, logger)
 	logger.Info("Server starting", "port", port)
 
+	// Initialize MongoDB
+	mongo, err := gomongo.InitMongoDB(logger, cfg)
+	if err != nil {
+		return fmt.Errorf("failed to initialize MongoDB: %w", err)
+	}
+
+	// Create Gin engine and register chatbox routes
+	r := gin.Default()
+	if err := chatbox.Register(r, cfg, logger, mongo); err != nil {
+		return fmt.Errorf("failed to register chatbox: %w", err)
+	}
+
+	// Create and start HTTP server
+	addr := fmt.Sprintf(":%d", port)
+	srv := NewHTTPServer(addr, r)
+
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logger.Error("HTTP server error", "error", err)
+		}
+	}()
+
+	logger.Info("Server started", "addr", addr)
+
 	// Wait for shutdown signal
 	<-sigChan
 	logger.Info("Shutting down gracefully")
+
+	// Graceful shutdown with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Shutdown chatbox service first (closes WebSocket connections, stops background goroutines)
+	if err := chatbox.Shutdown(ctx); err != nil {
+		logger.Warn("Chatbox shutdown error", "error", err)
+	}
+
+	// Then shutdown HTTP server
+	if err := srv.Shutdown(ctx); err != nil {
+		logger.Warn("HTTP server shutdown error", "error", err)
+		return err
+	}
 
 	return nil
 }

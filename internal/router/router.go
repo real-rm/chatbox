@@ -436,7 +436,7 @@ func (mr *MessageRouter) getOrCreateSession(conn *websocket.Connection, sessionI
 	// Session not found - create new one
 	// No else needed: early return pattern (guard clause)
 	if errors.Is(err, session.ErrSessionNotFound) {
-		return mr.createNewSession(conn, sessionID)
+		return mr.createNewSession(conn)
 	}
 
 	// Other error
@@ -444,7 +444,7 @@ func (mr *MessageRouter) getOrCreateSession(conn *websocket.Connection, sessionI
 }
 
 // createNewSession creates a new session for the user and persists it to the database
-func (mr *MessageRouter) createNewSession(conn *websocket.Connection, sessionID string) (*session.Session, error) {
+func (mr *MessageRouter) createNewSession(conn *websocket.Connection) (*session.Session, error) {
 	// Create session in memory
 	sess, err := mr.sessionManager.CreateSession(conn.UserID)
 	if err != nil {

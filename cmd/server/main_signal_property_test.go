@@ -24,6 +24,12 @@ var goconfigMutex sync.Mutex
 // For any valid shutdown signal (SIGTERM or SIGINT), the server should complete
 // its shutdown sequence and return without hanging.
 func TestProperty_SignalHandlingTriggersShutdown(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode (requires MongoDB)")
+	}
+	if !canRunFullServer() {
+		t.Skip("Full server test requires CHATBOX_SERVER_TEST=1 and running MongoDB (make docker-compose-up)")
+	}
 	parameters := gopter.DefaultTestParameters()
 	parameters.MinSuccessfulTests = 50
 	parameters.Workers = 1 // Force sequential execution to avoid goconfig state conflicts

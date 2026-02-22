@@ -67,6 +67,9 @@ type Connection struct {
 	// Roles are the user's roles from JWT
 	Roles []string
 
+	// connectedAt tracks when the connection was established for duration metrics
+	connectedAt time.Time
+
 	// send is a buffered channel for outbound messages
 	send chan []byte
 
@@ -294,6 +297,7 @@ func (h *Handler) createConnection(conn *websocket.Conn, claims *auth.Claims) *C
 			UserID:       claims.UserID,
 			Name:         claims.Name,
 			Roles:        claims.Roles,
+			connectedAt:  time.Now(),
 			send:         make(chan []byte, 256),
 		}
 	}
@@ -306,6 +310,7 @@ func (h *Handler) createConnection(conn *websocket.Conn, claims *auth.Claims) *C
 		UserID:       claims.UserID,
 		Name:         claims.Name,
 		Roles:        claims.Roles,
+		connectedAt:  time.Now(),
 		send:         make(chan []byte, 256),
 	}
 }
@@ -568,6 +573,11 @@ func (c *Connection) readPump(h *Handler) {
 			"session_id", sid,
 			"component", "websocket")
 
+		// Record connection duration metric
+		if !c.connectedAt.IsZero() {
+			metrics.WebSocketConnectionDuration.Observe(time.Since(c.connectedAt).Seconds())
+		}
+
 		// Unregister from router if we have a session ID
 		if sid != "" && h.router != nil {
 			h.router.UnregisterConnection(sid)
@@ -826,33 +836,38 @@ func (c *Connection) writePump() {
 	for {
 		select {
 		case message, ok := <-c.send:
-			// Set write deadline
+			// Acquire mutex to prevent concurrent writes with ShutdownWithContext.
+			// gorilla/websocket forbids concurrent writes to *websocket.Conn.
+			c.mu.Lock()
 			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
 
-			// No else needed: channel closed handling (sends close and returns)
 			if !ok {
 				// Channel closed, send close message
 				c.conn.WriteMessage(websocket.CloseMessage, []byte{})
+				c.mu.Unlock()
 				return
 			}
 
-			// No else needed: error handling with return (exits function)
 			// Write each message as a separate WebSocket frame
 			// This ensures proper JSON parsing on the client side
 			if err := c.conn.WriteMessage(websocket.TextMessage, message); err != nil {
+				c.mu.Unlock()
 				return
 			}
+			c.mu.Unlock()
 
 			// Increment messages sent metric
 			metrics.MessagesSent.Inc()
 
 		case <-ticker.C:
-			// No else needed: error handling with return (exits function)
-			// Send ping message
+			// Acquire mutex to prevent concurrent writes with ShutdownWithContext.
+			c.mu.Lock()
 			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+				c.mu.Unlock()
 				return
 			}
+			c.mu.Unlock()
 		}
 	}
 }

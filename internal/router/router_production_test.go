@@ -199,7 +199,7 @@ func TestProductionIssue02_CreateNewSessionFlow(t *testing.T) {
 
 		// Sub-task 2.3.2: Test createNewSession method
 		t.Log("Sub-task 2.3.2: Testing createNewSession method...")
-		sess, err := mr.createNewSession(conn, "client-session-id")
+		sess, err := mr.createNewSession(conn)
 		require.NoError(t, err, "createNewSession should succeed")
 		require.NotNil(t, sess, "Session should not be nil")
 		assert.NotEmpty(t, sess.ID, "Session should have an ID")
@@ -260,7 +260,7 @@ func TestProductionIssue02_CreateNewSessionFlow(t *testing.T) {
 
 		// Attempt to create session (should fail)
 		t.Log("Attempting to create session with failing storage...")
-		sess, err := mr.createNewSession(conn, "client-session-id")
+		sess, err := mr.createNewSession(conn)
 
 		// Verify error is returned
 		assert.Error(t, err, "createNewSession should return error on storage failure")

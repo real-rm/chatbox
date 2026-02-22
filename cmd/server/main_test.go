@@ -1,6 +1,7 @@
 package main
 
 import (
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -291,6 +292,12 @@ func TestSetupSignalHandler(t *testing.T) {
 // **Validates: Requirements 6.5**
 func TestRunWithSignalChannel(t *testing.T) {
 	t.Run("SuccessfulRun", func(t *testing.T) {
+		if testing.Short() {
+			t.Skip("Skipping integration test in short mode (requires MongoDB)")
+		}
+		if !canRunFullServer() {
+			t.Skip("Full server test requires CHATBOX_SERVER_TEST=1 and running MongoDB (make docker-compose-up)")
+		}
 		clearEnvVars()
 		defer clearEnvVars()
 		setupConfigFile()
@@ -360,6 +367,12 @@ func TestRunWithSignalChannel(t *testing.T) {
 	})
 
 	t.Run("RunWithLoggerError", func(t *testing.T) {
+		if testing.Short() {
+			t.Skip("Skipping integration test in short mode (requires MongoDB)")
+		}
+		if !canRunFullServer() {
+			t.Skip("Full server test requires CHATBOX_SERVER_TEST=1 and running MongoDB (make docker-compose-up)")
+		}
 		clearEnvVars()
 		defer clearEnvVars()
 		setupConfigFile()
@@ -379,14 +392,15 @@ func TestRunWithSignalChannel(t *testing.T) {
 		}()
 
 		// Wait to see if it fails or succeeds
+		// The function may fail at logger init, at MongoDB init, or start the full server
 		select {
 		case err := <-errChan:
 			if err != nil {
-				t.Logf("Run failed with logger error (expected): %v", err)
+				t.Logf("Run failed with initialization error (expected): %v", err)
 			} else {
-				t.Log("Run succeeded (golog may allow invalid log dir)")
+				t.Log("Run succeeded (unexpected in unit test mode)")
 			}
-		case <-time.After(200 * time.Millisecond):
+		case <-time.After(2 * time.Second):
 			// If still running, send signal to stop
 			sigChan <- syscall.SIGTERM
 			select {
@@ -396,7 +410,7 @@ func TestRunWithSignalChannel(t *testing.T) {
 				} else {
 					t.Log("Run completed successfully")
 				}
-			case <-time.After(1 * time.Second):
+			case <-time.After(5 * time.Second):
 				t.Fatal("Run did not complete after signal")
 			}
 		}
@@ -408,6 +422,12 @@ func TestRunWithSignalChannel(t *testing.T) {
 // **Validates: Requirements 6.5**
 func TestRunMain(t *testing.T) {
 	t.Run("RunMainWithSignal", func(t *testing.T) {
+		if testing.Short() {
+			t.Skip("Skipping integration test in short mode (requires MongoDB)")
+		}
+		if !canRunFullServer() {
+			t.Skip("Full server test requires CHATBOX_SERVER_TEST=1 and running MongoDB (make docker-compose-up)")
+		}
 		clearEnvVars()
 		defer clearEnvVars()
 		setupConfigFile()
@@ -1211,6 +1231,22 @@ func TestNewHTTPServer(t *testing.T) {
 }
 
 // Helper functions
+
+// canRunFullServer checks if the full server integration test environment is available.
+// Since runWithSignalChannel now initializes MongoDB and starts the full server,
+// these tests require a properly configured MongoDB instance with valid credentials.
+// Set CHATBOX_SERVER_TEST=1 after running `make docker-compose-up` to enable.
+func canRunFullServer() bool {
+	if os.Getenv("CHATBOX_SERVER_TEST") == "" {
+		return false
+	}
+	conn, err := net.DialTimeout("tcp", "localhost:27017", 1*time.Second)
+	if err != nil {
+		return false
+	}
+	conn.Close()
+	return true
+}
 
 func contains(slice []string, item string) bool {
 	for _, s := range slice {

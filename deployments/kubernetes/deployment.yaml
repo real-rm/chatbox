@@ -71,7 +71,7 @@ spec:
       containers:
       - name: chatbox
         image: chatbox-websocket:latest
-        imagePullPolicy: IfNotPresent
+        imagePullPolicy: Always
         
         ports:
         - name: http
@@ -248,64 +248,6 @@ spec:
       #             - chatbox
       #         topologyKey: kubernetes.io/hostname
 
----
-# Horizontal Pod Autoscaler - scales based on resource and application metrics
-apiVersion: autoscaling/v2
-kind: HorizontalPodAutoscaler
-metadata:
-  name: chatbox-websocket-hpa
-  namespace: default
-spec:
-  scaleTargetRef:
-    apiVersion: apps/v1
-    kind: Deployment
-    name: chatbox-websocket
-  minReplicas: 3
-  maxReplicas: 10
-  metrics:
-  # Resource-based metrics
-  - type: Resource
-    resource:
-      name: cpu
-      target:
-        type: Utilization
-        averageUtilization: 70
-  - type: Resource
-    resource:
-      name: memory
-      target:
-        type: Utilization
-        averageUtilization: 80
-  # Application-level metrics (requires Prometheus Adapter or similar)
-  # Uncomment when Prometheus Adapter is configured in your cluster
-  # - type: Pods
-  #   pods:
-  #     metric:
-  #       name: chatbox_websocket_connections_total
-  #     target:
-  #       type: AverageValue
-  #       averageValue: "100"  # Scale when average connections per pod exceeds 100
-  # - type: Pods
-  #   pods:
-  #     metric:
-  #       name: chatbox_active_sessions_total
-  #     target:
-  #       type: AverageValue
-  #       averageValue: "50"  # Scale when average active sessions per pod exceeds 50
-  behavior:
-    scaleDown:
-      stabilizationWindowSeconds: 300
-      policies:
-      - type: Percent
-        value: 50
-        periodSeconds: 60
-    scaleUp:
-      stabilizationWindowSeconds: 0
-      policies:
-      - type: Percent
-        value: 100
-        periodSeconds: 30
-      - type: Pods
-        value: 2
-        periodSeconds: 30
-      selectPolicy: Max
+
+# NOTE: HPA is defined in hpa.yaml as the single source of truth.
+# Do not add HPA definitions here to avoid conflicts.

@@ -17,12 +17,13 @@ import (
 
 // NotificationService handles sending email and SMS notifications
 type NotificationService struct {
-	mailer      *gomail.Mailer
-	smsSender   *gosms.SMSSender
-	logger      *golog.Logger
-	config      *goconfig.ConfigAccessor
-	rateLimiter *RateLimiter
-	mu          sync.RWMutex
+	mailer        *gomail.Mailer
+	smsSender     *gosms.SMSSender
+	logger        *golog.Logger
+	config        *goconfig.ConfigAccessor
+	rateLimiter   *RateLimiter
+	adminPanelURL string // Admin panel URL for help request links
+	mu            sync.RWMutex
 }
 
 // RateLimiter prevents notification flooding
@@ -127,12 +128,19 @@ func NewNotificationService(
 	// Create rate limiter: max 5 notifications per 5 minutes per event type
 	rateLimiter := NewRateLimiter(5*time.Minute, 5)
 
+	// Read admin panel URL: environment variable takes precedence over config
+	adminPanelURL := os.Getenv("ADMIN_PANEL_URL")
+	if adminPanelURL == "" {
+		adminPanelURL, _ = config.ConfigString("notification.adminPanelURL")
+	}
+
 	return &NotificationService{
-		mailer:      mailer,
-		smsSender:   smsSender,
-		logger:      logger,
-		config:      config,
-		rateLimiter: rateLimiter,
+		mailer:        mailer,
+		smsSender:     smsSender,
+		logger:        logger,
+		config:        config,
+		rateLimiter:   rateLimiter,
+		adminPanelURL: adminPanelURL,
 	}, nil
 }
 
@@ -162,16 +170,7 @@ func (ns *NotificationService) SendHelpRequestAlert(userID, sessionID string) er
 		msg := &gomail.EmailMessage{
 			To:      adminEmails,
 			Subject: fmt.Sprintf("Help Request - User %s", userID),
-			HTML: fmt.Sprintf(`
-				<h2>User Help Request</h2>
-				<p>A user has requested assistance.</p>
-				<ul>
-					<li><strong>User ID:</strong> %s</li>
-					<li><strong>Session ID:</strong> %s</li>
-					<li><strong>Time:</strong> %s</li>
-				</ul>
-				<p><a href="https://admin.example.com/sessions/%s">View Session</a></p>
-			`, userID, sessionID, time.Now().Format(time.RFC3339), sessionID),
+			HTML:    buildHelpRequestHTML(userID, sessionID, ns.adminPanelURL),
 			Text: fmt.Sprintf("Help Request - User: %s, Session: %s, Time: %s",
 				userID, sessionID, time.Now().Format(time.RFC3339)),
 		}
@@ -388,6 +387,26 @@ func (ns *NotificationService) getAdminPhones() ([]string, error) {
 	}
 
 	return phones, nil
+}
+
+// buildHelpRequestHTML builds the HTML body for help request email notifications.
+// If adminURL is empty, no link is rendered (safe fallback).
+func buildHelpRequestHTML(userID, sessionID, adminURL string) string {
+	timestamp := time.Now().Format(time.RFC3339)
+	linkSection := "<p>Please check the admin panel to view this session.</p>"
+	if adminURL != "" {
+		linkSection = fmt.Sprintf(`<p><a href="%s/%s">View Session</a></p>`, adminURL, sessionID)
+	}
+	return fmt.Sprintf(`
+		<h2>User Help Request</h2>
+		<p>A user has requested assistance.</p>
+		<ul>
+			<li><strong>User ID:</strong> %s</li>
+			<li><strong>Session ID:</strong> %s</li>
+			<li><strong>Time:</strong> %s</li>
+		</ul>
+		%s
+	`, userID, sessionID, timestamp, linkSection)
 }
 
 // splitAndTrim splits a string by comma and trims whitespace

@@ -1,3 +1,8 @@
+// LOCK ORDERING INVARIANT:
+// SessionManager.mu must always be acquired BEFORE Session.mu.
+// Never acquire SessionManager.mu while holding Session.mu — this will deadlock.
+// Correct:  sm.mu.Lock() → session.mu.Lock()
+// Wrong:    session.mu.Lock() → sm.mu.Lock()
 package session
 
 import (
@@ -811,8 +816,9 @@ func (sm *SessionManager) GetAssistingAdmin(sessionID string) (string, string, e
 	return session.AssistingAdminID, session.AssistingAdminName, nil
 }
 
-// RLock acquires a read lock on the session
-// This is used by external packages that need to safely read session fields
+// RLock acquires a read lock on the session.
+// WARNING: Do not acquire SessionManager.mu while holding this lock.
+// Lock ordering: SessionManager.mu → Session.mu
 func (s *Session) RLock() {
 	s.mu.RLock()
 }
@@ -822,8 +828,9 @@ func (s *Session) RUnlock() {
 	s.mu.RUnlock()
 }
 
-// Lock acquires a write lock on the session
-// This is used by external packages that need to safely modify session fields
+// Lock acquires a write lock on the session.
+// WARNING: Do not acquire SessionManager.mu while holding this lock.
+// Lock ordering: SessionManager.mu → Session.mu
 func (s *Session) Lock() {
 	s.mu.Lock()
 }

@@ -48,5 +48,8 @@ logs/
 tmp/
 temp/
 
+# Kubernetes secrets (use secret.yaml.template as the base)
+deployments/kubernetes/secret.yaml
+
 # Embedded git repositories
 goapidocs/

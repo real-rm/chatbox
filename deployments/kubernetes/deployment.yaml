@@ -38,6 +38,7 @@ spec:
     spec:
       # Service account for Kubernetes API access (if needed)
       serviceAccountName: default
+      automountServiceAccountToken: false
       
       # Security context for pod
       securityContext:
@@ -51,6 +52,21 @@ spec:
       - name: wait-for-mongo
         image: busybox:1.36
         command: ['sh', '-c', 'until nc -z mongo-service 27017; do echo waiting for mongo; sleep 2; done']
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 65534
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            cpu: 10m
+            memory: 16Mi
+          limits:
+            cpu: 50m
+            memory: 32Mi
       
       containers:
       - name: chatbox

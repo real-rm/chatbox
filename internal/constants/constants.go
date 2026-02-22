@@ -37,6 +37,7 @@ const (
 	MaxEventsPerUser      = 1000    // Maximum rate limit events tracked per user
 	MaxUsersTracked       = 100000  // Maximum distinct users in rate limiter map
 	PublicEndpointRate    = 60      // Requests per minute for public endpoints (healthz, readyz, metrics)
+	MaxLLMErrorBodySize   = 1024    // Max bytes to read from LLM provider error responses
 )
 
 // HTTP Server Timeouts (for standalone server mode)

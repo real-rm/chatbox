@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -196,6 +197,9 @@ func loadLLMProviders(cfg *goconfig.ConfigAccessor) ([]LLMProviderConfig, error)
 		}
 		if provider.Endpoint == "" {
 			return nil, fmt.Errorf("provider %d: endpoint is required", i)
+		}
+		if err := ValidateEndpoint(provider.Endpoint); err != nil {
+			return nil, fmt.Errorf("provider %d: %w", i, err)
 		}
 		if provider.APIKey == "" {
 			return nil, fmt.Errorf("provider %d: API key is required", i)
@@ -420,6 +424,7 @@ func (s *LLMService) StreamMessage(ctx context.Context, modelID string, messages
 			wrappedChan := make(chan *LLMChunk)
 			go func() {
 				defer close(wrappedChan)
+				defer recoverStreamPanic(wrappedChan, providerName)
 				firstChunk := true
 				for chunk := range chunkChan {
 					// Record latency for first chunk (time to first token)
@@ -518,6 +523,35 @@ func (s *LLMService) getProviderName(modelID string) string {
 	}
 
 	return "unknown"
+}
+
+// ValidateEndpoint validates that an LLM provider endpoint URL uses HTTPS and has a host.
+// This prevents SSRF by rejecting non-HTTPS endpoints at startup.
+func ValidateEndpoint(endpoint string) error {
+	u, err := url.Parse(endpoint)
+	if err != nil {
+		return fmt.Errorf("invalid endpoint URL: %w", err)
+	}
+	if u.Scheme != "https" {
+		return fmt.Errorf("endpoint must use https scheme, got %q", u.Scheme)
+	}
+	if u.Host == "" {
+		return fmt.Errorf("endpoint must have a host")
+	}
+	return nil
+}
+
+// recoverStreamPanic returns a deferred function for panic recovery in streaming goroutines.
+// On panic, it sends a Done chunk to the channel and increments the error metric.
+func recoverStreamPanic(chunkChan chan<- *LLMChunk, component string) {
+	if r := recover(); r != nil {
+		metrics.LLMErrors.WithLabelValues(component).Inc()
+		// Best-effort send; if the channel is already closed or full, skip.
+		select {
+		case chunkChan <- &LLMChunk{Done: true}:
+		default:
+		}
+	}
 }
 
 // isRetryableError determines if an error should trigger a retry

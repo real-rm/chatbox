@@ -165,6 +165,7 @@ fromNumber = "+1234567890"
 
 # Notification Configuration
 [notification]
+adminPanelURL = ""
 adminEmails = ["admin@example.com"]
 adminPhones = ["+1234567890"]
 

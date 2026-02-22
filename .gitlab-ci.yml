@@ -19,10 +19,10 @@ docker-build:
   before_script:
     - docker info
   script:
-    # Build the Docker image with GitHub token for private modules
+    # Build the Docker image with BuildKit secrets for private modules
     - |
-      docker build \
-        --build-arg GITHUB_TOKEN=$GITHUB_TOKEN \
+      DOCKER_BUILDKIT=1 docker build \
+        --secret id=github_token,env=GITHUB_TOKEN \
         -t chatbox-websocket:ci-test \
         .
     # Verify image was created
@@ -47,8 +47,8 @@ docker-build-push:
     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
   script:
     - |
-      docker build \
-        --build-arg GITHUB_TOKEN=$GITHUB_TOKEN \
+      DOCKER_BUILDKIT=1 docker build \
+        --secret id=github_token,env=GITHUB_TOKEN \
         -t $IMAGE_TAG \
         -t $CI_REGISTRY_IMAGE:latest \
         .

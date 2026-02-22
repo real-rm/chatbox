@@ -18,10 +18,11 @@ import (
 // Security Risk: Deploying with placeholder secrets exposes the system to unauthorized access
 //
 // Expected Result: Test documents placeholder secrets in the template file and passes with warnings
-// NOTE: secret.yaml is intentionally a template file with placeholders for documentation purposes
+// NOTE: secret.yaml.template is the checked-in template with placeholders for documentation purposes.
+// The actual secret.yaml is .gitignored and must be created per-environment.
 func TestProductionIssue06_PlaceholderSecrets(t *testing.T) {
-	// Step 6.2.1: Read secret.yaml file
-	secretPath := filepath.Join("secret.yaml")
+	// Step 6.2.1: Read secret.yaml.template file
+	secretPath := filepath.Join("secret.yaml.template")
 	data, err := os.ReadFile(secretPath)
 	if err != nil {
 		t.Fatalf("Failed to read secret.yaml: %v", err)

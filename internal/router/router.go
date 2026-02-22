@@ -1193,33 +1193,30 @@ func (mr *MessageRouter) handleChatError(sessionID string, chatErr *chaterrors.C
 			"error", err)
 	}
 
-	// If fatal error, close the connection
-	// No else needed: optional operation, only close connection for fatal errors
+	// If fatal error, close the connection asynchronously so the caller is not blocked
 	if chatErr.IsFatal() {
 		mr.logger.Info("Fatal error, closing connection",
 			"session_id", sessionID,
 			"error_code", chatErr.Code)
 
-		// Get connection and close it
 		mr.mu.RLock()
 		conn, exists := mr.connections[sessionID]
 		mr.mu.RUnlock()
 
-		// No else needed: optional operation, only close if connection exists
 		if exists {
-			// Give a brief moment for the error message to be sent
-			time.Sleep(constants.InitialRetryDelay)
+			closeSID := sessionID
+			util.SafeGo(mr.logger, "fatal-error-close", func() {
+				// Give a brief moment for the error message to be sent
+				time.Sleep(constants.InitialRetryDelay)
 
-			// Close the connection
-			// No else needed: optional operation (fire-and-forget), failure is logged but not fatal
-			if err := conn.Close(); err != nil {
-				mr.logger.Warn("Failed to close connection",
-					"session_id", sessionID,
-					"error", err)
-			}
+				if err := conn.Close(); err != nil {
+					mr.logger.Warn("Failed to close connection",
+						"session_id", closeSID,
+						"error", err)
+				}
 
-			// Unregister the connection
-			mr.UnregisterConnection(sessionID)
+				mr.UnregisterConnection(closeSID)
+			})
 		}
 	}
 

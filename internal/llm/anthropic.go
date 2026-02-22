@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/real-rm/chatbox/internal/constants"
 )
 
 // AnthropicProvider implements the LLMProvider interface for Anthropic API
@@ -135,7 +137,7 @@ func (p *AnthropicProvider) SendMessage(ctx context.Context, req *LLMRequest) (*
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, constants.MaxLLMErrorBodySize))
 		return nil, fmt.Errorf("Anthropic API error (status %d): %s", resp.StatusCode, string(body))
 	}
 
@@ -205,7 +207,7 @@ func (p *AnthropicProvider) StreamMessage(ctx context.Context, req *LLMRequest) 
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, constants.MaxLLMErrorBodySize))
 		resp.Body.Close()
 		return nil, fmt.Errorf("Anthropic API error (status %d): %s", resp.StatusCode, string(body))
 	}
@@ -215,6 +217,7 @@ func (p *AnthropicProvider) StreamMessage(ctx context.Context, req *LLMRequest) 
 
 	go func() {
 		defer close(chunkChan)
+		defer recoverStreamPanic(chunkChan, "anthropic")
 		defer resp.Body.Close()
 
 		scanner := bufio.NewScanner(resp.Body)

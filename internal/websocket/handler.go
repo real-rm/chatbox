@@ -200,14 +200,17 @@ func (h *Handler) checkOrigin(r *http.Request) bool {
 // 3. Upgrade the HTTP connection to WebSocket
 // 4. Create a Connection struct with user context
 func (h *Handler) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
-	// Extract token from query parameter or Authorization header
-	token := r.URL.Query().Get("token")
-	// No else needed: try alternative source (Authorization header)
+	// Extract token: prefer Authorization header, fall back to query parameter
+	var token string
+	authHeader := r.Header.Get("Authorization")
+	if len(authHeader) > 7 && authHeader[:7] == "Bearer " {
+		token = authHeader[7:]
+	}
 	if token == "" {
-		// Try Authorization header
-		authHeader := r.Header.Get("Authorization")
-		if len(authHeader) > 7 && authHeader[:7] == "Bearer " {
-			token = authHeader[7:]
+		token = r.URL.Query().Get("token")
+		if token != "" {
+			h.logger.Warn("JWT provided via query parameter (deprecated, use Authorization header)",
+				"component", "websocket")
 		}
 	}
 
@@ -557,15 +560,15 @@ func (c *Connection) sendErrorResponse(code chaterrors.ErrorCode, msg string) {
 // - Graceful cleanup on connection close or error
 func (c *Connection) readPump(h *Handler) {
 	defer func() {
+		sid := c.GetSessionID()
 		h.logger.Info("WebSocket connection closed",
 			"user_id", c.UserID,
-			"session_id", c.SessionID,
+			"session_id", sid,
 			"component", "websocket")
 
-		// No else needed: conditional cleanup (only if session ID is set)
 		// Unregister from router if we have a session ID
-		if c.SessionID != "" && h.router != nil {
-			h.router.UnregisterConnection(c.SessionID)
+		if sid != "" && h.router != nil {
+			h.router.UnregisterConnection(sid)
 		}
 
 		h.unregisterConnection(c)
@@ -580,7 +583,7 @@ func (c *Connection) readPump(h *Handler) {
 		c.conn.SetReadDeadline(time.Now().Add(pongWait))
 		h.logger.Debug("Heartbeat pong received",
 			"user_id", c.UserID,
-			"session_id", c.SessionID,
+			"session_id", c.GetSessionID(),
 			"component", "websocket")
 		return nil
 	})
@@ -601,12 +604,12 @@ func (c *Connection) readPump(h *Handler) {
 			} else if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 				util.LogError(h.logger, "websocket", "handle unexpected close", err,
 					"user_id", c.UserID,
-					"session_id", c.SessionID,
+					"session_id", c.GetSessionID(),
 					"connection_id", c.ConnectionID)
 			} else {
 				h.logger.Info("WebSocket connection closing",
 					"user_id", c.UserID,
-					"session_id", c.SessionID,
+					"session_id", c.GetSessionID(),
 					"connection_id", c.ConnectionID,
 					"component", "websocket")
 			}
@@ -656,7 +659,7 @@ func (c *Connection) readPump(h *Handler) {
 
 		h.logger.Debug("Message received",
 			"user_id", c.UserID,
-			"session_id", c.SessionID,
+			"session_id", c.GetSessionID(),
 			"connection_id", c.ConnectionID,
 			"message_type", msg.Type,
 			"component", "websocket")
@@ -667,49 +670,53 @@ func (c *Connection) readPump(h *Handler) {
 		// Route message to message router
 		// No else needed: router is required for message processing
 		if h.router != nil {
-			// No else needed: conditional registration (only if session ID present and not yet set)
-			// If message has a session ID and connection doesn't have one yet, set it
-			if msg.SessionID != "" && c.SessionID == "" {
+			// If message has a session ID and connection doesn't have one yet, set it.
+			// Both check and assign are under the same lock to avoid a data race.
+			if msg.SessionID != "" {
+				needsRegister := false
 				c.mu.Lock()
-				c.SessionID = msg.SessionID
+				if c.SessionID == "" {
+					c.SessionID = msg.SessionID
+					needsRegister = true
+				}
 				c.mu.Unlock()
 
-				// No else needed: error handling with continue (skips to next iteration)
-				// Register connection with router for this session
-				if err := h.router.RegisterConnection(msg.SessionID, c); err != nil {
-					util.LogError(h.logger, "websocket", "register connection with router", err,
+				if needsRegister {
+					if err := h.router.RegisterConnection(msg.SessionID, c); err != nil {
+						util.LogError(h.logger, "websocket", "register connection with router", err,
+							"user_id", c.UserID,
+							"session_id", msg.SessionID,
+							"connection_id", c.ConnectionID)
+
+						// Send error response to client for registration failure
+						errorMsg := &message.Message{
+							Type:      message.TypeError,
+							SessionID: msg.SessionID,
+							Sender:    message.SenderAI,
+							Error: &message.ErrorInfo{
+								Code:        string(chaterrors.ErrCodeServiceError),
+								Message:     "Failed to establish session connection",
+								Recoverable: true,
+							},
+							Timestamp: time.Now(),
+						}
+						if errorBytes, err := json.Marshal(errorMsg); err == nil {
+							select {
+							case c.send <- errorBytes:
+							default:
+								h.logger.Warn("Failed to send registration error, channel full",
+									"user_id", c.UserID,
+									"connection_id", c.ConnectionID)
+							}
+						}
+						continue
+					}
+
+					h.logger.Info("Connection registered with router",
 						"user_id", c.UserID,
 						"session_id", msg.SessionID,
 						"connection_id", c.ConnectionID)
-
-					// Send error response to client for registration failure
-					errorMsg := &message.Message{
-						Type:      message.TypeError,
-						SessionID: msg.SessionID,
-						Sender:    message.SenderAI,
-						Error: &message.ErrorInfo{
-							Code:        string(chaterrors.ErrCodeServiceError),
-							Message:     "Failed to establish session connection",
-							Recoverable: true,
-						},
-						Timestamp: time.Now(),
-					}
-					if errorBytes, err := json.Marshal(errorMsg); err == nil {
-						select {
-						case c.send <- errorBytes:
-						default:
-							h.logger.Warn("Failed to send registration error, channel full",
-								"user_id", c.UserID,
-								"connection_id", c.ConnectionID)
-						}
-					}
-					continue
 				}
-
-				h.logger.Info("Connection registered with router",
-					"user_id", c.UserID,
-					"session_id", msg.SessionID,
-					"connection_id", c.ConnectionID)
 			}
 
 			// No else needed: error handling (logs and sends error response)
@@ -718,7 +725,7 @@ func (c *Connection) readPump(h *Handler) {
 				// Log detailed error server-side
 				util.LogError(h.logger, "websocket", "route message", err,
 					"user_id", c.UserID,
-					"session_id", c.SessionID,
+					"session_id", c.GetSessionID(),
 					"connection_id", c.ConnectionID,
 					"message_type", msg.Type)
 
@@ -729,7 +736,6 @@ func (c *Connection) readPump(h *Handler) {
 				var chatErr *chaterrors.ChatError
 				var errorInfo *message.ErrorInfo
 
-				// No else needed: type assertion with specific handling
 				if errors.As(err, &chatErr) {
 					// Use the ChatError's error info
 					errorInfo = chatErr.ToErrorInfo()
@@ -739,7 +745,7 @@ func (c *Connection) readPump(h *Handler) {
 						"error_category", chatErr.Category,
 						"recoverable", chatErr.Recoverable,
 						"user_id", c.UserID,
-						"session_id", c.SessionID)
+						"session_id", c.GetSessionID())
 				} else {
 					// For non-ChatError errors, create a generic error response
 					errorInfo = &message.ErrorInfo{

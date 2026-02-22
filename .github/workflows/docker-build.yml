@@ -24,11 +24,10 @@ jobs:
       
       - name: Build Docker image
         env:
-          # Use GO_MODULES_TOKEN if available, fallback to WORKFLOW_TOKEN_GITHUB, then GITHUB_TOKEN
-          BUILD_TOKEN: ${{ secrets.GO_MODULES_TOKEN || secrets.WORKFLOW_TOKEN_GITHUB || secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GO_MODULES_TOKEN || secrets.WORKFLOW_TOKEN_GITHUB || secrets.GITHUB_TOKEN }}
         run: |
-          docker build \
-            --build-arg GITHUB_TOKEN=$BUILD_TOKEN \
+          DOCKER_BUILDKIT=1 docker build \
+            --secret id=github_token,env=GITHUB_TOKEN \
             -t chatbox-websocket:ci-test \
             .
       

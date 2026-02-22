@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/real-rm/chatbox/internal/constants"
 	"github.com/real-rm/gohelper"
 )
 
@@ -108,7 +109,7 @@ func (p *DifyProvider) SendMessage(ctx context.Context, req *LLMRequest) (*LLMRe
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, constants.MaxLLMErrorBodySize))
 		return nil, fmt.Errorf("Dify API error (status %d): %s", resp.StatusCode, string(body))
 	}
 
@@ -166,7 +167,7 @@ func (p *DifyProvider) StreamMessage(ctx context.Context, req *LLMRequest) (<-ch
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, constants.MaxLLMErrorBodySize))
 		resp.Body.Close()
 		return nil, fmt.Errorf("Dify API error (status %d): %s", resp.StatusCode, string(body))
 	}
@@ -176,6 +177,7 @@ func (p *DifyProvider) StreamMessage(ctx context.Context, req *LLMRequest) (<-ch
 
 	go func() {
 		defer close(chunkChan)
+		defer recoverStreamPanic(chunkChan, "dify")
 		defer resp.Body.Close()
 
 		scanner := bufio.NewScanner(resp.Body)

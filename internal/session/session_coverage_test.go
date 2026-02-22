@@ -296,3 +296,106 @@ func TestSession_MutexHelpers_TableDriven(t *testing.T) {
 		})
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Thread-safe Session accessor methods
+// ---------------------------------------------------------------------------
+
+func TestSession_GetModelID(t *testing.T) {
+	logger := getTestLogger()
+	sm := NewSessionManager(15*time.Minute, logger)
+	sess, err := sm.CreateSession("user-getmodel")
+	require.NoError(t, err)
+
+	// Initially empty
+	assert.Equal(t, "", sess.GetModelID())
+
+	// Set via SessionManager (acquires locks properly)
+	err = sm.SetModelID(sess.ID, "gpt-4")
+	require.NoError(t, err)
+
+	// Getter returns updated value
+	assert.Equal(t, "gpt-4", sess.GetModelID())
+}
+
+func TestSession_GetAssistingAdminID(t *testing.T) {
+	logger := getTestLogger()
+	sm := NewSessionManager(15*time.Minute, logger)
+	sess, err := sm.CreateSession("user-getadmin")
+	require.NoError(t, err)
+
+	// Initially empty
+	assert.Equal(t, "", sess.GetAssistingAdminID())
+
+	// Set via SessionManager
+	err = sm.MarkAdminAssisted(sess.ID, "admin-1", "Admin One")
+	require.NoError(t, err)
+
+	assert.Equal(t, "admin-1", sess.GetAssistingAdminID())
+}
+
+func TestSession_GetAssistingAdminName(t *testing.T) {
+	logger := getTestLogger()
+	sm := NewSessionManager(15*time.Minute, logger)
+	sess, err := sm.CreateSession("user-getadminname")
+	require.NoError(t, err)
+
+	assert.Equal(t, "", sess.GetAssistingAdminName())
+
+	err = sm.MarkAdminAssisted(sess.ID, "admin-2", "Admin Two")
+	require.NoError(t, err)
+
+	assert.Equal(t, "Admin Two", sess.GetAssistingAdminName())
+}
+
+func TestSession_GetAdminAssistance(t *testing.T) {
+	logger := getTestLogger()
+	sm := NewSessionManager(15*time.Minute, logger)
+	sess, err := sm.CreateSession("user-getadminassist")
+	require.NoError(t, err)
+
+	// Initially empty
+	adminID, adminName := sess.GetAdminAssistance()
+	assert.Equal(t, "", adminID)
+	assert.Equal(t, "", adminName)
+
+	// Set admin
+	err = sm.MarkAdminAssisted(sess.ID, "admin-3", "Admin Three")
+	require.NoError(t, err)
+
+	adminID, adminName = sess.GetAdminAssistance()
+	assert.Equal(t, "admin-3", adminID)
+	assert.Equal(t, "Admin Three", adminName)
+
+	// Clear admin
+	err = sm.ClearAdminAssistance(sess.ID)
+	require.NoError(t, err)
+
+	adminID, adminName = sess.GetAdminAssistance()
+	assert.Equal(t, "", adminID)
+	assert.Equal(t, "", adminName)
+}
+
+func TestSession_GetModelID_Concurrent(t *testing.T) {
+	logger := getTestLogger()
+	sm := NewSessionManager(15*time.Minute, logger)
+	sess, err := sm.CreateSession("user-concurrent-model")
+	require.NoError(t, err)
+
+	err = sm.SetModelID(sess.ID, "gpt-4")
+	require.NoError(t, err)
+
+	// Concurrent reads should not race
+	done := make(chan struct{})
+	for i := 0; i < 10; i++ {
+		go func() {
+			defer func() { done <- struct{}{} }()
+			for j := 0; j < 100; j++ {
+				_ = sess.GetModelID()
+			}
+		}()
+	}
+	for i := 0; i < 10; i++ {
+		<-done
+	}
+}

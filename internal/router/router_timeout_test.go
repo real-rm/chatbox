@@ -31,6 +31,8 @@ func (m *mockHangingLLMService) StreamMessage(ctx context.Context, modelID strin
 	return chunkChan, nil
 }
 
+func (m *mockHangingLLMService) ValidateModel(modelID string) error { return nil }
+
 func TestHandleUserMessage_Timeout(t *testing.T) {
 	logger := createTestLogger()
 	sm := session.NewSessionManager(15*time.Minute, logger)

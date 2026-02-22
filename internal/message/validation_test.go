@@ -528,24 +528,24 @@ func TestSanitize_XSSPrevention(t *testing.T) {
 		expected string
 	}{
 		{
-			name:     "script tag",
+			name:     "script tag preserved for LLM",
 			input:    "<script>alert('XSS')</script>",
-			expected: "&lt;script&gt;alert(&#39;XSS&#39;)&lt;/script&gt;",
+			expected: "<script>alert('XSS')</script>",
 		},
 		{
-			name:     "img tag with onerror",
+			name:     "img tag preserved for LLM",
 			input:    "<img src=x onerror=alert('XSS')>",
-			expected: "&lt;img src=x onerror=alert(&#39;XSS&#39;)&gt;",
+			expected: "<img src=x onerror=alert('XSS')>",
 		},
 		{
-			name:     "javascript protocol",
+			name:     "javascript protocol preserved for LLM",
 			input:    "<a href='javascript:alert(1)'>Click</a>",
-			expected: "&lt;a href=&#39;javascript:alert(1)&#39;&gt;Click&lt;/a&gt;",
+			expected: "<a href='javascript:alert(1)'>Click</a>",
 		},
 		{
-			name:     "html entities",
+			name:     "html entities preserved for LLM",
 			input:    "Test & <test>",
-			expected: "Test &amp; &lt;test&gt;",
+			expected: "Test & <test>",
 		},
 	}
 
@@ -572,19 +572,19 @@ func TestSanitize_SQLInjectionPrevention(t *testing.T) {
 		expected string
 	}{
 		{
-			name:     "sql injection attempt",
+			name:     "sql injection preserved (use parameterized queries for SQL safety)",
 			input:    "'; DROP TABLE users; --",
-			expected: "&#39;; DROP TABLE users; --",
+			expected: "'; DROP TABLE users; --",
 		},
 		{
-			name:     "union select",
+			name:     "union select preserved",
 			input:    "1' UNION SELECT * FROM users--",
-			expected: "1&#39; UNION SELECT * FROM users--",
+			expected: "1' UNION SELECT * FROM users--",
 		},
 		{
-			name:     "comment injection",
+			name:     "comment injection preserved",
 			input:    "admin'--",
-			expected: "admin&#39;--",
+			expected: "admin'--",
 		},
 	}
 
@@ -669,25 +669,23 @@ func TestSanitize_AllFields(t *testing.T) {
 
 	msg.Sanitize()
 
-	// Verify all fields are sanitized (HTML escaped)
-	assert.Contains(t, msg.SessionID, "&lt;script&gt;")
-	assert.Contains(t, msg.Content, "&lt;img")
-	assert.Contains(t, msg.FileID, "&#39;")
-	assert.Contains(t, msg.FileURL, "javascript:alert(1)") // URLs are escaped but protocol remains
-	assert.Contains(t, msg.ModelID, "&lt;b&gt;")
+	// Verify all fields are sanitized (null bytes removed, whitespace trimmed)
+	// HTML escaping is NOT applied — it belongs at render time only
+	assert.Contains(t, msg.SessionID, "<script>")
+	assert.Contains(t, msg.Content, "<img")
+	assert.Contains(t, msg.FileID, "'")
+	assert.Contains(t, msg.FileURL, "javascript:alert(1)")
+	assert.Contains(t, msg.ModelID, "<b>")
 
-	// Check metadata - keys and values should be escaped
+	// Check metadata - keys and values should be preserved (no HTML escaping)
 	for key, value := range msg.Metadata {
-		// Keys and values should have HTML entities escaped
-		if strings.Contains(key, "&lt;") || strings.Contains(value, "&lt;") {
-			// At least one should be escaped
-			assert.True(t, true)
-		}
+		assert.Contains(t, key, "<")
+		assert.Contains(t, value, "<")
 	}
 
-	// Check error info
-	assert.Contains(t, msg.Error.Code, "&lt;")
-	assert.Contains(t, msg.Error.Message, "&lt;")
+	// Check error info - preserved as-is
+	assert.Contains(t, msg.Error.Code, "<")
+	assert.Contains(t, msg.Error.Message, "<")
 }
 
 // TestSanitize_EmptyStrings tests sanitization of empty strings
@@ -719,11 +717,9 @@ func TestSanitize_VeryLongStrings(t *testing.T) {
 
 	msg.Sanitize()
 
-	// Verify no script tags remain
-	assert.NotContains(t, msg.Content, "<script>")
-	assert.NotContains(t, msg.Content, "</script>")
-	// Verify content is escaped
-	assert.Contains(t, msg.Content, "&lt;script&gt;")
+	// Verify script tags are preserved (HTML escaping removed — render-time concern)
+	assert.Contains(t, msg.Content, "<script>")
+	assert.Contains(t, msg.Content, "</script>")
 }
 
 // TestValidationError_Error tests ValidationError error message formatting

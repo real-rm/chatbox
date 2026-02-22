@@ -133,9 +133,11 @@ run-dev: ## Run the application in development mode with hot reload
 
 ##@ Docker
 
-docker-build: ## Build Docker image
+docker-build: ## Build Docker image (set GITHUB_TOKEN env var for private module access)
 	@echo "$(COLOR_GREEN)Building Docker image: $(DOCKER_IMAGE)...$(COLOR_RESET)"
-	docker build -t $(DOCKER_IMAGE) .
+	DOCKER_BUILDKIT=1 docker build \
+		--secret id=github_token,env=GITHUB_TOKEN \
+		-t $(DOCKER_IMAGE) .
 	@echo "$(COLOR_GREEN)Docker image built: $(DOCKER_IMAGE)$(COLOR_RESET)"
 
 docker-run: ## Run Docker container
@@ -167,6 +169,13 @@ docker-compose-test: docker-compose-up ## Run tests against docker-compose envir
 
 k8s-deploy: ## Deploy to Kubernetes
 	@echo "$(COLOR_GREEN)Deploying to Kubernetes...$(COLOR_RESET)"
+	@if [ ! -f $(K8S_DIR)/secret.yaml ]; then \
+		echo "$(COLOR_RED)ERROR: $(K8S_DIR)/secret.yaml not found.$(COLOR_RESET)"; \
+		echo "$(COLOR_YELLOW)Generate it from the template:$(COLOR_RESET)"; \
+		echo "  cp $(K8S_DIR)/secret.yaml.template $(K8S_DIR)/secret.yaml"; \
+		echo "  # Then edit secret.yaml with real values"; \
+		exit 1; \
+	fi
 	kubectl apply -f $(K8S_DIR)/configmap.yaml
 	kubectl apply -f $(K8S_DIR)/secret.yaml
 	kubectl apply -f $(K8S_DIR)/deployment.yaml

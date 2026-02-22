@@ -32,10 +32,16 @@ func (m *mockLLMServiceForErrorTests) StreamMessage(ctx context.Context, modelID
 	return ch, nil
 }
 
+func (m *mockLLMServiceForErrorTests) ValidateModel(modelID string) error { return nil }
+
 // mockStorageServiceForErrorTests is a simple mock for error handling tests
 type mockStorageServiceForErrorTests struct{}
 
 func (m *mockStorageServiceForErrorTests) CreateSession(sess *session.Session) error {
+	return nil
+}
+
+func (m *mockStorageServiceForErrorTests) AddMessage(sessionID string, msg *session.Message) error {
 	return nil
 }
 

@@ -1,4 +1,6 @@
 # Multi-stage build for chatbox service
+# NOTE: For production, pin images by digest (e.g., golang:1.24-alpine@sha256:<digest>)
+# to ensure reproducible builds. Run: docker pull golang:1.24-alpine && docker inspect --format='{{index .RepoDigests 0}}'
 # Stage 1: Build the Go application
 FROM golang:1.24-alpine AS builder
 
@@ -71,8 +73,10 @@ USER chatbox
 EXPOSE 8080
 
 # Health check
-# Uses CHATBOX_PATH_PREFIX env var (default: /chat) to support custom path prefixes
-ENV CHATBOX_PATH_PREFIX=/chat
+# CHATBOX_PATH_PREFIX is set by config.toml (default: /chatbox).
+# Do NOT bake a default here — config.toml is the single source of truth.
+# Override at runtime: docker run -e CHATBOX_PATH_PREFIX=/chat ...
+ENV CHATBOX_PATH_PREFIX=/chatbox
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD wget --no-verbose --tries=1 --spider http://localhost:8080${CHATBOX_PATH_PREFIX}/healthz || exit 1
 

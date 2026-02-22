@@ -34,19 +34,8 @@ func TestProperty_InputSanitization(t *testing.T) {
 			// Sanitize the message
 			msg.Sanitize()
 
-			// Verify no script tags remain in any field
-			if containsUnsafeHTML(msg.Content) {
-				return false
-			}
-			if containsUnsafeHTML(msg.SessionID) {
-				return false
-			}
-			if containsUnsafeHTML(msg.FileID) {
-				return false
-			}
-			if containsUnsafeHTML(msg.ModelID) {
-				return false
-			}
+			// HTML escaping removed from Sanitize() — it belongs at render time only.
+			// Sanitize() now only strips null bytes and trims whitespace.
 
 			// Verify no null bytes remain
 			if strings.Contains(msg.Content, "\x00") {
@@ -78,14 +67,15 @@ func TestProperty_InputSanitization(t *testing.T) {
 // Feature: chat-application-websocket, Property 42: Input Sanitization (XSS Prevention)
 // **Validates: Requirements 13.2**
 //
-// For any user input containing XSS attack vectors, the Sanitize() method should
-// properly escape or remove the malicious content.
+// HTML escaping was removed from Sanitize() — it belongs at render time only.
+// Sanitize() now only strips null bytes and trims whitespace. This test verifies
+// those invariants hold for XSS-like input strings.
 func TestProperty_XSSPrevention(t *testing.T) {
 	parameters := gopter.DefaultTestParameters()
 	parameters.MinSuccessfulTests = 20
 	properties := gopter.NewProperties(parameters)
 
-	properties.Property("sanitize prevents XSS attacks", prop.ForAll(
+	properties.Property("sanitize strips null bytes and trims whitespace from XSS vectors", prop.ForAll(
 		func(xssVector string) bool {
 			msg := &Message{
 				Type:    TypeUserMessage,
@@ -93,30 +83,21 @@ func TestProperty_XSSPrevention(t *testing.T) {
 				Sender:  SenderUser,
 			}
 
-			// Sanitize the message
 			msg.Sanitize()
 
-			// Verify dangerous patterns are escaped
-			// Script tags should be escaped
-			if strings.Contains(msg.Content, "<script>") || strings.Contains(msg.Content, "</script>") {
+			// Null bytes must be removed
+			if strings.Contains(msg.Content, "\x00") {
 				return false
 			}
 
-			// Event handlers should be escaped
-			if strings.Contains(msg.Content, "onerror=") && !strings.Contains(msg.Content, "&") {
-				return false
-			}
-			if strings.Contains(msg.Content, "onclick=") && !strings.Contains(msg.Content, "&") {
+			// Leading/trailing whitespace must be trimmed
+			if msg.Content != strings.TrimSpace(msg.Content) {
 				return false
 			}
 
-			// JavaScript protocol should be escaped
-			if strings.Contains(msg.Content, "javascript:") && strings.Contains(msg.Content, "<") {
-				// If there's a tag with javascript:, it should be escaped
-				return false
-			}
-
-			return true
+			// Content should equal the input after removing null bytes and trimming
+			expected := strings.TrimSpace(strings.ReplaceAll(xssVector, "\x00", ""))
+			return msg.Content == expected
 		},
 		genXSSVector(),
 	))
@@ -127,14 +108,15 @@ func TestProperty_XSSPrevention(t *testing.T) {
 // Feature: chat-application-websocket, Property 42: Input Sanitization (SQL Injection Prevention)
 // **Validates: Requirements 13.2**
 //
-// For any user input containing SQL injection patterns, the Sanitize() method should
-// properly escape the malicious content.
+// HTML escaping was removed from Sanitize() — SQL injection prevention relies on
+// parameterized queries, not input-level escaping. Sanitize() now only strips null
+// bytes and trims whitespace. This test verifies those invariants hold for SQL-like input.
 func TestProperty_SQLInjectionPrevention(t *testing.T) {
 	parameters := gopter.DefaultTestParameters()
 	parameters.MinSuccessfulTests = 20
 	properties := gopter.NewProperties(parameters)
 
-	properties.Property("sanitize escapes SQL injection patterns", prop.ForAll(
+	properties.Property("sanitize strips null bytes and trims whitespace from SQL vectors", prop.ForAll(
 		func(sqlVector string) bool {
 			msg := &Message{
 				Type:    TypeUserMessage,
@@ -142,25 +124,21 @@ func TestProperty_SQLInjectionPrevention(t *testing.T) {
 				Sender:  SenderUser,
 			}
 
-			// Sanitize the message
 			msg.Sanitize()
 
-			// Verify single quotes are escaped (HTML entity &#39;)
-			if strings.Contains(sqlVector, "'") {
-				// After sanitization, single quotes should be HTML escaped
-				if strings.Contains(msg.Content, "'") && !strings.Contains(msg.Content, "&#39;") {
-					return false
-				}
+			// Null bytes must be removed
+			if strings.Contains(msg.Content, "\x00") {
+				return false
 			}
 
-			// Verify double quotes are escaped (HTML entity &#34;)
-			if strings.Contains(sqlVector, "\"") {
-				if strings.Contains(msg.Content, "\"") && !strings.Contains(msg.Content, "&#34;") {
-					return false
-				}
+			// Leading/trailing whitespace must be trimmed
+			if msg.Content != strings.TrimSpace(msg.Content) {
+				return false
 			}
 
-			return true
+			// Content should equal the input after removing null bytes and trimming
+			expected := strings.TrimSpace(strings.ReplaceAll(sqlVector, "\x00", ""))
+			return msg.Content == expected
 		},
 		genSQLInjectionVector(),
 	))
@@ -198,10 +176,6 @@ func TestProperty_MetadataSanitization(t *testing.T) {
 			// Verify metadata is sanitized
 			for k, v := range msg.Metadata {
 				// Keys and values should not contain unsafe HTML
-				if containsUnsafeHTML(k) || containsUnsafeHTML(v) {
-					return false
-				}
-
 				// Keys and values should not contain null bytes
 				if strings.Contains(k, "\x00") || strings.Contains(v, "\x00") {
 					return false
@@ -245,12 +219,8 @@ func TestProperty_ErrorInfoSanitization(t *testing.T) {
 			// Sanitize the message
 			msg.Sanitize()
 
-			// Verify error info is sanitized
+			// Verify error info is sanitized (null bytes removed, whitespace trimmed)
 			if msg.Error != nil {
-				if containsUnsafeHTML(msg.Error.Code) || containsUnsafeHTML(msg.Error.Message) {
-					return false
-				}
-
 				if strings.Contains(msg.Error.Code, "\x00") || strings.Contains(msg.Error.Message, "\x00") {
 					return false
 				}
@@ -340,35 +310,5 @@ func genSQLInjectionVector() gopter.Gen {
 	)
 }
 
-// containsUnsafeHTML checks if a string contains unsafe HTML patterns
-func containsUnsafeHTML(s string) bool {
-	// Check for unescaped script tags
-	if strings.Contains(s, "<script>") || strings.Contains(s, "</script>") {
-		return true
-	}
-
-	// Check for unescaped iframe tags
-	if strings.Contains(s, "<iframe") && !strings.Contains(s, "&lt;iframe") {
-		return true
-	}
-
-	// Check for unescaped img tags with onerror
-	if strings.Contains(s, "<img") && strings.Contains(s, "onerror") && !strings.Contains(s, "&lt;") {
-		return true
-	}
-
-	// Check for unescaped event handlers in tags
-	unsafePatterns := []string{
-		"<body onload",
-		"<svg onload",
-		"<input onfocus",
-		"<div onclick",
-	}
-	for _, pattern := range unsafePatterns {
-		if strings.Contains(s, pattern) && !strings.Contains(s, "&lt;") {
-			return true
-		}
-	}
-
-	return false
-}
+// containsUnsafeHTML is no longer needed — HTML escaping was removed from Sanitize()
+// because it garbles content sent to the LLM. HTML escaping belongs at render time only.

@@ -253,29 +253,6 @@ spec:
 # NOTE: HPA is defined in hpa.yaml as the single source of truth.
 # Do not add HPA definitions here to avoid conflicts.
 
----
-# Service with sticky sessions for WebSocket connections.
-# WebSocket connections are stateful and must be pinned to the same pod.
-# NOTE: True horizontal scaling with session sharing requires a Redis session store.
-apiVersion: v1
-kind: Service
-metadata:
-  name: chatbox-websocket
-  namespace: default
-  labels:
-    app: chatbox
-    component: websocket
-spec:
-  selector:
-    app: chatbox
-    component: websocket
-  ports:
-    - name: http
-      port: 8080
-      targetPort: 8080
-      protocol: TCP
-  # Pin client connections to the same pod for WebSocket session affinity
-  sessionAffinity: ClientIP
-  sessionAffinityConfig:
-    clientIP:
-      timeoutSeconds: 3600
+
+# NOTE: Service is defined in service.yaml as the single source of truth.
+# Do not add Service definitions here to avoid conflicts.

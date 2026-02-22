@@ -3,13 +3,14 @@ package storage
 import (
 	"context"
 	"crypto/aes"
-	"crypto/cipher"
+	cipherPkg "crypto/cipher"
 	"crypto/rand"
 	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -54,7 +55,8 @@ type StorageService struct {
 	mongo         *gomongo.Mongo
 	collection    *gomongo.MongoCollection
 	logger        *golog.Logger
-	encryptionKey []byte // Key for encrypting sensitive fields
+	encryptionKey []byte           // Key for encrypting sensitive fields
+	gcm           cipherPkg.AEAD // Pre-computed AES-GCM cipher (nil if encryption disabled)
 }
 
 // SessionDocument represents a session stored in MongoDB
@@ -142,12 +144,25 @@ type Metrics struct {
 func NewStorageService(mongo *gomongo.Mongo, dbName, collName string, logger *golog.Logger, encryptionKey []byte) *StorageService {
 	collection := mongo.Coll(dbName, collName)
 
-	return &StorageService{
+	svc := &StorageService{
 		mongo:         mongo,
 		collection:    collection,
 		logger:        logger,
 		encryptionKey: encryptionKey,
 	}
+
+	// Pre-compute AES-GCM cipher to avoid per-call key schedule overhead
+	if len(encryptionKey) > 0 {
+		block, err := aes.NewCipher(encryptionKey)
+		if err == nil {
+			gcm, err := cipherPkg.NewGCM(block)
+			if err == nil {
+				svc.gcm = gcm
+			}
+		}
+	}
+
+	return svc
 }
 
 // isRetryableError checks if an error is retryable (transient)
@@ -188,19 +203,8 @@ func isRetryableError(err error) bool {
 // containsAny checks if a string contains any of the given substrings
 func containsAny(s string, substrings []string) bool {
 	for _, substr := range substrings {
-		if len(s) >= len(substr) {
-			for i := 0; i <= len(s)-len(substr); i++ {
-				match := true
-				for j := 0; j < len(substr); j++ {
-					if s[i+j] != substr[j] {
-						match = false
-						break
-					}
-				}
-				if match {
-					return true
-				}
-			}
+		if strings.Contains(s, substr) {
+			return true
 		}
 	}
 	return false
@@ -578,9 +582,10 @@ func (s *StorageService) AddMessage(sessionID string, msg *session.Message) erro
 	return nil
 }
 
-// EndSession updates the session with end timestamp and duration
+// EndSession updates the session with end timestamp and duration.
+// Uses FindOneAndUpdate to fetch the start time and set the end time in one round-trip,
+// then computes the duration client-side.
 func (s *StorageService) EndSession(sessionID string, endTime time.Time) error {
-	// No else needed: early return pattern (guard clause)
 	if sessionID == "" {
 		return ErrInvalidSessionID
 	}
@@ -593,76 +598,75 @@ func (s *StorageService) EndSession(sessionID string, endTime time.Time) error {
 	ctx, cancel := util.NewTimeoutContext(constants.SessionEndTimeout)
 	defer cancel()
 
-	// Get the session to calculate duration
+	// FindOneAndUpdate: atomically set endTime and return the document (before update)
+	// so we can compute duration from startTime.
+	filter := bson.M{constants.MongoFieldID: sessionID}
+	update := bson.M{
+		"$set": bson.M{
+			constants.MongoFieldEndTime: endTime,
+		},
+	}
+
 	var doc SessionDocument
-	err := s.collection.FindOne(ctx, bson.M{constants.MongoFieldID: sessionID}).Decode(&doc)
-	// No else needed: early return pattern (guard clause)
-	// CRITICAL FIX C4: Use errors.Is for proper error comparison
+	err := s.collection.FindOneAndUpdate(
+		ctx, filter, update,
+		options.FindOneAndUpdate().SetReturnDocument(options.Before),
+	).Decode(&doc)
 	if err != nil {
 		if errors.Is(err, mongo.ErrNoDocuments) {
 			return ErrSessionNotFound
 		}
-		return fmt.Errorf("failed to get session: %w", err)
-	}
-
-	// Calculate duration
-	duration := int64(endTime.Sub(doc.StartTime).Seconds())
-
-	// Update session with end time and duration using gomongo (automatically updates _mt)
-	filter := bson.M{constants.MongoFieldID: sessionID}
-	update := bson.M{
-		"$set": bson.M{
-			constants.MongoFieldEndTime:  endTime,
-			constants.MongoFieldDuration: duration,
-		},
-	}
-
-	result, err := s.collection.UpdateOne(ctx, filter, update)
-	// No else needed: early return pattern (guard clause)
-	if err != nil {
 		return fmt.Errorf("failed to end session: %w", err)
 	}
 
-	// No else needed: early return pattern (guard clause)
-	if result.MatchedCount == 0 {
-		return ErrSessionNotFound
+	// Compute and set duration in a lightweight second update
+	duration := int64(endTime.Sub(doc.StartTime).Seconds())
+	_, err = s.collection.UpdateOne(ctx, filter, bson.M{
+		"$set": bson.M{constants.MongoFieldDuration: duration},
+	})
+	if err != nil {
+		return fmt.Errorf("failed to set session duration: %w", err)
 	}
 
-	// Decrement active sessions metric
 	metrics.SessionsEnded.Inc()
 	metrics.ActiveSessions.Dec()
 
 	return nil
 }
 
+// getGCM returns the pre-computed GCM cipher, or creates one on-the-fly from encryptionKey.
+// Returns nil if encryption is disabled (no key).
+func (s *StorageService) getGCM() (cipherPkg.AEAD, error) {
+	if s.gcm != nil {
+		return s.gcm, nil
+	}
+	if len(s.encryptionKey) == 0 {
+		return nil, nil
+	}
+	// Fallback: compute cipher from encryptionKey (used by tests that construct StorageService directly)
+	block, err := aes.NewCipher(s.encryptionKey)
+	if err != nil {
+		return nil, fmt.Errorf("invalid encryption key size: %w", err)
+	}
+	gcm, err := cipherPkg.NewGCM(block)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create GCM: %w", err)
+	}
+	return gcm, nil
+}
+
 // encrypt encrypts data using AES-256-GCM
 func (s *StorageService) encrypt(plaintext string) (string, error) {
-	// Validate key size (AES supports 16, 24, or 32 bytes)
-	keyLen := len(s.encryptionKey)
-	if keyLen != 0 && keyLen != 16 && keyLen != 24 && keyLen != 32 {
-		return "", fmt.Errorf("invalid encryption key size: %d bytes (must be 16, 24, or 32)", keyLen)
+	gcm, err := s.getGCM()
+	if err != nil {
+		return "", err
 	}
-
-	// If no key is set (0 bytes), treat as "no encryption"
-	if keyLen == 0 {
+	if gcm == nil {
 		return plaintext, nil
-	}
-
-	block, err := aes.NewCipher(s.encryptionKey)
-	// No else needed: early return pattern (guard clause)
-	if err != nil {
-		return "", fmt.Errorf("failed to create cipher: %w", err)
-	}
-
-	gcm, err := cipher.NewGCM(block)
-	// No else needed: early return pattern (guard clause)
-	if err != nil {
-		return "", fmt.Errorf("failed to create GCM: %w", err)
 	}
 
 	// Create nonce
 	nonce := make([]byte, gcm.NonceSize())
-	// No else needed: early return pattern (guard clause)
 	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
 		return "", fmt.Errorf("failed to generate nonce: %w", err)
 	}
@@ -676,32 +680,21 @@ func (s *StorageService) encrypt(plaintext string) (string, error) {
 
 // decrypt decrypts data using AES-256-GCM
 func (s *StorageService) decrypt(ciphertext string) (string, error) {
-	// No else needed: early return pattern (guard clause)
-	if len(s.encryptionKey) == 0 {
+	gcm, err := s.getGCM()
+	if err != nil {
+		return "", err
+	}
+	if gcm == nil {
 		return ciphertext, nil
 	}
 
 	// Decode from base64
 	data, err := base64.StdEncoding.DecodeString(ciphertext)
-	// No else needed: early return pattern (guard clause)
 	if err != nil {
 		return "", fmt.Errorf("failed to decode base64: %w", err)
 	}
 
-	block, err := aes.NewCipher(s.encryptionKey)
-	// No else needed: early return pattern (guard clause)
-	if err != nil {
-		return "", fmt.Errorf("failed to create cipher: %w", err)
-	}
-
-	gcm, err := cipher.NewGCM(block)
-	// No else needed: early return pattern (guard clause)
-	if err != nil {
-		return "", fmt.Errorf("failed to create GCM: %w", err)
-	}
-
 	nonceSize := gcm.NonceSize()
-	// No else needed: early return pattern (guard clause)
 	if len(data) < nonceSize {
 		return "", errors.New("ciphertext too short")
 	}
@@ -711,7 +704,6 @@ func (s *StorageService) decrypt(ciphertext string) (string, error) {
 
 	// Decrypt
 	plaintext, err := gcm.Open(nil, nonce, ciphertextBytes, nil)
-	// No else needed: early return pattern (guard clause)
 	if err != nil {
 		return "", fmt.Errorf("failed to decrypt: %w", err)
 	}
@@ -720,9 +712,9 @@ func (s *StorageService) decrypt(ciphertext string) (string, error) {
 }
 
 // ListUserSessions retrieves all sessions for a user ordered by last activity (most recent first)
-// The limit parameter controls the maximum number of sessions to return (0 = no limit)
+// The limit parameter controls the maximum number of sessions to return.
+// If limit <= 0, defaults to constants.DefaultSessionLimit to prevent unbounded queries.
 func (s *StorageService) ListUserSessions(userID string, limit int) ([]*SessionMetadata, error) {
-	// No else needed: early return pattern (guard clause)
 	if userID == "" {
 		return nil, errors.New("user ID cannot be empty")
 	}
@@ -730,16 +722,18 @@ func (s *StorageService) ListUserSessions(userID string, limit int) ([]*SessionM
 	ctx, cancel := util.NewTimeoutContext(constants.DefaultContextTimeout)
 	defer cancel()
 
+	// Default to safe limit to prevent unbounded queries
+	if limit <= 0 {
+		limit = constants.DefaultSessionLimit
+	}
+
 	// Build query filter
 	filter := bson.M{constants.MongoFieldUserID: userID}
 
 	// Build find options with sorting by ts (descending)
 	queryOpts := gomongo.QueryOptions{
-		Sort: bson.D{{Key: constants.MongoFieldTimestamp, Value: -1}},
-	}
-
-	if limit > 0 {
-		queryOpts.Limit = int64(limit)
+		Sort:  bson.D{{Key: constants.MongoFieldTimestamp, Value: -1}},
+		Limit: int64(limit),
 	}
 
 	// Execute query using gomongo
@@ -930,13 +924,13 @@ func (s *StorageService) ListAllSessionsWithOptions(opts *SessionListOptions) ([
 	}
 
 	sortField := constants.MongoFieldTimestamp
+	useAggregation := false
 	switch opts.SortBy {
 	case constants.SortByEndTime:
 		sortField = constants.MongoFieldEndTime
 	case constants.SortByMessageCount:
-		// We'll need to sort by array size, which requires aggregation
-		// For now, we'll sort by ts and handle message_count in application
-		sortField = constants.MongoFieldTimestamp
+		// Use aggregation pipeline to compute and sort by array size server-side
+		useAggregation = true
 	case constants.SortByTotalTokens:
 		sortField = constants.MongoFieldTotalTokens
 	case constants.SortByUserID:
@@ -945,16 +939,30 @@ func (s *StorageService) ListAllSessionsWithOptions(opts *SessionListOptions) ([
 		sortField = constants.MongoFieldTimestamp
 	}
 
-	// Build find options
-	queryOpts := gomongo.QueryOptions{
-		Sort:  bson.D{{Key: sortField, Value: sortOrder}},
-		Limit: int64(opts.Limit),
-		Skip:  int64(opts.Offset),
+	var cursor *mongo.Cursor
+	var err error
+
+	if useAggregation {
+		// Use aggregation pipeline: $match → $addFields (messageCount) → $sort → $skip → $limit
+		pipeline := mongo.Pipeline{
+			{{Key: "$match", Value: filter}},
+			{{Key: "$addFields", Value: bson.M{
+				"_messageCount": bson.M{"$size": bson.M{"$ifNull": bson.A{"$msgs", bson.A{}}}},
+			}}},
+			{{Key: "$sort", Value: bson.D{{Key: "_messageCount", Value: sortOrder}}}},
+			{{Key: "$skip", Value: int64(opts.Offset)}},
+			{{Key: "$limit", Value: int64(opts.Limit)}},
+		}
+		cursor, err = s.collection.Aggregate(ctx, pipeline)
+	} else {
+		queryOpts := gomongo.QueryOptions{
+			Sort:  bson.D{{Key: sortField, Value: sortOrder}},
+			Limit: int64(opts.Limit),
+			Skip:  int64(opts.Offset),
+		}
+		cursor, err = s.collection.Find(ctx, filter, queryOpts)
 	}
 
-	// Execute query
-	cursor, err := s.collection.Find(ctx, filter, queryOpts)
-	// No else needed: early return pattern (guard clause)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list sessions with options: %w", err)
 	}
@@ -998,16 +1006,13 @@ func (s *StorageService) ListAllSessionsWithOptions(opts *SessionListOptions) ([
 		return nil, fmt.Errorf("cursor error: %w", err)
 	}
 
-	// If sorting by message_count, sort in application
-	// No else needed: optional operation (only sort if requested)
-	if opts.SortBy == constants.SortByMessageCount {
-		sortByMessageCount(sessions, opts.SortOrder == constants.SortOrderAsc)
-	}
+	// Message count sorting is handled server-side by the aggregation pipeline.
 
 	return sessions, nil
 }
 
-// sortByMessageCount sorts sessions by message count in place using O(n log n) algorithm
+// sortByMessageCount sorts sessions by message count in place.
+// Used by tests; production sorting is handled by the aggregation pipeline.
 func sortByMessageCount(sessions []*SessionMetadata, ascending bool) {
 	sort.Slice(sessions, func(i, j int) bool {
 		if ascending {

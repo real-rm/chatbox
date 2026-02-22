@@ -233,8 +233,8 @@ func Register(r *gin.Engine, config *goconfig.ConfigAccessor, logger *golog.Logg
 		// Non-fatal: sessions will be recreated when users reconnect
 	}
 
-	// Start cleanup goroutine for expired sessions
-	sessionManager.StartCleanup()
+	// NOTE: sessionManager.StartCleanup() is deferred until after all validation
+	// to avoid leaking goroutines if Register() returns an error.
 
 	// Create LLM service
 	llmService, err := llm.NewLLMService(config, chatboxLogger)
@@ -283,7 +283,6 @@ func Register(r *gin.Engine, config *goconfig.ConfigAccessor, logger *golog.Logg
 	}
 
 	adminLimiter := ratelimit.NewMessageLimiter(adminRateWindow, adminRateLimit)
-	adminLimiter.StartCleanup()
 
 	chatboxLogger.Info("Admin rate limiter configured",
 		"rate_limit", adminRateLimit,
@@ -297,7 +296,6 @@ func Register(r *gin.Engine, config *goconfig.ConfigAccessor, logger *golog.Logg
 
 	// Create public endpoint rate limiter (per-IP, prevents abuse of healthz/readyz/metrics)
 	publicLimiter := ratelimit.NewMessageLimiter(1*time.Minute, constants.PublicEndpointRate)
-	publicLimiter.StartCleanup()
 
 	// Configure allowed origins for WebSocket connections
 	// SECURITY: When no origins are configured, ALL origins are accepted.
@@ -318,8 +316,31 @@ func Register(r *gin.Engine, config *goconfig.ConfigAccessor, logger *golog.Logg
 		chatboxLogger.Warn("No allowed origins configured, allowing all origins (development mode)")
 	}
 
-	// Store global references for graceful shutdown
+	// Start background cleanup goroutines only after all validation is complete,
+	// so we don't leak goroutines if Register() returns an error.
+	sessionManager.StartCleanup()
+	adminLimiter.StartCleanup()
+	publicLimiter.StartCleanup()
+
+	// Store global references for graceful shutdown.
+	// Stop any previously-registered instances to prevent goroutine leaks
+	// when Register() is called multiple times (tests, hot-reload).
 	shutdownMu.Lock()
+	if globalSessionMgr != nil {
+		globalSessionMgr.StopCleanup()
+	}
+	if globalMessageRouter != nil {
+		globalMessageRouter.Shutdown()
+	}
+	if globalAdminLimiter != nil {
+		globalAdminLimiter.StopCleanup()
+	}
+	if globalPublicLimiter != nil {
+		globalPublicLimiter.StopCleanup()
+	}
+	if globalWSHandler != nil {
+		_ = globalWSHandler.ShutdownWithContext(context.Background())
+	}
 	globalWSHandler = wsHandler
 	globalSessionMgr = sessionManager
 	globalMessageRouter = messageRouter
@@ -377,6 +398,9 @@ func Register(r *gin.Engine, config *goconfig.ConfigAccessor, logger *golog.Logg
 		}
 	}
 
+	// Apply security headers middleware
+	r.Use(securityHeadersMiddleware())
+
 	// Apply metrics middleware to record HTTP request duration
 	r.Use(metricsMiddleware())
 
@@ -387,7 +411,16 @@ func Register(r *gin.Engine, config *goconfig.ConfigAccessor, logger *golog.Logg
 	{
 		// WebSocket endpoint - use Gin context adapter
 		chatGroup.GET("/ws", func(c *gin.Context) {
-			// Adapt Gin context to http.ResponseWriter and *http.Request
+			// M8: If JWT is in query param, move it to Authorization header and redact
+			// from URL to prevent it from appearing in Gin access logs.
+			if token := c.Query("token"); token != "" {
+				if c.Request.Header.Get("Authorization") == "" {
+					c.Request.Header.Set("Authorization", "Bearer "+token)
+				}
+				q := c.Request.URL.Query()
+				q.Del("token")
+				c.Request.URL.RawQuery = q.Encode()
+			}
 			wsHandler.HandleWebSocket(c.Writer, c.Request)
 		})
 
@@ -438,6 +471,17 @@ func Register(r *gin.Engine, config *goconfig.ConfigAccessor, logger *golog.Logg
 }
 
 // metricsMiddleware records HTTP request duration for Prometheus monitoring
+// securityHeadersMiddleware adds standard HTTP security headers to all responses.
+func securityHeadersMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Header("X-Content-Type-Options", "nosniff")
+		c.Header("X-Frame-Options", "DENY")
+		c.Header("Referrer-Policy", "strict-origin-when-cross-origin")
+		c.Header("X-XSS-Protection", "1; mode=block")
+		c.Next()
+	}
+}
+
 func metricsMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
@@ -680,6 +724,10 @@ func handleListSessions(storageService *storage.StorageService, sessionManager *
 	return func(c *gin.Context) {
 		// Parse query parameters
 		userID := c.Query("user_id")
+		if len(userID) > 255 {
+			httperrors.RespondBadRequest(c, "user_id exceeds maximum length of 255 characters")
+			return
+		}
 		status := c.Query("status")                       // "active" or "ended"
 		adminAssistedStr := c.Query("admin_assisted")     // "true" or "false"
 		sortBy := c.DefaultQuery("sort_by", "start_time") // "start_time", "end_time", "message_count", "total_tokens", "user_id"
@@ -861,19 +909,8 @@ func handleGetMetrics(storageService *storage.StorageService, logger *golog.Logg
 			return
 		}
 
-		// Get total token usage
-		totalTokens, err := storageService.GetTokenUsage(startTime, endTime)
-		// No else needed: early return pattern (guard clause)
-		if err != nil {
-			// Log detailed error server-side
-			util.LogError(logger, "http", "get token usage", err)
-			// Send generic error to client
-			httperrors.RespondInternalError(c)
-			return
-		}
-
-		// Update metrics with token usage
-		metrics.TotalTokens = totalTokens
+		// TotalTokens is already computed by GetSessionMetrics aggregation pipeline.
+		// No separate GetTokenUsage call needed.
 
 		c.JSON(constants.StatusOK, gin.H{
 			"metrics": metrics,

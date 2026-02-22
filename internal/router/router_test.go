@@ -34,6 +34,10 @@ func (m *mockStorageService) CreateSession(sess *session.Session) error {
 	return nil
 }
 
+func (m *mockStorageService) AddMessage(sessionID string, msg *session.Message) error {
+	return nil
+}
+
 func TestNewMessageRouter(t *testing.T) {
 	logger := createTestLogger()
 	sm := session.NewSessionManager(15*time.Minute, logger)

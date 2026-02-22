@@ -866,6 +866,34 @@ func (sm *SessionManager) GetAssistingAdmin(sessionID string) (string, string, e
 	return session.AssistingAdminID, session.AssistingAdminName, nil
 }
 
+// GetModelID returns the session's model ID in a thread-safe manner.
+func (s *Session) GetModelID() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.ModelID
+}
+
+// GetAssistingAdminID returns the assisting admin's ID in a thread-safe manner.
+func (s *Session) GetAssistingAdminID() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.AssistingAdminID
+}
+
+// GetAssistingAdminName returns the assisting admin's name in a thread-safe manner.
+func (s *Session) GetAssistingAdminName() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.AssistingAdminName
+}
+
+// GetAdminAssistance returns the assisting admin ID and name in a thread-safe manner.
+func (s *Session) GetAdminAssistance() (adminID, adminName string) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.AssistingAdminID, s.AssistingAdminName
+}
+
 // RLock acquires a read lock on the session.
 // WARNING: Do not acquire SessionManager.mu while holding this lock.
 // Lock ordering: SessionManager.mu → Session.mu

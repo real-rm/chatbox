@@ -107,7 +107,7 @@ metadata:
     component: websocket
   annotations:
     # Nginx Ingress Controller annotations
-    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
     
     # WebSocket support - CRITICAL for WebSocket connections
@@ -151,8 +151,8 @@ spec:
   - host: chat.example.com
     http:
       paths:
-      - path: /chat
-        pathType: Prefix
+      - path: /chat(/|$)(.*)
+        pathType: ImplementationSpecific
         backend:
           service:
             name: chatbox-websocket

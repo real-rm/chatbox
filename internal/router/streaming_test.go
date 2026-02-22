@@ -45,6 +45,8 @@ func (m *streamingMockLLMService) StreamMessage(ctx context.Context, modelID str
 	return ch, nil
 }
 
+func (m *streamingMockLLMService) ValidateModel(modelID string) error { return nil }
+
 // TestStreamingResponseForwarding verifies that LLM response chunks are forwarded to the client
 func TestStreamingResponseForwarding(t *testing.T) {
 	logger := createTestLogger()

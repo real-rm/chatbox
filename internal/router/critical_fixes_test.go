@@ -89,17 +89,14 @@ func TestCriticalFix_C2_MessageSanitizationCalled(t *testing.T) {
 	// Sanitize the message
 	msg.Sanitize()
 
-	// Verify that the content is HTML-escaped
-	if msg.Content == "<script>alert('XSS')</script>" {
-		t.Error("Message content was not sanitized")
+	// HTML escaping removed from Sanitize() — it belongs at render time only.
+	// Sanitize() now only strips null bytes and trims whitespace.
+	// The XSS payload should be preserved as-is (no null bytes or whitespace to strip).
+	if msg.Content != "<script>alert('XSS')</script>" {
+		t.Errorf("Expected content preserved as-is, got: %s", msg.Content)
 	}
 
-	// The sanitized content should have HTML entities escaped
-	if msg.Content != "&lt;script&gt;alert(&#39;XSS&#39;)&lt;/script&gt;" {
-		t.Errorf("Expected HTML-escaped content, got: %s", msg.Content)
-	}
-
-	t.Log("✓ Message sanitization is working correctly - XSS vulnerability fixed")
+	t.Log("✓ Message sanitization preserves content for LLM processing")
 }
 
 // TestCriticalFix_C3_DoubleCloseProtection tests that double-close doesn't panic

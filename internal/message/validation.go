@@ -2,7 +2,6 @@ package message
 
 import (
 	"fmt"
-	"html"
 	"strings"
 	"time"
 )
@@ -208,19 +207,16 @@ func (m *Message) Sanitize() {
 	}
 }
 
-// sanitizeString sanitizes a string by:
-// 1. HTML escaping to prevent XSS
-// 2. Trimming whitespace
-// 3. Removing null bytes
+// sanitizeString sanitizes a string by removing null bytes and trimming whitespace.
+// HTML escaping is NOT applied here — it belongs at render time only.
+// Applying html.EscapeString at ingestion garbles content sent to the LLM
+// (e.g., "<" becomes "&lt;"), degrading AI responses.
 func sanitizeString(s string) string {
 	// Remove null bytes
 	s = strings.ReplaceAll(s, "\x00", "")
 
 	// Trim whitespace
 	s = strings.TrimSpace(s)
-
-	// HTML escape to prevent XSS
-	s = html.EscapeString(s)
 
 	return s
 }

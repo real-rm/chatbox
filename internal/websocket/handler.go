@@ -77,6 +77,10 @@ type Connection struct {
 	// Set before closing the send channel to prevent send-on-closed-channel panics.
 	closing atomic.Bool
 
+	// sendOnce ensures the send channel is closed exactly once,
+	// preventing panics from concurrent teardown paths (readPump, writePump, ShutdownWithContext).
+	sendOnce sync.Once
+
 	// mu protects concurrent access to the connection
 	mu sync.RWMutex
 }
@@ -123,6 +127,9 @@ type Handler struct {
 	// connections tracks active connections by user ID and connection ID
 	connections map[string]map[string]*Connection
 	mu          sync.RWMutex
+
+	// pumpWg tracks active readPump/writePump goroutines for graceful shutdown
+	pumpWg sync.WaitGroup
 }
 
 // MessageRouter interface for routing messages
@@ -275,9 +282,17 @@ func (h *Handler) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		"user_id", claims.UserID,
 		"component", "websocket")
 
-	// Start read and write pumps in goroutines with panic recovery
-	util.SafeGo(h.logger, "readPump", func() { connection.readPump(h) })
-	util.SafeGo(h.logger, "writePump", func() { connection.writePump() })
+	// Start read and write pumps in goroutines with panic recovery.
+	// Track with pumpWg so ShutdownWithContext can wait for them.
+	h.pumpWg.Add(2)
+	util.SafeGo(h.logger, "readPump", func() {
+		defer h.pumpWg.Done()
+		connection.readPump(h)
+	})
+	util.SafeGo(h.logger, "writePump", func() {
+		defer h.pumpWg.Done()
+		connection.writePump()
+	})
 }
 
 // createConnection creates a new Connection with user context from JWT claims
@@ -353,7 +368,7 @@ func (h *Handler) unregisterConnection(conn *Connection) {
 		if _, exists := userConns[conn.ConnectionID]; exists {
 			delete(userConns, conn.ConnectionID)
 			conn.closing.Store(true)
-			close(conn.send)
+			conn.sendOnce.Do(func() { close(conn.send) })
 
 			// Release connection from rate limiter for each connection
 			h.connLimiter.Release(conn.UserID)
@@ -426,9 +441,10 @@ func (h *Handler) notifyConnectionLimit(userID string) {
 
 // Shutdown gracefully closes all active WebSocket connections
 // It sends close messages to all connected clients and waits for them to close
-// Deprecated: Use ShutdownWithContext instead
+// Deprecated: Use ShutdownWithContext instead.
 func (h *Handler) Shutdown() {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 	h.ShutdownWithContext(ctx)
 }
 
@@ -476,10 +492,12 @@ func (h *Handler) ShutdownWithContext(ctx context.Context) error {
 		}(conn)
 	}
 
-	// Wait for all closures or context deadline
+	// Wait for all connection closures or context deadline
 	done := make(chan struct{})
 	go func() {
 		wg.Wait()
+		// Also wait for readPump/writePump goroutines to fully exit
+		h.pumpWg.Wait()
 		close(done)
 	}()
 

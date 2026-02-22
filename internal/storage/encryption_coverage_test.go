@@ -273,7 +273,7 @@ func TestDecrypt_AllCodePaths(t *testing.T) {
 
 		_, err = invalidService.decrypt(encrypted)
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to create cipher")
+		assert.Contains(t, err.Error(), "invalid encryption key size")
 	})
 
 	t.Run("decrypt with invalid key size 17", func(t *testing.T) {
@@ -294,7 +294,7 @@ func TestDecrypt_AllCodePaths(t *testing.T) {
 
 		_, err = invalidService.decrypt(encrypted)
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to create cipher")
+		assert.Contains(t, err.Error(), "invalid encryption key size")
 	})
 
 	t.Run("decrypt with invalid key size 23", func(t *testing.T) {
@@ -315,7 +315,7 @@ func TestDecrypt_AllCodePaths(t *testing.T) {
 
 		_, err = invalidService.decrypt(encrypted)
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to create cipher")
+		assert.Contains(t, err.Error(), "invalid encryption key size")
 	})
 
 	t.Run("decrypt with invalid key size 25", func(t *testing.T) {
@@ -336,7 +336,7 @@ func TestDecrypt_AllCodePaths(t *testing.T) {
 
 		_, err = invalidService.decrypt(encrypted)
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to create cipher")
+		assert.Contains(t, err.Error(), "invalid encryption key size")
 	})
 
 	t.Run("decrypt with invalid key size 31", func(t *testing.T) {
@@ -357,7 +357,7 @@ func TestDecrypt_AllCodePaths(t *testing.T) {
 
 		_, err = invalidService.decrypt(encrypted)
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to create cipher")
+		assert.Contains(t, err.Error(), "invalid encryption key size")
 	})
 
 	t.Run("decrypt with invalid key size 33", func(t *testing.T) {
@@ -378,7 +378,7 @@ func TestDecrypt_AllCodePaths(t *testing.T) {
 
 		_, err = invalidService.decrypt(encrypted)
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to create cipher")
+		assert.Contains(t, err.Error(), "invalid encryption key size")
 	})
 
 	t.Run("decrypt with 16-byte key", func(t *testing.T) {

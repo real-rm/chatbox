@@ -49,8 +49,9 @@ func TestProductionIssue07_ValidationCalled(t *testing.T) {
 		}
 
 		msg.Sanitize()
-		assert.NotContains(t, msg.Content, "<script>", "Sanitize() should escape HTML")
-		assert.Contains(t, msg.Content, "&lt;script&gt;", "Sanitize() should HTML-escape tags")
+		// HTML escaping removed — belongs at render time, not ingestion.
+		// Sanitize() now only strips null bytes and trims whitespace.
+		assert.Contains(t, msg.Content, "<script>", "Sanitize() preserves content for LLM processing")
 	})
 
 	t.Run("InvalidMessageRejected", func(t *testing.T) {
@@ -64,7 +65,7 @@ func TestProductionIssue07_ValidationCalled(t *testing.T) {
 		assert.Contains(t, err.Error(), "type is required")
 	})
 
-	t.Run("MaliciousContentSanitized", func(t *testing.T) {
+	t.Run("MaliciousContentPreserved", func(t *testing.T) {
 		xssPayload := "<img src=x onerror=alert('xss')>"
 		msg := &Message{
 			Type:      TypeUserMessage,
@@ -76,11 +77,12 @@ func TestProductionIssue07_ValidationCalled(t *testing.T) {
 		assert.Equal(t, xssPayload, msg.Content, "Content should be unchanged before sanitization")
 
 		msg.Sanitize()
-		assert.NotEqual(t, xssPayload, msg.Content, "Content should be sanitized")
-		assert.NotContains(t, msg.Content, "<img", "HTML tags should be escaped")
+		// HTML escaping removed — belongs at render time, not ingestion.
+		// Sanitize() only strips null bytes and trims whitespace.
+		assert.Equal(t, xssPayload, msg.Content, "Content should be preserved as-is (no null bytes or leading/trailing whitespace)")
 	})
 
-	t.Run("SQLInjectionSanitized", func(t *testing.T) {
+	t.Run("SQLInjectionPreserved", func(t *testing.T) {
 		sqlPayload := "'; DROP TABLE users; --"
 		msg := &Message{
 			Type:      TypeUserMessage,
@@ -92,8 +94,9 @@ func TestProductionIssue07_ValidationCalled(t *testing.T) {
 		assert.Contains(t, msg.Content, "'", "Single quotes should be present before sanitization")
 
 		msg.Sanitize()
-		assert.NotContains(t, msg.Content, "'", "Single quotes should be escaped after sanitization")
-		assert.Contains(t, msg.Content, "&#39;", "Single quotes should be HTML-escaped")
+		// HTML escaping removed — SQL injection prevention relies on parameterized queries,
+		// not input-level HTML escaping.
+		assert.Equal(t, sqlPayload, msg.Content, "Content should be preserved as-is")
 	})
 
 	t.Run("FutureTimestampRejected", func(t *testing.T) {

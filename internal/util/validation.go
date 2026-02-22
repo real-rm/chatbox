@@ -175,13 +175,32 @@ func ValidateFileURL(rawURL string) error {
 	}
 
 	// Reject private/internal IPs (SSRF protection)
-	ip := net.ParseIP(u.Hostname())
+	hostname := u.Hostname()
+	ip := net.ParseIP(hostname)
 	if ip != nil {
 		for _, ipNet := range privateNetworks {
 			if ipNet.Contains(ip) {
-				return fmt.Errorf("URL host %q resolves to a private/internal IP address", u.Hostname())
+				return fmt.Errorf("URL host %q resolves to a private/internal IP address", hostname)
 			}
 		}
+	} else {
+		// DNS pre-flight: resolve hostname and check all IPs against private ranges
+		// Prevents DNS rebinding attacks where a hostname resolves to a private IP
+		addrs, err := net.LookupHost(hostname)
+		if err == nil {
+			for _, addr := range addrs {
+				resolved := net.ParseIP(addr)
+				if resolved == nil {
+					continue
+				}
+				for _, ipNet := range privateNetworks {
+					if ipNet.Contains(resolved) {
+						return fmt.Errorf("URL host %q resolves to a private/internal IP address %s", hostname, addr)
+					}
+				}
+			}
+		}
+		// DNS lookup failure is not fatal — the URL may still be valid
 	}
 
 	return nil

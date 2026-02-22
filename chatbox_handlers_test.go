@@ -1442,8 +1442,8 @@ func TestHandleAdminTakeover_RouterError(t *testing.T) {
 	// Call handler
 	handler(c)
 
-	// Verify internal error response (router will return error for non-existent session)
-	require.Equal(t, 500, w.Code)
+	// Verify not-found response (router returns ErrCodeNotFound for non-existent session)
+	require.Equal(t, 404, w.Code)
 	require.Contains(t, w.Body.String(), "error")
 }
 
@@ -1580,14 +1580,14 @@ func TestHandleAdminTakeover_CoverageImprovement(t *testing.T) {
 			sessionID:    "non-existent-session-id",
 			claims:       createMockJWTClaims("admin3", "Admin Three", []string{"admin"}),
 			setClaims:    true,
-			expectedCode: 500,
+			expectedCode: 404,
 		},
 		{
 			name:         "takeover by different admin (should fail - already assisted)",
 			sessionID:    testSession.ID,
 			claims:       createMockJWTClaims("admin4", "Admin Four", []string{"admin"}),
 			setClaims:    true,
-			expectedCode: 500, // Fails because session is already being assisted by admin1
+			expectedCode: 400, // Fails because session is already being assisted by admin1
 		},
 	}
 

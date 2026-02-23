@@ -228,9 +228,6 @@ func TestGetSessionMetrics_MultipleSessions(t *testing.T) {
 	// Max response time should be 600ms
 	require.Equal(t, int64(600), metrics.MaxResponseTime, "Max response time should be 600ms")
 
-	// Note: MaxConcurrent/AvgConcurrent are not computed by the aggregation pipeline (H3 optimization).
-	// These fields remain 0 as the trade-off for avoiding OOM with unbounded in-memory processing.
-	require.Equal(t, 0, metrics.MaxConcurrent, "Max concurrent not computed by aggregation pipeline")
 }
 
 // TestGetSessionMetrics_AdminAssisted tests metrics with admin-assisted sessions
@@ -454,10 +451,6 @@ func TestGetSessionMetrics_ConcurrentTracking(t *testing.T) {
 	require.Equal(t, 3, metrics.TotalSessions, "Should have 3 total sessions")
 	require.Equal(t, 0, metrics.ActiveSessions, "Should have 0 active sessions (all ended)")
 
-	// Note: MaxConcurrent/AvgConcurrent are not computed by the aggregation pipeline (H3 optimization).
-	// These fields remain 0 as the trade-off for avoiding OOM with unbounded in-memory processing.
-	require.Equal(t, 0, metrics.MaxConcurrent, "Max concurrent not computed by aggregation pipeline")
-	require.Equal(t, 0.0, metrics.AvgConcurrent, "Avg concurrent not computed by aggregation pipeline")
 }
 
 // TestGetSessionMetrics_InvalidTimeRangeEndBeforeStart tests error handling for invalid time range
@@ -513,8 +506,6 @@ func TestGetSessionMetrics_NoSessionsInRange(t *testing.T) {
 	require.Equal(t, 0, metrics.TotalTokens, "Should have 0 total tokens")
 	require.Equal(t, int64(0), metrics.AvgResponseTime, "Average response time should be 0")
 	require.Equal(t, int64(0), metrics.MaxResponseTime, "Max response time should be 0")
-	require.Equal(t, 0, metrics.MaxConcurrent, "Max concurrent should be 0")
-	require.Equal(t, 0.0, metrics.AvgConcurrent, "Average concurrent should be 0")
 }
 
 // TestGetTokenUsageMetrics_MultipleSessions tests token usage calculation for multiple sessions

@@ -168,25 +168,27 @@ func TestUnregisterAdminConnection(t *testing.T) {
 	router := NewMessageRouter(sm, nil, nil, nil, nil, 120*time.Second, logger)
 
 	adminID := "admin-123"
+	sessionID := "session-456"
 	mockConn := websocket.NewConnection("admin-user", []string{"admin"})
 
-	// Register admin connection
-	router.RegisterAdminConnection(adminID, mockConn)
+	// Register admin connection with compound key
+	router.RegisterAdminConnection(adminID, sessionID, mockConn)
 
 	// Verify it's registered
+	adminConnKey := adminID + ":" + sessionID
 	router.mu.RLock()
-	_, exists := router.adminConns[adminID]
+	_, exists := router.adminConns[adminConnKey]
 	router.mu.RUnlock()
 	if !exists {
 		t.Error("Admin connection should be registered")
 	}
 
 	// Unregister admin connection
-	router.UnregisterAdminConnection(adminID)
+	router.UnregisterAdminConnection(adminID, sessionID)
 
 	// Verify it's unregistered
 	router.mu.RLock()
-	_, exists = router.adminConns[adminID]
+	_, exists = router.adminConns[adminConnKey]
 	router.mu.RUnlock()
 	if exists {
 		t.Error("Admin connection should be unregistered")
@@ -388,21 +390,31 @@ func TestRegisterAdminConnection(t *testing.T) {
 	tests := []struct {
 		name      string
 		adminID   string
+		sessionID string
 		expectErr bool
 	}{
 		{
 			name:      "valid admin connection",
 			adminID:   "admin-123",
+			sessionID: "session-456",
 			expectErr: false,
 		},
 		{
 			name:      "empty admin ID",
 			adminID:   "",
+			sessionID: "session-456",
+			expectErr: true,
+		},
+		{
+			name:      "empty session ID",
+			adminID:   "admin-123",
+			sessionID: "",
 			expectErr: true,
 		},
 		{
 			name:      "nil connection",
 			adminID:   "admin-456",
+			sessionID: "session-789",
 			expectErr: true,
 		},
 	}
@@ -414,7 +426,7 @@ func TestRegisterAdminConnection(t *testing.T) {
 				conn = websocket.NewConnection("admin-user", []string{"admin"})
 			}
 
-			err := router.RegisterAdminConnection(tt.adminID, conn)
+			err := router.RegisterAdminConnection(tt.adminID, tt.sessionID, conn)
 			if tt.expectErr && err == nil {
 				t.Error("Expected error but got none")
 			}

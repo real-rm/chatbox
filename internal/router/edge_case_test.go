@@ -533,8 +533,8 @@ func TestEdgeCase_BroadcastToSessionWithAdmin(t *testing.T) {
 	err = router.HandleAdminTakeover(adminConn, sess.ID)
 	require.NoError(t, err)
 
-	// Register admin connection
-	err = router.RegisterAdminConnection("admin-1", adminConn)
+	// Register admin connection with compound key
+	err = router.RegisterAdminConnection("admin-1", sess.ID, adminConn)
 	require.NoError(t, err)
 
 	// Broadcast a message

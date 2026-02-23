@@ -345,7 +345,7 @@ func loadLLMConfig() LLMConfig {
 		prefix := fmt.Sprintf("LLM_PROVIDER_%d_", i)
 		id := os.Getenv(prefix + "ID")
 		if id == "" {
-			continue // No more providers
+			continue // provider slot is unconfigured, scan remaining slots
 		}
 
 		provider := LLMProviderConfig{

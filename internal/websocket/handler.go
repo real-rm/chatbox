@@ -741,21 +741,21 @@ func (c *Connection) readPump(h *Handler) {
 				}
 			}
 
-			// Call router with the connection.
-			// RouteMessage calls HandleError internally on failure, which sends
-			// the error frame to the client. We only log and increment metrics here
-			// to avoid sending duplicate error frames.
-			if err := h.router.RouteMessage(c, &msg); err != nil {
-				// Log detailed error server-side
-				util.LogError(h.logger, "websocket", "route message", err,
-					"user_id", c.UserID,
-					"session_id", c.GetSessionID(),
-					"connection_id", c.ConnectionID,
-					"message_type", msg.Type)
-
-				// Increment message errors metric
-				metrics.MessageErrors.Inc()
-			}
+			// Dispatch RouteMessage into a goroutine so readPump stays free to
+			// handle pong frames. Without this, long LLM streams (>60s) block
+			// pong handling and the pongWait deadline kills the connection.
+			// Copy msg so the loop variable is not reused across iterations.
+			routeMsg := msg
+			go func() {
+				if err := h.router.RouteMessage(c, &routeMsg); err != nil {
+					util.LogError(h.logger, "websocket", "route message", err,
+						"user_id", c.UserID,
+						"session_id", c.GetSessionID(),
+						"connection_id", c.ConnectionID,
+						"message_type", routeMsg.Type)
+					metrics.MessageErrors.Inc()
+				}
+			}()
 		} else {
 			h.logger.Warn("No router configured, message not processed",
 				"user_id", c.UserID,

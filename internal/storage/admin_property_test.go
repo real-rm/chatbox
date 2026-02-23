@@ -36,8 +36,6 @@ func TestProperty_SessionMetricsCalculation(t *testing.T) {
 			metrics := &Metrics{
 				TotalSessions:      numSessions,
 				ActiveSessions:     numSessions / 2,
-				AvgConcurrent:      float64(numSessions) / 2.0,
-				MaxConcurrent:      numSessions,
 				TotalTokens:        numSessions * 100,
 				AvgResponseTime:    100,
 				MaxResponseTime:    200,
@@ -49,12 +47,6 @@ func TestProperty_SessionMetricsCalculation(t *testing.T) {
 				return false
 			}
 			if metrics.ActiveSessions < 0 {
-				return false
-			}
-			if metrics.AvgConcurrent < 0 {
-				return false
-			}
-			if metrics.MaxConcurrent < 0 {
 				return false
 			}
 			if metrics.TotalTokens < 0 {

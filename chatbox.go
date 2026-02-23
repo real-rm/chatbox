@@ -191,8 +191,12 @@ func Register(r *gin.Engine, config *goconfig.ConfigAccessor, logger *golog.Logg
 		var parsedSize int64
 		// No else needed: optional operation (logging based on parse result)
 		if _, err := fmt.Sscanf(maxSizeStr, "%d", &parsedSize); err == nil {
-			maxMessageSize = parsedSize
-			chatboxLogger.Info("Using MAX_MESSAGE_SIZE from environment", "size_bytes", maxMessageSize)
+			if parsedSize > 0 {
+				maxMessageSize = parsedSize
+				chatboxLogger.Info("Using MAX_MESSAGE_SIZE from environment", "size_bytes", maxMessageSize)
+			} else {
+				chatboxLogger.Warn("MAX_MESSAGE_SIZE must be positive, using default", "value", parsedSize, "default", maxMessageSize)
+			}
 		} else {
 			chatboxLogger.Warn("Invalid MAX_MESSAGE_SIZE environment variable, using default", "value", maxSizeStr, "default", maxMessageSize)
 		}
@@ -702,8 +706,8 @@ func handleUserSessions(storageService *storage.StorageService, logger *golog.Lo
 			return
 		}
 
-		// Get user's sessions
-		sessions, err := storageService.ListUserSessions(claims.UserID, 0)
+		// Get user's sessions (capped at DefaultSessionLimit)
+		sessions, err := storageService.ListUserSessions(claims.UserID, constants.DefaultSessionLimit)
 		// No else needed: early return pattern (guard clause)
 		if err != nil {
 			// Log detailed error server-side
@@ -714,9 +718,11 @@ func handleUserSessions(storageService *storage.StorageService, logger *golog.Lo
 		}
 
 		c.JSON(constants.StatusOK, gin.H{
-			"sessions": sessions,
-			"user_id":  claims.UserID,
-			"count":    len(sessions),
+			"sessions":  sessions,
+			"user_id":   claims.UserID,
+			"count":     len(sessions),
+			"limit":     constants.DefaultSessionLimit,
+			"truncated": len(sessions) == constants.DefaultSessionLimit,
 		})
 	}
 }

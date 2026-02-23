@@ -119,7 +119,9 @@ func redactURLQuery(rawURL string) string {
 	return rawURL
 }
 
-// RegisterConnection registers a connection for a session
+// RegisterConnection registers a connection for a session.
+// If the session already exists, ownership is verified before registration.
+// If an old connection exists for the session, it is marked as closing.
 func (mr *MessageRouter) RegisterConnection(sessionID string, conn *websocket.Connection) error {
 	if conn == nil {
 		return ErrNilConnection
@@ -128,8 +130,28 @@ func (mr *MessageRouter) RegisterConnection(sessionID string, conn *websocket.Co
 		return ErrInvalidMessage
 	}
 
+	// Verify session ownership if session already exists (prevents session ID squatting)
+	if sess, err := mr.sessionManager.GetSession(sessionID); err == nil {
+		if sess.UserID != conn.UserID {
+			mr.logger.Warn("Session ownership violation in RegisterConnection",
+				"session_id", sessionID,
+				"session_owner", sess.UserID,
+				"requesting_user", conn.UserID)
+			return chaterrors.NewValidationError(
+				chaterrors.ErrCodeUnauthorized,
+				"Session access denied",
+				nil,
+			)
+		}
+	}
+
 	mr.mu.Lock()
 	defer mr.mu.Unlock()
+
+	// Close old connection if it exists and is different from the new one
+	if oldConn, exists := mr.connections[sessionID]; exists && oldConn != conn {
+		oldConn.SetClosing()
+	}
 
 	mr.connections[sessionID] = conn
 	return nil
@@ -804,12 +826,12 @@ func (mr *MessageRouter) processVoiceMessageWithLLM(sessionID string, audioFileU
 	ctx, cancel := context.WithTimeout(mr.ctx, constants.VoiceProcessTimeout)
 	defer cancel()
 
-	// Create a message indicating the audio file for the LLM
-	// Note: The actual transcription capability depends on the LLM provider
+	// Create a message indicating the audio file for the LLM.
+	// Redact query parameters to avoid leaking pre-signed S3 credentials to external providers.
 	llmMessages := []llm.ChatMessage{
 		{
 			Role:    constants.SenderUser,
-			Content: fmt.Sprintf("Audio file: %s", audioFileURL),
+			Content: fmt.Sprintf("Audio file: %s", redactURLQuery(audioFileURL)),
 		},
 	}
 
@@ -1269,28 +1291,31 @@ func (mr *MessageRouter) HandleAdminLeave(adminID, sessionID string) error {
 	return nil
 }
 
-// RegisterAdminConnection registers an admin connection
-func (mr *MessageRouter) RegisterAdminConnection(adminID string, conn *websocket.Connection) error {
+// RegisterAdminConnection registers an admin connection keyed by adminID:sessionID.
+// This matches the key scheme used by HandleAdminTakeover and BroadcastToSession.
+func (mr *MessageRouter) RegisterAdminConnection(adminID string, sessionID string, conn *websocket.Connection) error {
 	if conn == nil {
 		return ErrNilConnection
 	}
-	if adminID == "" {
+	if adminID == "" || sessionID == "" {
 		return ErrInvalidMessage
 	}
 
 	mr.mu.Lock()
 	defer mr.mu.Unlock()
 
-	mr.adminConns[adminID] = conn
+	adminConnKey := adminID + ":" + sessionID
+	mr.adminConns[adminConnKey] = conn
 	return nil
 }
 
-// UnregisterAdminConnection removes an admin connection
-func (mr *MessageRouter) UnregisterAdminConnection(adminID string) {
+// UnregisterAdminConnection removes an admin connection keyed by adminID:sessionID.
+func (mr *MessageRouter) UnregisterAdminConnection(adminID string, sessionID string) {
 	mr.mu.Lock()
 	defer mr.mu.Unlock()
 
-	delete(mr.adminConns, adminID)
+	adminConnKey := adminID + ":" + sessionID
+	delete(mr.adminConns, adminConnKey)
 }
 
 // HandleError handles errors by sending appropriate error messages to the client

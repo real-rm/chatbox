@@ -17,8 +17,8 @@ variables:
   - until nc -z mongo 27017; do echo "Waiting for MongoDB..."; sleep 1; done
   - |
     apt-get install -y wget gnupg
-    wget -qO /usr/share/keyrings/mongodb-server-6.0.gpg https://www.mongodb.org/static/pgp/server-6.0.asc
-    echo "deb [ signed-by=/usr/share/keyrings/mongodb-server-6.0.gpg ] http://repo.mongodb.org/apt/debian bullseye/mongodb-org/6.0 main" | tee /etc/apt/sources.list.d/mongodb-org-6.0.list
+    wget -qO /usr/share/keyrings/mongodb-server-7.0.gpg https://www.mongodb.org/static/pgp/server-7.0.asc
+    echo "deb [ signed-by=/usr/share/keyrings/mongodb-server-7.0.gpg ] http://repo.mongodb.org/apt/debian bullseye/mongodb-org/7.0 main" | tee /etc/apt/sources.list.d/mongodb-org-7.0.list
     apt-get update
     apt-get install -y mongodb-mongosh
     mongosh "mongodb://admin:admin@mongo:27017/admin" --eval 'try { db.createUser({user: "chatbox", pwd: "ChatBox123", roles: [{role: "readWrite", db: "chatbox"}, {role: "dbAdmin", db: "chatbox"}]}) } catch(e) { print("User already exists: " + e) }'

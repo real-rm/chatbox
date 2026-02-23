@@ -124,12 +124,12 @@ type SessionListOptions struct {
 	SortOrder string // Sort order: "asc" or "desc" (default: "desc")
 }
 
-// Metrics represents aggregated session metrics for admin monitoring
+// Metrics represents aggregated session metrics for admin monitoring.
+// Note: Concurrency metrics (peak concurrent sessions) are not computed here;
+// use an external time-series tool (e.g., Prometheus) for real-time concurrency tracking.
 type Metrics struct {
 	TotalSessions      int
 	ActiveSessions     int
-	AvgConcurrent      float64
-	MaxConcurrent      int
 	TotalTokens        int
 	AvgResponseTime    int64 // milliseconds
 	MaxResponseTime    int64 // milliseconds

@@ -55,6 +55,11 @@ jobs:
           GO_MODULES_TOKEN: ${{ secrets.GO_MODULES_TOKEN || secrets.WORKFLOW_TOKEN_GITHUB || secrets.GITHUB_TOKEN }}
         run: git config --global url."https://${GO_MODULES_TOKEN}@github.com/".insteadOf "https://github.com/"
 
+      - name: Run govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@v1.1.3
+          govulncheck ./...
+
       - name: Run tests with coverage
         run: go test -race -short -timeout 5m -coverprofile=coverage.out ./...
 

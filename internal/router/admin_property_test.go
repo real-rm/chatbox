@@ -66,17 +66,18 @@ func TestProperty_BidirectionalMessageRoutingDuringTakeover(t *testing.T) {
 				return false
 			}
 
-			// Create and register admin connection
+			// Create and register admin connection with compound key
 			adminConn := websocket.NewConnection(adminID, []string{"admin"})
-			err = mr.RegisterAdminConnection(adminID, adminConn)
+			err = mr.RegisterAdminConnection(adminID, sess.ID, adminConn)
 			if err != nil {
 				return false
 			}
 
 			// Verify both connections are registered
+			adminConnKey := adminID + ":" + sess.ID
 			mr.mu.RLock()
 			_, userExists := mr.connections[sess.ID]
-			_, adminExists := mr.adminConns[adminID]
+			_, adminExists := mr.adminConns[adminConnKey]
 			mr.mu.RUnlock()
 
 			return userExists && adminExists

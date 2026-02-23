@@ -1201,8 +1201,6 @@ func TestGetSessionMetrics_ConcurrentSessions(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, metrics)
 	assert.Equal(t, 3, metrics.TotalSessions)
-	// MaxConcurrent not computed by aggregation pipeline (H3 optimization)
-	assert.Equal(t, 0, metrics.MaxConcurrent)
 }
 
 func TestGetTokenUsage_ValidTimeRange(t *testing.T) {

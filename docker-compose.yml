@@ -149,7 +149,7 @@ services:
     networks:
       - chatbox-network
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/chatbox/healthz"]
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8080$${CHATBOX_PATH_PREFIX:-/chatbox}/healthz || exit 1"]
       interval: 10s
       timeout: 3s
       retries: 3

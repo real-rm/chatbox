@@ -41,7 +41,7 @@ allowed_origins = ""
 cors_allowed_origins = ""
 # REQUIRED: Encryption key for message content at rest (must be 32 bytes for AES-256)
 # Set via environment variable ENCRYPTION_KEY or Kubernetes secret
-# Generate with: openssl rand -hex 16  (produces exactly 32 hex chars)
+# Generate with: openssl rand -hex 16  (produces exactly 32 hex chars, 128-bit entropy)
 encryption_key = "PLACEHOLDER_ENCRYPTION_KEY_32_BYTES"
 
 # Maximum message size in bytes for WebSocket connections (default: 1048576 = 1MB)

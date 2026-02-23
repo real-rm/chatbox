@@ -2,7 +2,7 @@
 # NOTE: For production, pin images by digest (e.g., golang:1.24-alpine@sha256:<digest>)
 # to ensure reproducible builds. Run: docker pull golang:1.24-alpine && docker inspect --format='{{index .RepoDigests 0}}'
 # Stage 1: Build the Go application
-FROM golang:1.24.4-alpine AS builder
+FROM golang:1.24.12-alpine AS builder
 
 # Install build dependencies
 RUN apk add --no-cache git ca-certificates tzdata

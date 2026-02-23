@@ -1,6 +1,6 @@
 module github.com/real-rm/chatbox
 
-go 1.24.12
+go 1.24.13
 
 require (
 	github.com/gin-contrib/cors v1.7.6

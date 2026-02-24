@@ -93,7 +93,7 @@ func TestDifyProvider_SendMessage(t *testing.T) {
 			}))
 			defer server.Close()
 
-			provider := NewDifyProvider("test-key", server.URL, "dify-model")
+			provider := NewDifyProvider("test-key", server.URL, "dify-model", createTestLogger())
 
 			req := &LLMRequest{
 				ModelID:  "dify-model",
@@ -198,7 +198,7 @@ func TestDifyProvider_StreamMessage(t *testing.T) {
 			}))
 			defer server.Close()
 
-			provider := NewDifyProvider("test-key", server.URL, "dify-model")
+			provider := NewDifyProvider("test-key", server.URL, "dify-model", createTestLogger())
 
 			req := &LLMRequest{
 				ModelID:  "dify-model",
@@ -236,7 +236,7 @@ func TestDifyProvider_StreamMessage(t *testing.T) {
 }
 
 func TestDifyProvider_GetTokenCount(t *testing.T) {
-	provider := NewDifyProvider("test-key", "https://api.dify.ai/v1", "dify-model")
+	provider := NewDifyProvider("test-key", "https://api.dify.ai/v1", "dify-model", createTestLogger())
 
 	tests := []struct {
 		name    string
@@ -274,7 +274,7 @@ func TestDifyProvider_GetTokenCount(t *testing.T) {
 }
 
 func TestDifyProvider_FormatMessages(t *testing.T) {
-	provider := NewDifyProvider("test-key", "https://api.dify.ai/v1", "dify-model")
+	provider := NewDifyProvider("test-key", "https://api.dify.ai/v1", "dify-model", createTestLogger())
 
 	tests := []struct {
 		name     string
@@ -332,7 +332,7 @@ func TestDifyProvider_MultipleMessages(t *testing.T) {
 	}))
 	defer server.Close()
 
-	provider := NewDifyProvider("test-key", server.URL, "dify-model")
+	provider := NewDifyProvider("test-key", server.URL, "dify-model", createTestLogger())
 
 	req := &LLMRequest{
 		ModelID: "dify-model",

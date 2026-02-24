@@ -93,7 +93,7 @@ func TestAnthropicProvider_SendMessage(t *testing.T) {
 			}))
 			defer server.Close()
 
-			provider := NewAnthropicProvider("test-key", server.URL, "claude-3-opus-20240229")
+			provider := NewAnthropicProvider("test-key", server.URL, "claude-3-opus-20240229", createTestLogger())
 
 			req := &LLMRequest{
 				ModelID:  "claude-3-opus-20240229",
@@ -199,7 +199,7 @@ func TestAnthropicProvider_StreamMessage(t *testing.T) {
 			}))
 			defer server.Close()
 
-			provider := NewAnthropicProvider("test-key", server.URL, "claude-3-opus-20240229")
+			provider := NewAnthropicProvider("test-key", server.URL, "claude-3-opus-20240229", createTestLogger())
 
 			req := &LLMRequest{
 				ModelID:  "claude-3-opus-20240229",
@@ -237,7 +237,7 @@ func TestAnthropicProvider_StreamMessage(t *testing.T) {
 }
 
 func TestAnthropicProvider_GetTokenCount(t *testing.T) {
-	provider := NewAnthropicProvider("test-key", "https://api.anthropic.com/v1", "claude-3-opus-20240229")
+	provider := NewAnthropicProvider("test-key", "https://api.anthropic.com/v1", "claude-3-opus-20240229", createTestLogger())
 
 	tests := []struct {
 		name    string
@@ -293,7 +293,7 @@ func TestAnthropicProvider_SystemMessageHandling(t *testing.T) {
 	}))
 	defer server.Close()
 
-	provider := NewAnthropicProvider("test-key", server.URL, "claude-3-opus-20240229")
+	provider := NewAnthropicProvider("test-key", server.URL, "claude-3-opus-20240229", createTestLogger())
 
 	req := &LLMRequest{
 		ModelID: "claude-3-opus-20240229",

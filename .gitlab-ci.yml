@@ -75,7 +75,7 @@ docker-build-push:
 # Static analysis job
 lint:
   stage: lint
-  image: golang:1.24.4
+  image: golang:1.24.13
   cache:
     key: go-mod-${CI_COMMIT_REF_SLUG}
     paths:
@@ -98,7 +98,7 @@ lint:
 # Combined test + coverage job (avoids running all tests twice)
 test:
   stage: test
-  image: golang:1.24.4
+  image: golang:1.24.13
   services:
     - mongo:7.0
   cache:

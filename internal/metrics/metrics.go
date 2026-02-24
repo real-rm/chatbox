@@ -106,4 +106,11 @@ var (
 		Help:    "Latency of HTTP requests in seconds",
 		Buckets: prometheus.DefBuckets,
 	}, []string{"endpoint", "method"})
+
+	// AdminMessagesDropped tracks messages dropped when an admin connection's send buffer
+	// is full or closing. Admin connections are best-effort; user connections are reliable.
+	AdminMessagesDropped = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "chatbox_admin_messages_dropped_total",
+		Help: "Total number of messages dropped because the admin WebSocket send buffer was full or closing",
+	})
 )

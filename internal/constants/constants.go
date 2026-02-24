@@ -36,10 +36,11 @@ const (
 	DefaultRateLimit      = 100     // Default messages per minute per user
 	DefaultAdminRateLimit = 20      // Default admin requests per minute
 	MaxRetryAttempts      = 3       // Maximum retry attempts for transient errors
-	MaxEventsPerUser      = 1000    // Maximum rate limit events tracked per user
+	MaxEventsPerUser      = 1000    // Maximum rate limit events tracked per user (memory bound: ~16 KB per user at max)
 	MaxUsersTracked       = 100000  // Maximum distinct users in rate limiter map
 	PublicEndpointRate    = 60      // Requests per minute for public endpoints (healthz, readyz, metrics)
-	MaxLLMErrorBodySize   = 1024    // Max bytes to read from LLM provider error responses
+	MaxLLMErrorBodySize              = 1024 // Max bytes to read from LLM provider error responses
+	MaxConcurrentMessagesPerConn     = 3    // Max concurrent RouteMessage goroutines per WebSocket connection
 )
 
 // HTTP Server Timeouts (for standalone server mode)
@@ -204,6 +205,7 @@ const DefaultAnthropicMaxTokens = 4096
 
 // LLM retry configuration
 const (
-	LLMInitialRetryDelay = 1 * time.Second  // Base delay for LLM retry exponential backoff
-	LLMMaxRetryDelay     = 30 * time.Second // Cap for exponential backoff in LLM retries
+	LLMInitialRetryDelay   = 1 * time.Second  // Base delay for LLM retry exponential backoff
+	LLMMaxRetryDelay       = 30 * time.Second // Cap for exponential backoff in LLM retries
+	LLMStreamHeaderTimeout = 30 * time.Second // Max wait for first response byte on streaming requests
 )

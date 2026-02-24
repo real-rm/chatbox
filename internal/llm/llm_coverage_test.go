@@ -110,7 +110,7 @@ func TestCreateProvider(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			provider, err := createProvider(tt.cfg)
+			provider, err := createProvider(tt.cfg, createTestLogger())
 			if tt.wantErr {
 				require.Error(t, err)
 				if tt.errMsg != "" {

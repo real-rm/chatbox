@@ -60,7 +60,7 @@ func TestAllProviders_Integration(t *testing.T) {
 	for _, tc := range providers {
 		t.Run(tc.name, func(t *testing.T) {
 			// Create provider instance
-			provider, err := createProvider(tc.config)
+			provider, err := createProvider(tc.config, createTestLogger())
 			require.NoError(t, err, "Failed to create %s provider", tc.name)
 			require.NotNil(t, provider, "%s provider should not be nil", tc.name)
 

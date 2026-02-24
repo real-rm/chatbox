@@ -125,6 +125,10 @@ type Handler struct {
 	allowedOrigins map[string]bool // Allowed origins for CORS
 	maxMessageSize int64           // Maximum message size in bytes
 
+	// deprecateJWTQueryParam rejects tokens provided via ?token= query parameter when true.
+	// Set via SetDeprecateJWTQueryParam(). Default false preserves backwards compatibility.
+	deprecateJWTQueryParam bool
+
 	// connections tracks active connections by user ID and connection ID
 	connections map[string]map[string]*Connection
 	mu          sync.RWMutex
@@ -182,6 +186,16 @@ func (h *Handler) IsOpenOrigin() bool {
 	return len(h.allowedOrigins) == 0
 }
 
+// SetDeprecateJWTQueryParam controls whether JWT tokens provided via the ?token=
+// query parameter are rejected. When enabled (true), clients must use the
+// Authorization header to prevent tokens leaking into server logs and browser history.
+// Default is false for backwards compatibility.
+func (h *Handler) SetDeprecateJWTQueryParam(deprecate bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.deprecateJWTQueryParam = deprecate
+}
+
 // checkOrigin validates the origin of a WebSocket upgrade request
 func (h *Handler) checkOrigin(r *http.Request) bool {
 	origin := r.Header.Get("Origin")
@@ -220,10 +234,20 @@ func (h *Handler) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		token = authHeader[7:]
 	}
 	if token == "" {
-		token = r.URL.Query().Get("token")
-		if token != "" {
+		queryToken := r.URL.Query().Get("token")
+		if queryToken != "" {
+			h.mu.RLock()
+			deprecated := h.deprecateJWTQueryParam
+			h.mu.RUnlock()
+			if deprecated {
+				h.logger.Warn("JWT query parameter rejected (deprecated transport)",
+					"component", "websocket")
+				http.Error(w, "JWT via query parameter is disabled. Use the Authorization header instead.", http.StatusUnauthorized)
+				return
+			}
 			h.logger.Warn("JWT provided via query parameter (deprecated, use Authorization header)",
 				"component", "websocket")
+			token = queryToken
 		}
 	}
 
@@ -616,6 +640,11 @@ func (c *Connection) readPump(h *Handler) {
 		return nil
 	})
 
+	// Semaphore to cap concurrent RouteMessage goroutines per connection.
+	// Without this, a rapid sender could spawn unbounded goroutines (one per message)
+	// and exhaust memory while long-running LLM calls are in-flight.
+	routeSem := make(chan struct{}, constants.MaxConcurrentMessagesPerConn)
+
 	// Read messages in a loop
 	for {
 		_, rawMessage, err := c.conn.ReadMessage()
@@ -745,17 +774,32 @@ func (c *Connection) readPump(h *Handler) {
 			// handle pong frames. Without this, long LLM streams (>60s) block
 			// pong handling and the pongWait deadline kills the connection.
 			// Copy msg so the loop variable is not reused across iterations.
+			// SafeGo adds panic recovery: a RouteMessage panic must not crash readPump.
+			// routeSem limits concurrent goroutines to MaxConcurrentMessagesPerConn.
 			routeMsg := msg
-			go func() {
-				if err := h.router.RouteMessage(c, &routeMsg); err != nil {
-					util.LogError(h.logger, "websocket", "route message", err,
-						"user_id", c.UserID,
-						"session_id", c.GetSessionID(),
-						"connection_id", c.ConnectionID,
-						"message_type", routeMsg.Type)
-					metrics.MessageErrors.Inc()
-				}
-			}()
+			select {
+			case routeSem <- struct{}{}:
+				util.SafeGo(h.logger, "routeMessage", func() {
+					defer func() { <-routeSem }()
+					if err := h.router.RouteMessage(c, &routeMsg); err != nil {
+						util.LogError(h.logger, "websocket", "route message", err,
+							"user_id", c.UserID,
+							"session_id", c.GetSessionID(),
+							"connection_id", c.ConnectionID,
+							"message_type", routeMsg.Type)
+						metrics.MessageErrors.Inc()
+					}
+				})
+			default:
+				// All goroutine slots are full; reject this message to avoid unbounded growth.
+				h.logger.Warn("Connection overloaded: dropping message (too many in-flight)",
+					"user_id", c.UserID,
+					"session_id", c.GetSessionID(),
+					"connection_id", c.ConnectionID,
+					"limit", constants.MaxConcurrentMessagesPerConn)
+				metrics.MessageErrors.Inc()
+				c.sendErrorResponse(chaterrors.ErrCodeServiceError, "Server busy — please retry")
+			}
 		} else {
 			h.logger.Warn("No router configured, message not processed",
 				"user_id", c.UserID,

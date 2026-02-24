@@ -20,7 +20,7 @@ func (p *PanickingProvider) StreamMessage(ctx context.Context, req *LLMRequest) 
 	ch := make(chan *LLMChunk)
 	go func() {
 		defer close(ch)
-		defer recoverStreamPanic(ch, "test-panicking")
+		defer recoverStreamPanic(ch, "test-panicking", createTestLogger())
 		// Simulate a panic inside the streaming goroutine
 		panic("unexpected nil pointer in streaming")
 	}()
@@ -68,7 +68,7 @@ func TestRecoverStreamPanic_NoPanic(t *testing.T) {
 	ch := make(chan *LLMChunk, 1)
 
 	func() {
-		defer recoverStreamPanic(ch, "test-no-panic")
+		defer recoverStreamPanic(ch, "test-no-panic", createTestLogger())
 		// No panic here
 	}()
 

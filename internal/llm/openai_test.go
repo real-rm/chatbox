@@ -99,7 +99,7 @@ func TestOpenAIProvider_SendMessage(t *testing.T) {
 			}))
 			defer server.Close()
 
-			provider := NewOpenAIProvider("test-key", server.URL, "gpt-4")
+			provider := NewOpenAIProvider("test-key", server.URL, "gpt-4", createTestLogger())
 
 			req := &LLMRequest{
 				ModelID:  "gpt-4",
@@ -191,7 +191,7 @@ func TestOpenAIProvider_StreamMessage(t *testing.T) {
 			}))
 			defer server.Close()
 
-			provider := NewOpenAIProvider("test-key", server.URL, "gpt-4")
+			provider := NewOpenAIProvider("test-key", server.URL, "gpt-4", createTestLogger())
 
 			req := &LLMRequest{
 				ModelID:  "gpt-4",
@@ -229,7 +229,7 @@ func TestOpenAIProvider_StreamMessage(t *testing.T) {
 }
 
 func TestOpenAIProvider_GetTokenCount(t *testing.T) {
-	provider := NewOpenAIProvider("test-key", "https://api.openai.com/v1", "gpt-4")
+	provider := NewOpenAIProvider("test-key", "https://api.openai.com/v1", "gpt-4", createTestLogger())
 
 	tests := []struct {
 		name    string
@@ -277,7 +277,7 @@ func TestOpenAIProvider_ContextCancellation(t *testing.T) {
 	}))
 	defer server.Close()
 
-	provider := NewOpenAIProvider("test-key", server.URL, "gpt-4")
+	provider := NewOpenAIProvider("test-key", server.URL, "gpt-4", createTestLogger())
 
 	// Create context with short timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)

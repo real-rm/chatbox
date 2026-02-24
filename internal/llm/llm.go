@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"net/url"
 	"os"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
@@ -15,6 +17,15 @@ import (
 	"github.com/real-rm/goconfig"
 	"github.com/real-rm/golog"
 )
+
+// newStreamTransport returns an HTTP transport cloned from http.DefaultTransport
+// with ResponseHeaderTimeout set to protect against hung streaming connections
+// (server accepts the TCP connection but never sends the first response byte).
+func newStreamTransport() *http.Transport {
+	t := http.DefaultTransport.(*http.Transport).Clone()
+	t.ResponseHeaderTimeout = constants.LLMStreamHeaderTimeout
+	return t
+}
 
 var (
 	// ErrProviderNotFound is returned when a provider with the given ID is not found
@@ -129,7 +140,7 @@ func NewLLMService(cfg *goconfig.ConfigAccessor, logger *golog.Logger) (*LLMServ
 		service.models[providerCfg.ID] = modelInfo
 
 		// Create provider instance based on type
-		provider, err := createProvider(providerCfg)
+		provider, err := createProvider(providerCfg, llmLogger)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create provider %s: %w", providerCfg.ID, err)
 		}
@@ -222,15 +233,16 @@ func getStringFromMap(m map[string]interface{}, key string) string {
 	return ""
 }
 
-// createProvider creates a provider instance based on the configuration
-func createProvider(cfg LLMProviderConfig) (LLMProvider, error) {
+// createProvider creates a provider instance based on the configuration.
+// The logger is passed to the provider so it can log panic stack traces via recoverStreamPanic.
+func createProvider(cfg LLMProviderConfig, logger *golog.Logger) (LLMProvider, error) {
 	switch cfg.Type {
 	case "openai":
-		return NewOpenAIProvider(cfg.APIKey, cfg.Endpoint, cfg.Model), nil
+		return NewOpenAIProvider(cfg.APIKey, cfg.Endpoint, cfg.Model, logger), nil
 	case "anthropic":
-		return NewAnthropicProvider(cfg.APIKey, cfg.Endpoint, cfg.Model), nil
+		return NewAnthropicProvider(cfg.APIKey, cfg.Endpoint, cfg.Model, logger), nil
 	case "dify":
-		return NewDifyProvider(cfg.APIKey, cfg.Endpoint, cfg.Model), nil
+		return NewDifyProvider(cfg.APIKey, cfg.Endpoint, cfg.Model, logger), nil
 	default:
 		return nil, fmt.Errorf("unsupported provider type: %s", cfg.Type)
 	}
@@ -425,7 +437,7 @@ func (s *LLMService) StreamMessage(ctx context.Context, modelID string, messages
 			wrappedChan := make(chan *LLMChunk)
 			go func() {
 				defer close(wrappedChan)
-				defer recoverStreamPanic(wrappedChan, providerName)
+				defer recoverStreamPanic(wrappedChan, providerName, s.logger)
 				firstChunk := true
 				for chunk := range chunkChan {
 					// Record latency for first chunk (time to first token)
@@ -546,10 +558,15 @@ func ValidateEndpoint(endpoint string) error {
 	return nil
 }
 
-// recoverStreamPanic returns a deferred function for panic recovery in streaming goroutines.
-// On panic, it sends a Done chunk to the channel and increments the error metric.
-func recoverStreamPanic(chunkChan chan<- *LLMChunk, component string) {
+// recoverStreamPanic handles panic recovery in streaming goroutines.
+// On panic it logs the panic value and stack trace, increments the error metric,
+// and sends a Done chunk to unblock downstream consumers.
+func recoverStreamPanic(chunkChan chan<- *LLMChunk, component string, logger *golog.Logger) {
 	if r := recover(); r != nil {
+		logger.Error("Panic recovered in LLM streaming goroutine",
+			"component", component,
+			"panic", fmt.Sprintf("%v", r),
+			"stack", string(debug.Stack()))
 		metrics.LLMErrors.WithLabelValues(component).Inc()
 		// Best-effort send; if the channel is already closed or full, skip.
 		select {

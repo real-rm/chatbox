@@ -70,8 +70,11 @@ spec:
       
       containers:
       - name: chatbox
+        # IMPORTANT: Replace :latest with a pinned semantic version or digest before deploying.
+        # Using :latest with imagePullPolicy:Always causes unpredictable rollouts on pod restarts.
+        # Example: chatbox-websocket:v1.0.0  or  chatbox-websocket@sha256:<digest>
         image: chatbox-websocket:latest
-        imagePullPolicy: Always
+        imagePullPolicy: IfNotPresent  # Safer default; pin the tag before promoting to production
         
         ports:
         - name: http

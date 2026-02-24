@@ -172,7 +172,7 @@ func Register(r *gin.Engine, config *goconfig.ConfigAccessor, logger *golog.Logg
 		encryptionKey = []byte(encryptionKeyStr)
 		chatboxLogger.Info("Message encryption enabled", "key_length", len(encryptionKey))
 	} else {
-		chatboxLogger.Warn("No encryption key configured, messages will be stored unencrypted")
+		chatboxLogger.Error("No encryption key configured — messages will be stored unencrypted. Set ENCRYPTION_KEY to enable AES-256-GCM encryption at rest.")
 	}
 
 	// Validate encryption key length before any encryption operations

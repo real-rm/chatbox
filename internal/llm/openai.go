@@ -13,6 +13,7 @@ import (
 
 	"github.com/real-rm/chatbox/internal/constants"
 	"github.com/real-rm/chatbox/internal/metrics"
+	"github.com/real-rm/golog"
 )
 
 // OpenAIProvider implements the LLMProvider interface for OpenAI API
@@ -20,21 +21,24 @@ type OpenAIProvider struct {
 	apiKey       string
 	endpoint     string
 	model        string
+	logger       *golog.Logger
 	client       *http.Client // used for non-streaming requests (60s timeout)
-	streamClient *http.Client // used for streaming requests (no transport timeout; context controls cancellation)
+	streamClient *http.Client // used for streaming requests; ResponseHeaderTimeout guards against hung connections
 }
 
 // NewOpenAIProvider creates a new OpenAI provider
-func NewOpenAIProvider(apiKey, endpoint, model string) *OpenAIProvider {
+func NewOpenAIProvider(apiKey, endpoint, model string, logger *golog.Logger) *OpenAIProvider {
 	return &OpenAIProvider{
 		apiKey:   apiKey,
 		endpoint: endpoint,
 		model:    model,
+		logger:   logger,
 		client: &http.Client{
 			Timeout: constants.LLMClientTimeout,
 		},
 		streamClient: &http.Client{
-			Timeout: 0, // no deadline; the caller's context controls cancellation
+			Timeout:   0, // no deadline; the caller's context controls stream length
+			Transport: newStreamTransport(),
 		},
 	}
 }
@@ -189,7 +193,7 @@ func (p *OpenAIProvider) StreamMessage(ctx context.Context, req *LLMRequest) (<-
 
 	go func() {
 		defer close(chunkChan)
-		defer recoverStreamPanic(chunkChan, "openai")
+		defer recoverStreamPanic(chunkChan, "openai", p.logger)
 		defer resp.Body.Close()
 
 		scanner := bufio.NewScanner(resp.Body)

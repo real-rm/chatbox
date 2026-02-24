@@ -13,6 +13,7 @@ import (
 
 	"github.com/real-rm/chatbox/internal/constants"
 	"github.com/real-rm/chatbox/internal/metrics"
+	"github.com/real-rm/golog"
 )
 
 // AnthropicProvider implements the LLMProvider interface for Anthropic API
@@ -20,21 +21,24 @@ type AnthropicProvider struct {
 	apiKey       string
 	endpoint     string
 	model        string
+	logger       *golog.Logger
 	client       *http.Client // used for non-streaming requests (60s timeout)
-	streamClient *http.Client // used for streaming requests (no transport timeout; context controls cancellation)
+	streamClient *http.Client // used for streaming requests; ResponseHeaderTimeout guards against hung connections
 }
 
 // NewAnthropicProvider creates a new Anthropic provider
-func NewAnthropicProvider(apiKey, endpoint, model string) *AnthropicProvider {
+func NewAnthropicProvider(apiKey, endpoint, model string, logger *golog.Logger) *AnthropicProvider {
 	return &AnthropicProvider{
 		apiKey:   apiKey,
 		endpoint: endpoint,
 		model:    model,
+		logger:   logger,
 		client: &http.Client{
 			Timeout: constants.LLMClientTimeout,
 		},
 		streamClient: &http.Client{
-			Timeout: 0, // no deadline; the caller's context controls cancellation
+			Timeout:   0, // no deadline; the caller's context controls stream length
+			Transport: newStreamTransport(),
 		},
 	}
 }
@@ -218,7 +222,7 @@ func (p *AnthropicProvider) StreamMessage(ctx context.Context, req *LLMRequest) 
 
 	go func() {
 		defer close(chunkChan)
-		defer recoverStreamPanic(chunkChan, "anthropic")
+		defer recoverStreamPanic(chunkChan, "anthropic", p.logger)
 		defer resp.Body.Close()
 
 		scanner := bufio.NewScanner(resp.Body)

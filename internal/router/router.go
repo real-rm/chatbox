@@ -65,6 +65,7 @@ type MessageRouter struct {
 	connections         map[string]*websocket.Connection // sessionID -> Connection
 	adminConns          map[string]*websocket.Connection // adminID -> Connection
 	mu                  sync.RWMutex
+	wg                  sync.WaitGroup     // tracks all goroutines launched via safeGo
 	logger              *golog.Logger
 	llmStreamTimeout    time.Duration      // NEW: for LLM streaming timeout
 	ctx                 context.Context    // Lifecycle context — cancelled on Shutdown
@@ -94,6 +95,18 @@ func NewMessageRouter(sessionManager *session.SessionManager, llmService LLMServ
 		ctx:                 ctx,
 		cancel:              cancel,
 	}
+}
+
+// safeGo launches a goroutine tracked by the router's WaitGroup so that
+// Shutdown() can wait for all in-flight goroutines to finish.
+// It also adds panic recovery to prevent a misbehaving goroutine from crashing
+// the process.
+func (mr *MessageRouter) safeGo(component string, fn func()) {
+	mr.wg.Add(1)
+	util.SafeGo(mr.logger, component, func() {
+		defer mr.wg.Done()
+		fn()
+	})
 }
 
 // persistMessage persists a message to storage (fire-and-forget).
@@ -130,7 +143,12 @@ func (mr *MessageRouter) RegisterConnection(sessionID string, conn *websocket.Co
 		return ErrInvalidMessage
 	}
 
-	// Verify session ownership if session already exists (prevents session ID squatting)
+	mr.mu.Lock()
+	defer mr.mu.Unlock()
+
+	// Verify session ownership inside the lock to prevent a TOCTOU race between the
+	// ownership check and the connection registration. Both operations are atomic under mu.
+	// Lock ordering is safe: mr.mu → sessionManager.mu (sessionManager never calls back into router).
 	if sess, err := mr.sessionManager.GetSession(sessionID); err == nil {
 		if sess.UserID != conn.UserID {
 			mr.logger.Warn("Session ownership violation in RegisterConnection",
@@ -144,9 +162,6 @@ func (mr *MessageRouter) RegisterConnection(sessionID string, conn *websocket.Co
 			)
 		}
 	}
-
-	mr.mu.Lock()
-	defer mr.mu.Unlock()
 
 	// Close old connection if it exists and is different from the new one
 	if oldConn, exists := mr.connections[sessionID]; exists && oldConn != conn {
@@ -484,7 +499,7 @@ func (mr *MessageRouter) handleHelpRequest(conn *websocket.Connection, msg *mess
 		userID := sess.UserID
 		sessionID := msg.SessionID
 		routerCtx := mr.ctx
-		util.SafeGo(mr.logger, "helpRequestNotification", func() {
+		mr.safeGo("helpRequestNotification", func() {
 			// Check if router is shutting down before sending notification
 			if routerCtx.Err() != nil {
 				return
@@ -813,7 +828,7 @@ func (mr *MessageRouter) handleVoiceMessage(conn *websocket.Connection, msg *mes
 	if mr.llmService != nil && voiceModelID != "" {
 		sessionID := msg.SessionID
 		fileURL := msg.FileURL
-		util.SafeGo(mr.logger, "voiceMessageLLM", func() {
+		mr.safeGo("voiceMessageLLM", func() {
 			mr.processVoiceMessageWithLLM(sessionID, fileURL, voiceModelID)
 		})
 	}
@@ -1117,8 +1132,10 @@ func (mr *MessageRouter) BroadcastToSession(sessionID string, msg *message.Messa
 
 		// No else needed: optional operation, only send if admin connection exists
 		if exists {
+			// Admin connections are best-effort: a full/closing buffer drops the message.
 			if !adminConn.SafeSend(data) {
 				mr.logger.Warn("Admin connection send channel full or closing", "admin_id", assistingAdminID)
+				metrics.AdminMessagesDropped.Inc()
 			}
 		}
 	}
@@ -1293,6 +1310,8 @@ func (mr *MessageRouter) HandleAdminLeave(adminID, sessionID string) error {
 
 // RegisterAdminConnection registers an admin connection keyed by adminID:sessionID.
 // This matches the key scheme used by HandleAdminTakeover and BroadcastToSession.
+// Key format: adminID + ":" + sessionID. Both IDs are guaranteed to be UUID-hex
+// strings (no colons), so the separator is unambiguous.
 func (mr *MessageRouter) RegisterAdminConnection(adminID string, sessionID string, conn *websocket.Connection) error {
 	if conn == nil {
 		return ErrNilConnection
@@ -1383,7 +1402,7 @@ func (mr *MessageRouter) handleChatError(sessionID string, chatErr *chaterrors.C
 
 		if exists {
 			closeSID := sessionID
-			util.SafeGo(mr.logger, "fatal-error-close", func() {
+			mr.safeGo("fatal-error-close", func() {
 				// Give a brief moment for the error message to be sent
 				time.Sleep(constants.InitialRetryDelay)
 
@@ -1421,12 +1440,17 @@ func (mr *MessageRouter) SendErrorMessage(sessionID string, code chaterrors.Erro
 	return mr.sendToConnection(sessionID, errorMsg)
 }
 
-// Shutdown gracefully shuts down the message router and its cleanup goroutines
+// Shutdown gracefully shuts down the message router and its cleanup goroutines.
+// It cancels the lifecycle context, waits for all tracked goroutines to finish,
+// then stops the rate-limiter cleanup goroutine.
 func (mr *MessageRouter) Shutdown() {
 	mr.logger.Info("Shutting down message router")
 	if mr.cancel != nil {
 		mr.cancel()
 	}
+	// Wait for all goroutines launched via safeGo to finish before tearing down
+	// dependencies (MongoDB, LLM service, etc.).
+	mr.wg.Wait()
 	if mr.messageLimiter != nil {
 		mr.messageLimiter.StopCleanup()
 	}

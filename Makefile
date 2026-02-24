@@ -114,11 +114,11 @@ test-verbose: ## Run tests with verbose output
 	@echo "$(COLOR_GREEN)Running tests (verbose)...$(COLOR_RESET)"
 	$(GOTEST) -v -timeout $(TEST_TIMEOUT) -count=1 ./...
 
-cleantest: ## Clear test cache then run all tests
+cleantest: ## Clear test cache then run all tests (with race detector)
 	@echo "$(COLOR_YELLOW)Clearing test cache...$(COLOR_RESET)"
 	$(GOCLEAN) -testcache
-	@echo "$(COLOR_GREEN)Running all tests...$(COLOR_RESET)"
-	$(GOTEST) -v -timeout $(TEST_TIMEOUT) ./...
+	@echo "$(COLOR_GREEN)Running all tests (with race detector)...$(COLOR_RESET)"
+	$(GOTEST) -v -race -timeout $(TEST_TIMEOUT) ./...
 
 ##@ Running
 

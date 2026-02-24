@@ -21,7 +21,7 @@ func TestOpenAI_ErrorBodyTruncated(t *testing.T) {
 	}))
 	defer server.Close()
 
-	provider := NewOpenAIProvider("test-key", server.URL, "gpt-4")
+	provider := NewOpenAIProvider("test-key", server.URL, "gpt-4", createTestLogger())
 
 	_, err := provider.SendMessage(context.Background(), &LLMRequest{
 		ModelID:  "gpt-4",
@@ -43,7 +43,7 @@ func TestAnthropic_ErrorBodyTruncated(t *testing.T) {
 	}))
 	defer server.Close()
 
-	provider := NewAnthropicProvider("test-key", server.URL, "claude-3")
+	provider := NewAnthropicProvider("test-key", server.URL, "claude-3", createTestLogger())
 
 	_, err := provider.SendMessage(context.Background(), &LLMRequest{
 		ModelID:  "claude-3",
@@ -63,7 +63,7 @@ func TestDify_ErrorBodyTruncated(t *testing.T) {
 	}))
 	defer server.Close()
 
-	provider := NewDifyProvider("test-key", server.URL, "assistant")
+	provider := NewDifyProvider("test-key", server.URL, "assistant", createTestLogger())
 
 	_, err := provider.SendMessage(context.Background(), &LLMRequest{
 		ModelID:  "assistant",
@@ -83,7 +83,7 @@ func TestOpenAI_StreamErrorBodyTruncated(t *testing.T) {
 	}))
 	defer server.Close()
 
-	provider := NewOpenAIProvider("test-key", server.URL, "gpt-4")
+	provider := NewOpenAIProvider("test-key", server.URL, "gpt-4", createTestLogger())
 
 	_, err := provider.StreamMessage(context.Background(), &LLMRequest{
 		ModelID:  "gpt-4",

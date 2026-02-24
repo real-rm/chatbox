@@ -14,6 +14,7 @@ import (
 	"github.com/real-rm/chatbox/internal/constants"
 	"github.com/real-rm/chatbox/internal/metrics"
 	"github.com/real-rm/gohelper"
+	"github.com/real-rm/golog"
 )
 
 // DifyProvider implements the LLMProvider interface for Dify API
@@ -21,21 +22,24 @@ type DifyProvider struct {
 	apiKey       string
 	endpoint     string
 	model        string
+	logger       *golog.Logger
 	client       *http.Client // used for non-streaming requests (60s timeout)
-	streamClient *http.Client // used for streaming requests (no transport timeout; context controls cancellation)
+	streamClient *http.Client // used for streaming requests; ResponseHeaderTimeout guards against hung connections
 }
 
 // NewDifyProvider creates a new Dify provider
-func NewDifyProvider(apiKey, endpoint, model string) *DifyProvider {
+func NewDifyProvider(apiKey, endpoint, model string, logger *golog.Logger) *DifyProvider {
 	return &DifyProvider{
 		apiKey:   apiKey,
 		endpoint: endpoint,
 		model:    model,
+		logger:   logger,
 		client: &http.Client{
 			Timeout: constants.LLMClientTimeout,
 		},
 		streamClient: &http.Client{
-			Timeout: 0, // no deadline; the caller's context controls cancellation
+			Timeout:   0, // no deadline; the caller's context controls stream length
+			Transport: newStreamTransport(),
 		},
 	}
 }
@@ -178,7 +182,7 @@ func (p *DifyProvider) StreamMessage(ctx context.Context, req *LLMRequest) (<-ch
 
 	go func() {
 		defer close(chunkChan)
-		defer recoverStreamPanic(chunkChan, "dify")
+		defer recoverStreamPanic(chunkChan, "dify", p.logger)
 		defer resp.Body.Close()
 
 		scanner := bufio.NewScanner(resp.Body)

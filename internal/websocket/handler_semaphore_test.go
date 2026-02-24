@@ -24,7 +24,7 @@ type blockingRouter struct {
 	routed        []*message.Message
 	blockedCh     chan struct{} // closed when all slots are occupied
 	releaseCh     chan struct{} // close to unblock all waiting goroutines
-	maxSeen       atomic.Int32 // highest concurrent count seen
+	maxSeen       atomic.Int32  // highest concurrent count seen
 	currentActive atomic.Int32
 	expectedBlock int32 // how many goroutines we expect to be blocked simultaneously
 }

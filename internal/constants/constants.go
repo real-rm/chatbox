@@ -29,18 +29,18 @@ const (
 
 // Sizes and Limits
 const (
-	DefaultMaxMessageSize = 1048576 // 1MB in bytes for WebSocket messages
-	EncryptionKeyLength   = 32      // AES-256 requires exactly 32 bytes
-	DefaultSessionLimit   = 100     // Default number of sessions to return
-	MaxSessionLimit       = 1000    // Maximum sessions per query (performance cap)
-	DefaultRateLimit      = 100     // Default messages per minute per user
-	DefaultAdminRateLimit = 20      // Default admin requests per minute
-	MaxRetryAttempts      = 3       // Maximum retry attempts for transient errors
-	MaxEventsPerUser      = 1000    // Maximum rate limit events tracked per user (memory bound: ~16 KB per user at max)
-	MaxUsersTracked       = 100000  // Maximum distinct users in rate limiter map
-	PublicEndpointRate    = 60      // Requests per minute for public endpoints (healthz, readyz, metrics)
-	MaxLLMErrorBodySize              = 1024 // Max bytes to read from LLM provider error responses
-	MaxConcurrentMessagesPerConn     = 3    // Max concurrent RouteMessage goroutines per WebSocket connection
+	DefaultMaxMessageSize        = 1048576 // 1MB in bytes for WebSocket messages
+	EncryptionKeyLength          = 32      // AES-256 requires exactly 32 bytes
+	DefaultSessionLimit          = 100     // Default number of sessions to return
+	MaxSessionLimit              = 1000    // Maximum sessions per query (performance cap)
+	DefaultRateLimit             = 100     // Default messages per minute per user
+	DefaultAdminRateLimit        = 20      // Default admin requests per minute
+	MaxRetryAttempts             = 3       // Maximum retry attempts for transient errors
+	MaxEventsPerUser             = 1000    // Maximum rate limit events tracked per user (memory bound: ~16 KB per user at max)
+	MaxUsersTracked              = 100000  // Maximum distinct users in rate limiter map
+	PublicEndpointRate           = 60      // Requests per minute for public endpoints (healthz, readyz, metrics)
+	MaxLLMErrorBodySize          = 1024    // Max bytes to read from LLM provider error responses
+	MaxConcurrentMessagesPerConn = 3       // Max concurrent RouteMessage goroutines per WebSocket connection
 )
 
 // HTTP Server Timeouts (for standalone server mode)

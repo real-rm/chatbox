@@ -19,11 +19,11 @@ import (
 // panicOnFirstCallRouter panics on the first RouteMessage call, succeeds on the second.
 // Used to verify that panic recovery in the dispatch goroutine works correctly.
 type panicOnFirstCallRouter struct {
-	mu           sync.Mutex
-	callCount    atomic.Int32
-	routed       []*message.Message
-	recoveredCh  chan struct{} // closed when second call succeeds
-	closeOnce    sync.Once
+	mu          sync.Mutex
+	callCount   atomic.Int32
+	routed      []*message.Message
+	recoveredCh chan struct{} // closed when second call succeeds
+	closeOnce   sync.Once
 }
 
 func newPanicOnFirstCallRouter() *panicOnFirstCallRouter {

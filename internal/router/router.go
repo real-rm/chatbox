@@ -65,7 +65,7 @@ type MessageRouter struct {
 	connections         map[string]*websocket.Connection // sessionID -> Connection
 	adminConns          map[string]*websocket.Connection // adminID -> Connection
 	mu                  sync.RWMutex
-	wg                  sync.WaitGroup     // tracks all goroutines launched via safeGo
+	wg                  sync.WaitGroup // tracks all goroutines launched via safeGo
 	logger              *golog.Logger
 	llmStreamTimeout    time.Duration      // NEW: for LLM streaming timeout
 	ctx                 context.Context    // Lifecycle context — cancelled on Shutdown

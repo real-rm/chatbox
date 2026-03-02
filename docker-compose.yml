@@ -99,7 +99,8 @@ services:
       mailhog:
         condition: service_started
     env_file:
-      - .env.local  # Optional: override defaults with local secrets
+      - path: .env.local
+        required: false  # Override defaults with local secrets (copy from .env.example)
     environment:
       # Server Configuration
       SERVER_PORT: "8080"

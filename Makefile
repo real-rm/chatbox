@@ -1,6 +1,6 @@
 # Makefile for Chat Application WebSocket Service
 
-.PHONY: help build test test-unit test-integration test-property test-coverage cleantest clean run docker-build docker-run docker-compose-up docker-compose-down lint fmt vet deps tidy check install deploy k8s-deploy k8s-delete k8s-logs k8s-status test-e2e test-e2e-ui test-e2e-api test-e2e-headed test-e2e-all-browsers test-e2e-report
+.PHONY: help build test test-unit test-integration test-property test-coverage cleantest clean run docker-build docker-run docker-compose-up docker-compose-down lint fmt vet deps tidy check install deploy k8s-deploy k8s-delete k8s-logs k8s-status test-e2e test-e2e-ui test-e2e-api test-e2e-headed test-e2e-all-browsers test-e2e-report env-local
 
 # Variables
 APP_NAME := chatbox
@@ -169,6 +169,15 @@ docker-build: ## Build Docker image (set GITHUB_TOKEN env var for private module
 docker-run: ## Run Docker container
 	@echo "$(COLOR_GREEN)Running Docker container...$(COLOR_RESET)"
 	docker run -p 8080:8080 --env-file .env $(DOCKER_IMAGE)
+
+env-local: ## Create .env.local from .env.example (run once before docker-compose-up)
+	@if [ -f .env.local ]; then \
+		echo "$(COLOR_YELLOW).env.local already exists, skipping.$(COLOR_RESET)"; \
+	else \
+		cp .env.example .env.local; \
+		echo "$(COLOR_GREEN).env.local created from .env.example$(COLOR_RESET)"; \
+		echo "$(COLOR_YELLOW)Edit .env.local to set real API keys and secrets.$(COLOR_RESET)"; \
+	fi
 
 docker-compose-up: ## Start services with docker compose
 	@echo "$(COLOR_GREEN)Starting services with docker compose...$(COLOR_RESET)"

@@ -1,0 +1,18 @@
+{
+  "type": "module",
+  "dependencies": {
+    "playwright": "^1.58.2"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.2",
+    "@types/node": "^25.3.3"
+  },
+  "scripts": {
+    "test:e2e": "npx playwright test",
+    "test:frontend": "npx playwright test --project=frontend-chromium",
+    "test:api": "npx playwright test --project=api",
+    "test:all-browsers": "npx playwright test --project=frontend-chromium --project=frontend-firefox --project=frontend-webkit",
+    "static-server": "node tests/static-server.js",
+    "report": "npx playwright show-report"
+  }
+}

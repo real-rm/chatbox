@@ -1,6 +1,6 @@
 # Makefile for Chat Application WebSocket Service
 
-.PHONY: help build test test-unit test-integration test-property test-coverage cleantest clean run docker-build docker-run docker-compose-up docker-compose-down lint fmt vet deps tidy check install deploy k8s-deploy k8s-delete k8s-logs k8s-status
+.PHONY: help build test test-unit test-integration test-property test-coverage cleantest clean run docker-build docker-run docker-compose-up docker-compose-down lint fmt vet deps tidy check install deploy k8s-deploy k8s-delete k8s-logs k8s-status test-e2e test-e2e-ui test-e2e-api test-e2e-headed test-e2e-all-browsers test-e2e-report
 
 # Variables
 APP_NAME := chatbox
@@ -119,6 +119,32 @@ cleantest: ## Clear test cache then run all tests (with race detector)
 	$(GOCLEAN) -testcache
 	@echo "$(COLOR_GREEN)Running all tests (with race detector)...$(COLOR_RESET)"
 	$(GOTEST) -v -race -timeout $(TEST_TIMEOUT) ./...
+
+##@ E2E Testing (Playwright)
+
+test-e2e: ## Run all Playwright E2E tests (frontend + API)
+	@echo "$(COLOR_GREEN)Running all E2E tests...$(COLOR_RESET)"
+	npx playwright test
+
+test-e2e-ui: ## Run frontend E2E tests only (no backend needed)
+	@echo "$(COLOR_GREEN)Running frontend E2E tests...$(COLOR_RESET)"
+	npx playwright test --project=frontend-chromium
+
+test-e2e-api: ## Run API E2E tests only (requires docker-compose up + JWT_SECRET)
+	@echo "$(COLOR_GREEN)Running API E2E tests...$(COLOR_RESET)"
+	npx playwright test --project=api
+
+test-e2e-headed: ## Run frontend E2E tests with visible browser
+	@echo "$(COLOR_GREEN)Running frontend E2E tests (headed)...$(COLOR_RESET)"
+	npx playwright test --project=frontend-chromium --headed
+
+test-e2e-all-browsers: ## Run frontend E2E tests on Chromium, Firefox, and WebKit
+	@echo "$(COLOR_GREEN)Running frontend E2E tests on all browsers...$(COLOR_RESET)"
+	npx playwright test --project=frontend-chromium --project=frontend-firefox --project=frontend-webkit
+
+test-e2e-report: ## Open the Playwright HTML test report
+	@echo "$(COLOR_GREEN)Opening Playwright report...$(COLOR_RESET)"
+	npx playwright show-report
 
 ##@ Running
 

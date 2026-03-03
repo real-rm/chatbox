@@ -26,16 +26,22 @@ A production-ready real-time chat application with WebSocket backend in Go, feat
 ### Using Docker Compose (Recommended for Development)
 
 ```bash
+# First time only: create .env.local from the example template
+make env-local
+# Edit .env.local to set real API keys if needed (works with defaults as-is)
+
 # Start all services (MongoDB, MinIO, MailHog, Chatbox)
-docker-compose up -d
+make docker-compose-up
 
 # View logs
-docker-compose logs -f chatbox
+make docker-compose-logs
 
 # Access points:
-# - WebSocket: ws://localhost:8080/chat/ws
-# - Health: http://localhost:8080/chat/healthz
-# - Metrics: http://localhost:8080/metrics
+# - WebSocket: ws://localhost:8080/chatbox/ws
+# - Health:    http://localhost:8080/chatbox/healthz
+# - Metrics:   http://localhost:8080/metrics
+# - MailHog:   http://localhost:8025
+# - MinIO:     http://localhost:9001
 ```
 
 See [DEPLOYMENT.md](docs/DEPLOYMENT.md) for detailed deployment instructions.
@@ -48,23 +54,26 @@ chatbox/
 │   └── server/            # Main server
 ├── internal/              # Internal packages
 │   ├── auth/             # JWT authentication
-│   ├── config/           # Configuration
 │   ├── constants/        # Centralized constants (no magic numbers/strings)
-│   ├── llm/              # LLM integration
+│   ├── llm/              # LLM integration (OpenAI, Anthropic, Dify)
 │   ├── router/           # Message routing
 │   ├── session/          # Session management
-│   ├── storage/          # MongoDB storage
+│   ├── storage/          # MongoDB storage with AES-256 encryption
 │   ├── util/             # Shared utility functions (DRY principle)
 │   ├── websocket/        # WebSocket handling
 │   └── ...               # Other packages
-├── web/                   # Frontend assets
+├── web/                   # Frontend (sessions.html, chat.html, admin.html)
+├── tests/                 # Playwright E2E tests
+│   ├── frontend/         # UI tests with mocked APIs
+│   ├── api/              # API tests against real server
+│   ├── helpers/          # Shared mock data and JWT helpers
+│   └── static-server.js  # Dev server for web/ during tests
 ├── deployments/           # Kubernetes manifests
 ├── docs/                  # Documentation
-│   ├── verification/     # Test results
-│   └── [feature docs]    # Feature-specific docs
 ├── scripts/               # Utility scripts
 ├── .github/              # GitHub Actions workflows
-├── docker-compose.yml    # Local development
+├── docker-compose.yml    # Local development environment
+├── playwright.config.js  # Playwright configuration
 ├── Dockerfile            # Production image
 └── README.md             # This file
 ```
@@ -240,9 +249,11 @@ For detailed deployment configuration including nginx setup, see [DEPLOYMENT.md]
 ## Development
 
 ### Prerequisites
-- Go 1.21 or higher
-- MongoDB
-- AWS S3 or compatible storage
+- Go 1.24.13 or higher
+- Docker & Docker Compose (for local development)
+- Node.js (for E2E tests)
+- MongoDB (or use docker-compose)
+- AWS S3 or compatible storage (MinIO provided via docker-compose)
 - LLM API access (OpenAI, Anthropic, or Dify)
 
 ### Code Quality
@@ -263,7 +274,17 @@ The codebase follows strict code quality standards:
 ### Running Tests
 
 ```bash
-go test ./...
+# Go unit + integration tests
+make test
+
+# With race detector and clean cache
+make cleantest
+
+# E2E tests (frontend only, no backend required)
+make test-e2e-ui
+
+# E2E tests with visible browser
+make test-e2e-headed
 ```
 
 ### Running the Server
@@ -302,32 +323,54 @@ kubectl apply -f deployments/kubernetes/deployment.yaml
 
 ## Testing
 
-The project follows TDD principles with comprehensive test coverage:
+The project follows TDD principles with comprehensive test coverage across two layers.
 
-- **Unit Tests**: Test individual functions and methods
-- **Property-Based Tests**: Validate universal correctness properties using gopter
-- **Integration Tests**: Test end-to-end flows
+### Go Tests (unit, integration, property-based)
 
-### Run All Tests
 ```bash
-go test ./...
+make test                 # All Go tests with race detector
+make test-unit            # Unit tests only (skip integration)
+make test-integration     # Integration tests (requires MongoDB)
+make test-property        # Property-based tests (gopter)
+make test-coverage        # Generate coverage.html report
+make cleantest            # Clear cache then run all tests
 ```
 
-### Run Tests with Coverage
+**Test results**: ✅ All tests passing | 16+ packages | 80%+ coverage | Race detector clean
+
+### E2E Tests (Playwright)
+
+52 browser-based tests covering all three web interfaces with no backend required.
+
 ```bash
-go test -cover ./...
+# One-time setup
+npm install
+npx playwright install chromium
+
+# Run frontend tests (no backend needed — APIs are mocked)
+make test-e2e-ui
+
+# Run with visible browser to watch tests execute
+make test-e2e-headed
+
+# Run on all browsers (Chromium, Firefox, WebKit)
+make test-e2e-all-browsers
+
+# Run API tests against a live server (requires docker-compose up + JWT_SECRET)
+JWT_SECRET=your-secret make test-e2e-api
+
+# Open the HTML test report
+make test-e2e-report
 ```
 
-### Run Specific Package Tests
-```bash
-go test -v ./internal/websocket
-```
-
-### Test Results
-✅ All tests passing (147s total)  
-✅ 16 packages tested  
-✅ Property-based tests included  
-✅ Integration tests included
+| Test file | Coverage |
+|-----------|----------|
+| `tests/frontend/sessions-page.spec.js` | Session list, empty state, JWT storage, navigation |
+| `tests/frontend/chat-page.spec.js` | WebSocket messaging, AI responses, model selector, help request |
+| `tests/frontend/admin-page.spec.js` | Metrics, session table, filters, sorting, auto-refresh |
+| `tests/api/health.spec.js` | `/healthz`, `/readyz`, Prometheus metrics |
+| `tests/api/sessions.spec.js` | Auth enforcement on user and admin session endpoints |
+| `tests/api/websocket.spec.js` | WebSocket connect/reject/ping-pong |
 
 See [docs/TESTING.md](docs/TESTING.md) for detailed testing documentation.
 

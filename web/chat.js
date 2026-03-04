@@ -827,8 +827,12 @@ class ChatClient {
 
   // Share session — POST to get/create share token, copy link to clipboard
   async shareSession() {
-    if (!this.sessionID) {
-      this.displaySystemMessage("Send a message first before sharing", "error");
+    const hasMessages = this.messagesContainer.querySelector(".message");
+    if (!this.sessionID || !hasMessages) {
+      this.displaySystemMessage(
+        "Start a conversation first — there's nothing to share yet",
+        "info",
+      );
       return;
     }
 

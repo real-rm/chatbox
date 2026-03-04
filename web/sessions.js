@@ -60,6 +60,9 @@ class SessionList {
       this.sessions = data.sessions || [];
       this.userID = data.user_id;
 
+      // User is authenticated — show the new-session button
+      this.newSessionBtn.style.display = "";
+
       this.hideLoading();
       this.renderSessions();
     } catch (error) {
@@ -192,6 +195,12 @@ class SessionList {
   showEmptyState() {
     this.emptyState.style.display = "flex";
     this.sessionsList.style.display = "none";
+
+    // Hide "Start Your First Chat" button if not authenticated
+    const startBtn = this.emptyState.querySelector(".primary-btn");
+    if (startBtn) {
+      startBtn.style.display = this.userID ? "" : "none";
+    }
   }
 
   hideEmptyState() {

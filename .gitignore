@@ -35,6 +35,9 @@ Thumbs.db
 .env.local
 .env.*.local
 
+# Local config with secrets
+config.local.toml
+
 # Build output
 bin/
 dist/

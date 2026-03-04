@@ -126,6 +126,9 @@ LLM providers configured as numbered env vars: `LLM_PROVIDER_1_ID`, `LLM_PROVIDE
 - **Field names**: `camelCase` in BSON documents (e.g., `userId`, `startTime`, `isActive`)
 - **Collection names**: `snake_case` (e.g., `chat_sessions`, `file_stats`)
 
+### Formatting
+Always run `gofmt -w -s .` before committing Go files. CI enforces `gofmt -l .` and will fail on unformatted code.
+
 ### DRY
 Before writing new code, check `internal/util/` and the `github.com/real-rm/*` packages first. Extract any repeated logic into `internal/util/` rather than duplicating it across packages.
 

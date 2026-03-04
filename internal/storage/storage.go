@@ -75,8 +75,8 @@ type SessionDocument struct {
 	HelpRequested      bool              `bson:"helpRequested"`
 	TotalTokens        int               `bson:"totalTokens"`
 	LastActivity       time.Time         `bson:"lastActivity,omitempty"`
-	MaxResponseTime    int64             `bson:"maxRespTime"`   // milliseconds
-	AvgResponseTime    int64             `bson:"avgRespTime"`   // milliseconds
+	MaxResponseTime    int64             `bson:"maxRespTime"` // milliseconds
+	AvgResponseTime    int64             `bson:"avgRespTime"` // milliseconds
 	ShareToken         string            `bson:"shareToken,omitempty"`
 	CreatedAt          time.Time         `bson:"_ts,omitempty"` // gomongo automatic timestamp
 	ModifiedAt         time.Time         `bson:"_mt,omitempty"` // gomongo automatic timestamp
@@ -94,21 +94,21 @@ type MessageDocument struct {
 
 // SessionMetadata represents summary information about a session
 type SessionMetadata struct {
-	ID              string     `json:"id"`
-	UserID          string     `json:"user_id"`
-	Name            string     `json:"name"`
-	LastMessageTime time.Time  `json:"last_activity"`
-	MessageCount    int        `json:"message_count"`
-	AdminAssisted   bool       `json:"admin_assisted"`
-	StartTime       time.Time  `json:"start_time"`
-	EndTime         *time.Time `json:"end_time,omitempty"`
-	IsActive        bool       `json:"is_active"`
-	Duration        int64      `json:"duration"`                // seconds
-	TotalTokens     int        `json:"total_tokens"`
-	MaxResponseTime    int64  `json:"max_response_time"`              // milliseconds
-	AvgResponseTime    int64  `json:"avg_response_time"`              // milliseconds
-	AssistingAdminName string `json:"assisting_admin_name,omitempty"`
-	ShareToken         string `json:"share_token,omitempty"`
+	ID                 string     `json:"id"`
+	UserID             string     `json:"user_id"`
+	Name               string     `json:"name"`
+	LastMessageTime    time.Time  `json:"last_activity"`
+	MessageCount       int        `json:"message_count"`
+	AdminAssisted      bool       `json:"admin_assisted"`
+	StartTime          time.Time  `json:"start_time"`
+	EndTime            *time.Time `json:"end_time,omitempty"`
+	IsActive           bool       `json:"is_active"`
+	Duration           int64      `json:"duration"` // seconds
+	TotalTokens        int        `json:"total_tokens"`
+	MaxResponseTime    int64      `json:"max_response_time"` // milliseconds
+	AvgResponseTime    int64      `json:"avg_response_time"` // milliseconds
+	AssistingAdminName string     `json:"assisting_admin_name,omitempty"`
+	ShareToken         string     `json:"share_token,omitempty"`
 }
 
 // buildSessionMetadata constructs a SessionMetadata from a SessionDocument,

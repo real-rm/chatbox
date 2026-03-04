@@ -97,13 +97,13 @@ const (
 
 // Error Messages
 const (
-	ErrMsgInvalidAuthHeader = "Invalid or missing Authorization header"
-	ErrMsgInvalidToken      = "Invalid or expired token"
-	ErrMsgForbidden         = "Insufficient permissions"
-	ErrMsgInternalError     = "Internal server error"
-	ErrMsgRateLimitExceeded = "Too many requests. Please try again later."
-	ErrMsgInvalidTimeFormat = "Invalid time format. Use RFC3339 format."
-	ErrMsgSessionIDRequired = "Session ID is required"
+	ErrMsgInvalidAuthHeader     = "Invalid or missing Authorization header"
+	ErrMsgInvalidToken          = "Invalid or expired token"
+	ErrMsgForbidden             = "Insufficient permissions"
+	ErrMsgInternalError         = "Internal server error"
+	ErrMsgRateLimitExceeded     = "Too many requests. Please try again later."
+	ErrMsgInvalidTimeFormat     = "Invalid time format. Use RFC3339 format."
+	ErrMsgSessionIDRequired     = "Session ID is required"
 	ErrMsgSharedSessionNotFound = "Shared session not found"
 )
 

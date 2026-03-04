@@ -36,6 +36,10 @@ func (m *MockStorageService) AddMessage(sessionID string, msg *session.Message) 
 	return nil
 }
 
+func (m *MockStorageService) UpdateSessionName(sessionID, name string) error {
+	return nil
+}
+
 // MockLLMService for testing
 type MockLLMService struct {
 	StreamMessageFunc func(context.Context, string, []llm.ChatMessage) (<-chan *llm.LLMChunk, error)

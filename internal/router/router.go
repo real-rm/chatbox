@@ -52,6 +52,7 @@ type NotificationService interface {
 type StorageService interface {
 	CreateSession(sess *session.Session) error
 	AddMessage(sessionID string, msg *session.Message) error
+	UpdateSessionName(sessionID, name string) error
 }
 
 // MessageRouter routes messages between clients, LLM backends, and admin users
@@ -254,9 +255,26 @@ func (mr *MessageRouter) HandleUserMessage(conn *websocket.Connection, msg *mess
 		return err
 	}
 
+	// Use the authoritative session ID (may differ from msg.SessionID if the
+	// client sent a stale/random ID and the server reused an existing session).
+	sessionID := sess.ID
+
+	// If the session ID differs from what the client sent, re-register the
+	// connection under the correct session ID so sendToConnection can find it.
+	if sessionID != msg.SessionID {
+		mr.mu.Lock()
+		if c, ok := mr.connections[msg.SessionID]; ok {
+			delete(mr.connections, msg.SessionID)
+			mr.connections[sessionID] = c
+		}
+		mr.mu.Unlock()
+
+		conn.SetSessionID(sessionID)
+	}
+
 	sessModelID := sess.GetModelID()
 	mr.logger.Debug("Routing user message to LLM",
-		"session_id", msg.SessionID,
+		"session_id", sessionID,
 		"content_length", len(msg.Content),
 		"model_id", sessModelID)
 
@@ -267,23 +285,31 @@ func (mr *MessageRouter) HandleUserMessage(conn *websocket.Connection, msg *mess
 		Sender:    string(message.SenderUser),
 		Metadata:  msg.Metadata,
 	}
-	if err := mr.sessionManager.AddMessage(msg.SessionID, userSessionMsg); err != nil {
-		mr.logger.Warn("Failed to store user message in session", "error", err, "session_id", msg.SessionID)
+	if err := mr.sessionManager.AddMessage(sessionID, userSessionMsg); err != nil {
+		mr.logger.Warn("Failed to store user message in session", "error", err, "session_id", sessionID)
 	}
-	mr.persistMessage(msg.SessionID, userSessionMsg)
+	mr.persistMessage(sessionID, userSessionMsg)
 
-	// Set session name from first user message (no-op if name already set)
-	mr.sessionManager.SetSessionNameFromMessage(msg.SessionID, msg.Content)
+	// Set session name from first user message and persist to storage.
+	// Check before/after to avoid redundant DB writes on subsequent messages.
+	nameBefore := sess.Name
+	if err := mr.sessionManager.SetSessionNameFromMessage(sessionID, msg.Content); err == nil {
+		if nameBefore == "" && sess.Name != "" && mr.storageService != nil {
+			if err := mr.storageService.UpdateSessionName(sessionID, sess.Name); err != nil {
+				mr.logger.Warn("Failed to persist session name", "session_id", sessionID, "error", err)
+			}
+		}
+	}
 
 	// Send loading indicator to client
 	loadingMsg := &message.Message{
 		Type:      message.TypeLoading,
-		SessionID: msg.SessionID,
+		SessionID: sessionID,
 		Sender:    message.SenderAI,
 		Timestamp: time.Now(),
 	}
 	// No else needed: optional operation (fire-and-forget), failure is logged but not fatal
-	if err := mr.sendToConnection(msg.SessionID, loadingMsg); err != nil {
+	if err := mr.sendToConnection(sessionID, loadingMsg); err != nil {
 		mr.logger.Warn("Failed to send loading indicator", "error", err)
 	}
 
@@ -323,7 +349,7 @@ func (mr *MessageRouter) HandleUserMessage(conn *websocket.Connection, msg *mess
 		// No else needed: early return pattern (guard clause)
 		if ctx.Err() == context.DeadlineExceeded {
 			util.LogError(mr.logger, "router", "stream LLM response", ctx.Err(),
-				"session_id", msg.SessionID,
+				"session_id", sessionID,
 				"model_id", modelID,
 				"timeout", timeout,
 				"elapsed", time.Since(startTime))
@@ -334,16 +360,16 @@ func (mr *MessageRouter) HandleUserMessage(conn *websocket.Connection, msg *mess
 			// Send timeout error response to client
 			errorMsg := &message.Message{
 				Type:      message.TypeError,
-				SessionID: msg.SessionID,
+				SessionID: sessionID,
 				Sender:    message.SenderAI,
 				Error:     timeoutErr.ToErrorInfo(),
 				Timestamp: time.Now(),
 			}
-			return mr.sendToConnection(msg.SessionID, errorMsg)
+			return mr.sendToConnection(sessionID, errorMsg)
 		}
 
 		util.LogError(mr.logger, "router", "call LLM service", err,
-			"session_id", msg.SessionID,
+			"session_id", sessionID,
 			"model_id", modelID)
 
 		// Create appropriate error based on the failure
@@ -352,12 +378,12 @@ func (mr *MessageRouter) HandleUserMessage(conn *websocket.Connection, msg *mess
 		// Send error response to client
 		errorMsg := &message.Message{
 			Type:      message.TypeError,
-			SessionID: msg.SessionID,
+			SessionID: sessionID,
 			Sender:    message.SenderAI,
 			Error:     llmErr.ToErrorInfo(),
 			Timestamp: time.Now(),
 		}
-		return mr.sendToConnection(msg.SessionID, errorMsg)
+		return mr.sendToConnection(sessionID, errorMsg)
 	}
 
 	// Stream response chunks to client
@@ -369,7 +395,7 @@ func (mr *MessageRouter) HandleUserMessage(conn *websocket.Connection, msg *mess
 		// No else needed: early return pattern (guard clause)
 		if ctx.Err() == context.DeadlineExceeded {
 			util.LogError(mr.logger, "router", "process LLM streaming chunk", ctx.Err(),
-				"session_id", msg.SessionID,
+				"session_id", sessionID,
 				"model_id", modelID,
 				"timeout", timeout,
 				"elapsed", time.Since(startTime))
@@ -378,23 +404,25 @@ func (mr *MessageRouter) HandleUserMessage(conn *websocket.Connection, msg *mess
 			timeoutErr := chaterrors.ErrLLMTimeout(timeout)
 			errorMsg := &message.Message{
 				Type:      message.TypeError,
-				SessionID: msg.SessionID,
+				SessionID: sessionID,
 				Sender:    message.SenderAI,
 				Error:     timeoutErr.ToErrorInfo(),
 				Timestamp: time.Now(),
 			}
-			mr.sendToConnection(msg.SessionID, errorMsg)
+			mr.sendToConnection(sessionID, errorMsg)
 			return ctx.Err()
 		}
 
-		// No else needed: optional operation, only process non-empty chunks
 		if chunk.Content != "" {
 			fullContent.WriteString(chunk.Content)
+		}
 
-			// Send chunk to client
+		// Send chunk to client when there is content, or when the
+		// stream is done (so the client always receives done=true).
+		if chunk.Content != "" || chunk.Done {
 			chunkMsg := &message.Message{
 				Type:      message.TypeAIResponse,
-				SessionID: msg.SessionID,
+				SessionID: sessionID,
 				Content:   chunk.Content,
 				Sender:    message.SenderAI,
 				ModelID:   modelID,
@@ -405,16 +433,14 @@ func (mr *MessageRouter) HandleUserMessage(conn *websocket.Connection, msg *mess
 				},
 			}
 
-			// No else needed: optional operation (fire-and-forget), failure is logged but not fatal
-			if err := mr.sendToConnection(msg.SessionID, chunkMsg); err != nil {
+			if err := mr.sendToConnection(sessionID, chunkMsg); err != nil {
 				mr.logger.Warn("Failed to send chunk to client",
-					"session_id", msg.SessionID,
+					"session_id", sessionID,
 					"error", err)
 			}
 		}
 
 		// If this is the final chunk, break
-		// No else needed: loop continues to next iteration if not done
 		if chunk.Done {
 			break
 		}
@@ -422,8 +448,8 @@ func (mr *MessageRouter) HandleUserMessage(conn *websocket.Connection, msg *mess
 
 	// Record response time
 	responseTime := time.Since(startTime)
-	if err := mr.sessionManager.RecordResponseTime(msg.SessionID, responseTime); err != nil {
-		mr.logger.Warn("Failed to record response time", "session_id", msg.SessionID, "error", err)
+	if err := mr.sessionManager.RecordResponseTime(sessionID, responseTime); err != nil {
+		mr.logger.Warn("Failed to record response time", "session_id", sessionID, "error", err)
 	}
 
 	// Persist the AI response to session and storage
@@ -433,15 +459,15 @@ func (mr *MessageRouter) HandleUserMessage(conn *websocket.Connection, msg *mess
 			Timestamp: time.Now(),
 			Sender:    constants.SenderAI,
 		}
-		if err := mr.sessionManager.AddMessage(msg.SessionID, aiSessionMsg); err != nil {
-			mr.logger.Warn("Failed to store AI response in session", "error", err, "session_id", msg.SessionID)
+		if err := mr.sessionManager.AddMessage(sessionID, aiSessionMsg); err != nil {
+			mr.logger.Warn("Failed to store AI response in session", "error", err, "session_id", sessionID)
 		}
-		mr.persistMessage(msg.SessionID, aiSessionMsg)
+		mr.persistMessage(sessionID, aiSessionMsg)
 
 		// Estimate token usage (rough estimate: ~4 chars per token)
 		tokenCount = fullContent.Len() / constants.CharsPerToken
-		if err := mr.sessionManager.UpdateTokenUsage(msg.SessionID, tokenCount); err != nil {
-			mr.logger.Warn("Failed to update token usage", "session_id", msg.SessionID, "error", err)
+		if err := mr.sessionManager.UpdateTokenUsage(sessionID, tokenCount); err != nil {
+			mr.logger.Warn("Failed to update token usage", "session_id", sessionID, "error", err)
 		}
 	}
 
@@ -524,7 +550,9 @@ func (mr *MessageRouter) handleHelpRequest(conn *websocket.Connection, msg *mess
 	return mr.sendToConnection(msg.SessionID, response)
 }
 
-// getOrCreateSession retrieves an existing session or creates a new one if not found
+// getOrCreateSession retrieves an existing session or creates a new one if not found.
+// If the client-provided sessionID is not in memory but the user already has an active
+// session (e.g. client used a stale/random ID), the existing active session is returned.
 // SECURITY: Enforces session ownership - users can only access their own sessions
 func (mr *MessageRouter) getOrCreateSession(conn *websocket.Connection, sessionID string) (*session.Session, error) {
 	// Try to get existing session
@@ -547,10 +575,26 @@ func (mr *MessageRouter) getOrCreateSession(conn *websocket.Connection, sessionI
 		return sess, nil // Session exists and belongs to user
 	}
 
-	// Session not found - create new one
-	// No else needed: early return pattern (guard clause)
+	// Session not found - create new one or reuse existing active session
 	if errors.Is(err, session.ErrSessionNotFound) {
-		return mr.createNewSession(conn)
+		newSess, createErr := mr.createNewSession(conn)
+		if createErr == nil {
+			return newSess, nil
+		}
+
+		// If creation failed because user already has an active session,
+		// return that existing session instead of erroring out.
+		if errors.Is(createErr, session.ErrActiveSessionExists) {
+			if activeSess, activeErr := mr.sessionManager.GetActiveSessionForUser(conn.UserID); activeErr == nil {
+				mr.logger.Info("Reusing existing active session for user",
+					"requested_session_id", sessionID,
+					"active_session_id", activeSess.ID,
+					"user_id", conn.UserID)
+				return activeSess, nil
+			}
+		}
+
+		return nil, createErr
 	}
 
 	// Other error
@@ -566,10 +610,12 @@ func (mr *MessageRouter) createNewSession(conn *websocket.Connection) (*session.
 	}
 
 	// Persist to database
-	if err := mr.storageService.CreateSession(sess); err != nil {
-		// Rollback in-memory session
-		mr.sessionManager.EndSession(sess.ID)
-		return nil, chaterrors.ErrDatabaseError(err)
+	if mr.storageService != nil {
+		if err := mr.storageService.CreateSession(sess); err != nil {
+			// Rollback in-memory session
+			mr.sessionManager.EndSession(sess.ID)
+			return nil, chaterrors.ErrDatabaseError(err)
+		}
 	}
 
 	return sess, nil

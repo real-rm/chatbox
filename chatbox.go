@@ -32,6 +32,7 @@ import (
 	"github.com/real-rm/chatbox/internal/util"
 	"github.com/real-rm/chatbox/internal/websocket"
 	"github.com/real-rm/goconfig"
+	"github.com/real-rm/gohelper"
 	levelStore "github.com/real-rm/golevelstore"
 	"github.com/real-rm/golog"
 	"github.com/real-rm/gomongo"
@@ -430,8 +431,14 @@ func Register(r *gin.Engine, config *goconfig.ConfigAccessor, logger *golog.Logg
 			wsHandler.HandleWebSocket(c.Writer, c.Request)
 		})
 
-		// User session list endpoint (authenticated but not admin-only)
+		// User session endpoints (authenticated but not admin-only)
 		chatGroup.GET("/sessions", userAuthMiddleware(validator, chatboxLogger), handleUserSessions(storageService, chatboxLogger))
+		chatGroup.GET("/sessions/:sessionID", userAuthMiddleware(validator, chatboxLogger), handleGetSessionMessages(storageService, chatboxLogger))
+		chatGroup.POST("/sessions/:sessionID/end", userAuthMiddleware(validator, chatboxLogger), handleEndSession(storageService, sessionManager, chatboxLogger))
+		chatGroup.POST("/sessions/:sessionID/share", userAuthMiddleware(validator, chatboxLogger), handleShareSession(storageService, chatboxLogger))
+
+		// Public shared session endpoint (no auth, rate-limited)
+		chatGroup.GET("/shared/:shareToken", publicRateLimitMiddleware(publicLimiter, chatboxLogger), handleGetSharedSession(storageService, chatboxLogger))
 
 		// Admin HTTP endpoints
 		adminGroup := chatGroup.Group("/admin")
@@ -723,6 +730,197 @@ func handleUserSessions(storageService *storage.StorageService, logger *golog.Lo
 			"count":     len(sessions),
 			"limit":     constants.DefaultSessionLimit,
 			"truncated": len(sessions) == constants.DefaultSessionLimit,
+		})
+	}
+}
+
+// handleGetSessionMessages returns a handler for fetching a single session's messages.
+// SECURITY: Enforces session ownership — users can only access their own sessions.
+func handleGetSessionMessages(storageService *storage.StorageService, logger *golog.Logger) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		claimsInterface, exists := c.Get("claims")
+		if !exists {
+			httperrors.RespondUnauthorized(c, "")
+			return
+		}
+		claims, ok := claimsInterface.(*auth.Claims)
+		if !ok {
+			util.LogError(logger, "http", "validate claims type", fmt.Errorf("invalid claims type in context"))
+			httperrors.RespondInternalError(c)
+			return
+		}
+
+		sessionID := c.Param("sessionID")
+		if sessionID == "" {
+			httperrors.RespondBadRequest(c, "session ID is required")
+			return
+		}
+
+		sess, err := storageService.GetSession(sessionID)
+		if err != nil {
+			util.LogError(logger, "http", "get session", err, "session_id", sessionID, "user_id", claims.UserID)
+			httperrors.RespondNotFound(c, "Session not found")
+			return
+		}
+
+		// Verify ownership
+		if sess.UserID != claims.UserID {
+			logger.Warn("Session ownership violation",
+				"session_id", sessionID,
+				"session_owner", sess.UserID,
+				"requesting_user", claims.UserID)
+			httperrors.RespondNotFound(c, "Session not found")
+			return
+		}
+
+		c.JSON(constants.StatusOK, gin.H{
+			"session_id": sess.ID,
+			"name":       sess.Name,
+			"messages":   sess.Messages,
+		})
+	}
+}
+
+// handleEndSession ends an active session for the authenticated user.
+func handleEndSession(storageService *storage.StorageService, sessionManager *session.SessionManager, logger *golog.Logger) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		claimsInterface, exists := c.Get("claims")
+		if !exists {
+			httperrors.RespondUnauthorized(c, "")
+			return
+		}
+		claims, ok := claimsInterface.(*auth.Claims)
+		if !ok {
+			util.LogError(logger, "http", "validate claims type", fmt.Errorf("invalid claims type in context"))
+			httperrors.RespondInternalError(c)
+			return
+		}
+
+		sessionID := c.Param("sessionID")
+		if sessionID == "" {
+			httperrors.RespondBadRequest(c, "session ID is required")
+			return
+		}
+
+		// Verify ownership via storage
+		sess, err := storageService.GetSession(sessionID)
+		if err != nil {
+			httperrors.RespondNotFound(c, "Session not found")
+			return
+		}
+		if sess.UserID != claims.UserID {
+			httperrors.RespondNotFound(c, "Session not found")
+			return
+		}
+
+		// End in-memory session (ignore not-found — may already be expired from memory)
+		_ = sessionManager.EndSession(sessionID)
+
+		// Persist to storage
+		if err := storageService.EndSession(sessionID, time.Now()); err != nil {
+			util.LogError(logger, "http", "end session", err, "session_id", sessionID)
+			httperrors.RespondInternalError(c)
+			return
+		}
+
+		c.JSON(constants.StatusOK, gin.H{"status": "ended"})
+	}
+}
+
+// handleShareSession generates or retrieves a share token for a session.
+// SECURITY: Enforces session ownership — users can only share their own sessions.
+func handleShareSession(storageService *storage.StorageService, logger *golog.Logger) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		claimsInterface, exists := c.Get("claims")
+		if !exists {
+			httperrors.RespondUnauthorized(c, "")
+			return
+		}
+		claims, ok := claimsInterface.(*auth.Claims)
+		if !ok {
+			util.LogError(logger, "http", "validate claims type", fmt.Errorf("invalid claims type in context"))
+			httperrors.RespondInternalError(c)
+			return
+		}
+
+		sessionID := c.Param("sessionID")
+		if sessionID == "" {
+			httperrors.RespondBadRequest(c, "session ID is required")
+			return
+		}
+
+		// Verify ownership
+		sess, err := storageService.GetSession(sessionID)
+		if err != nil {
+			httperrors.RespondNotFound(c, "Session not found")
+			return
+		}
+		if sess.UserID != claims.UserID {
+			httperrors.RespondNotFound(c, "Session not found")
+			return
+		}
+
+		// Check if already shared — return existing token
+		existingToken, err := storageService.GetShareToken(sessionID)
+		if err != nil {
+			util.LogError(logger, "http", "get share token", err, "session_id", sessionID)
+			httperrors.RespondInternalError(c)
+			return
+		}
+		if existingToken != "" {
+			c.JSON(constants.StatusOK, gin.H{
+				"share_token": existingToken,
+			})
+			return
+		}
+
+		// Generate new share token
+		token, err := gohelper.GenUUID(constants.ShareTokenLength)
+		if err != nil {
+			util.LogError(logger, "http", "generate share token", err, "session_id", sessionID)
+			httperrors.RespondInternalError(c)
+			return
+		}
+
+		// Persist token
+		if err := storageService.SetShareToken(sessionID, token); err != nil {
+			util.LogError(logger, "http", "set share token", err, "session_id", sessionID)
+			httperrors.RespondInternalError(c)
+			return
+		}
+
+		logger.Info("Session shared", "session_id", sessionID, "user_id", claims.UserID)
+		c.JSON(constants.StatusOK, gin.H{
+			"share_token": token,
+		})
+	}
+}
+
+// handleGetSharedSession returns session data for a public share link.
+// No authentication required — anyone with the share token can view.
+func handleGetSharedSession(storageService *storage.StorageService, logger *golog.Logger) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		shareToken := c.Param("shareToken")
+		if shareToken == "" {
+			httperrors.RespondBadRequest(c, "share token is required")
+			return
+		}
+
+		sess, err := storageService.GetSessionByShareToken(shareToken)
+		if err != nil {
+			if errors.Is(err, storage.ErrSessionNotFound) {
+				httperrors.RespondNotFound(c, constants.ErrMsgSharedSessionNotFound)
+				return
+			}
+			util.LogError(logger, "http", "get shared session", err)
+			httperrors.RespondInternalError(c)
+			return
+		}
+
+		c.JSON(constants.StatusOK, gin.H{
+			"session_id": sess.ID,
+			"name":       sess.Name,
+			"messages":   sess.Messages,
 		})
 	}
 }

@@ -31,6 +31,7 @@ const (
 const (
 	DefaultMaxMessageSize        = 1048576 // 1MB in bytes for WebSocket messages
 	EncryptionKeyLength          = 32      // AES-256 requires exactly 32 bytes
+	ShareTokenLength             = 32      // Hex chars for share token
 	DefaultSessionLimit          = 100     // Default number of sessions to return
 	MaxSessionLimit              = 1000    // Maximum sessions per query (performance cap)
 	DefaultRateLimit             = 100     // Default messages per minute per user
@@ -103,6 +104,7 @@ const (
 	ErrMsgRateLimitExceeded = "Too many requests. Please try again later."
 	ErrMsgInvalidTimeFormat = "Invalid time format. Use RFC3339 format."
 	ErrMsgSessionIDRequired = "Session ID is required"
+	ErrMsgSharedSessionNotFound = "Shared session not found"
 )
 
 // MongoDB Field Names (BSON tags)
@@ -116,6 +118,7 @@ const (
 	MongoFieldDuration      = "dur"
 	MongoFieldTotalTokens   = "totalTokens"
 	MongoFieldLastActivity  = "lastActivity"
+	MongoFieldShareToken    = "shareToken"
 )
 
 // MongoDB Index Names
@@ -124,6 +127,7 @@ const (
 	IndexStartTime     = "idx_start_time"
 	IndexAdminAssisted = "idx_admin_assisted"
 	IndexUserStartTime = "idx_user_start_time"
+	IndexShareToken    = "idx_share_token"
 )
 
 // Token Estimation

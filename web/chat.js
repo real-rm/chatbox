@@ -1,4 +1,12 @@
 // Chat Client Application
+
+// Dev/production configuration via query parameters:
+//   ?prefix=/custom/path  — API path prefix (default: /chatbox)
+//   ?api=localhost:8080    — API server host:port (default: same as page host)
+const _qp = new URLSearchParams(window.location.search);
+const PATH_PREFIX = _qp.get("prefix") || "/chatbox";
+const API_HOST = _qp.get("api") || window.location.host;
+
 class ChatClient {
   constructor() {
     this.ws = null;
@@ -14,18 +22,25 @@ class ChatClient {
     this.recordingTimer = null;
     this.audioChunks = [];
 
-    // Check if in admin mode
+    // Check if in admin mode or shared (read-only) mode
     const urlParams = new URLSearchParams(window.location.search);
     this.isAdminMode = urlParams.get("admin") === "true";
+    this.shareToken = urlParams.get("share_token") || null;
 
     this.initializeElements();
     this.attachEventListeners();
-    this.connect();
+
+    if (this.shareToken) {
+      this.enterReadOnlyMode();
+    } else {
+      this.connect();
+    }
   }
 
   initializeElements() {
     // Header elements
     this.backBtn = document.getElementById("back-btn");
+    this.shareBtn = document.getElementById("share-btn");
 
     // Status elements
     this.statusText = document.getElementById("status-text");
@@ -69,6 +84,9 @@ class ChatClient {
     // Back button
     this.backBtn.addEventListener("click", () => this.goBackToSessions());
 
+    // Share button
+    this.shareBtn.addEventListener("click", () => this.shareSession());
+
     // Send message
     this.sendBtn.addEventListener("click", () => this.sendMessage());
     this.messageInput.addEventListener("keypress", (e) => {
@@ -100,7 +118,7 @@ class ChatClient {
   }
 
   // WebSocket Connection Management
-  connect() {
+  async connect() {
     const token = this.getJWTToken();
     if (!token) {
       this.updateStatus("disconnected", "No authentication token");
@@ -110,18 +128,86 @@ class ChatClient {
     this.updateStatus("connecting", "Connecting...");
 
     // Check for session ID from URL (when navigating from session list)
+    let isExistingSession = false;
     if (!this.sessionID) {
       const urlParams = new URLSearchParams(window.location.search);
       const sessionIDFromURL = urlParams.get("session_id");
+      const isNewChat = urlParams.get("new") === "1";
       if (sessionIDFromURL) {
         this.sessionID = sessionIDFromURL;
+        isExistingSession = true;
+      } else if (isNewChat) {
+        // Explicit new chat — generate a fresh UUID so the server creates
+        // a brand-new session (the active session was already ended).
+        this.sessionID = crypto.randomUUID();
+      } else {
+        // Fetch existing sessions to reuse an active one (server enforces
+        // one-active-session-per-user, so creating a new one would fail)
+        this.sessionID = await this.resolveSessionID(token);
       }
     }
 
+    // Load message history for existing sessions before connecting
+    if (isExistingSession) {
+      await this.loadMessageHistory(token);
+    }
+
+    this.openWebSocket(token);
+  }
+
+  // Fetch the user's sessions and return an active session ID if one exists,
+  // otherwise return a new random UUID so the server creates a fresh session.
+  async resolveSessionID(token) {
+    try {
+      const apiBase = _qp.get("api")
+        ? `${window.location.protocol}//${_qp.get("api")}`
+        : "";
+      const response = await fetch(`${apiBase}${PATH_PREFIX}/sessions`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        const sessions = data.sessions || [];
+        // Find an active session (is_active=true means no end_time set)
+        const active = sessions.find((s) => s.is_active);
+        if (active && active.id) {
+          return active.id;
+        }
+      }
+    } catch (err) {
+      console.warn("Could not fetch existing sessions:", err);
+    }
+    // No active session found — generate a new ID for server-side creation
+    return crypto.randomUUID();
+  }
+
+  async loadMessageHistory(token) {
+    try {
+      const apiBase = _qp.get("api")
+        ? `${window.location.protocol}//${_qp.get("api")}`
+        : "";
+      const response = await fetch(
+        `${apiBase}${PATH_PREFIX}/sessions/${this.sessionID}`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      if (!response.ok) {
+        console.warn("Failed to load message history:", response.status);
+        return;
+      }
+      const data = await response.json();
+      const messages = data.messages || [];
+      for (const msg of messages) {
+        this.displayMessage(msg);
+      }
+    } catch (err) {
+      console.warn("Could not load message history:", err);
+    }
+  }
+
+  openWebSocket(token) {
     // Construct WebSocket URL
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const host = window.location.host || "localhost:8080";
-    let wsUrl = `${protocol}//${host}/chat/ws?token=${token}`;
+    let wsUrl = `${protocol}//${API_HOST}${PATH_PREFIX}/ws?token=${token}`;
 
     // Include session ID if reconnecting or loading existing session
     if (this.sessionID) {
@@ -221,20 +307,14 @@ class ChatClient {
     }, delay);
   }
 
-  // Heartbeat (Ping/Pong)
+  // Heartbeat — the server sends WebSocket protocol-level pings (writePump);
+  // the browser responds with pongs automatically. No application-level ping needed.
   startHeartbeat() {
-    this.pingInterval = setInterval(() => {
-      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-        this.ws.send(JSON.stringify({ type: "ping" }));
-      }
-    }, 30000); // 30 seconds
+    // no-op: handled by server-side ping/pong frames
   }
 
   stopHeartbeat() {
-    if (this.pingInterval) {
-      clearInterval(this.pingInterval);
-      this.pingInterval = null;
-    }
+    // no-op
   }
 
   // Message Handlers
@@ -251,7 +331,47 @@ class ChatClient {
   }
 
   handleAIResponse(message) {
-    this.displayMessage(message);
+    const isStreaming =
+      message.metadata && message.metadata.streaming === "true";
+    const isDone = message.metadata && message.metadata.done === "true";
+
+    if (isStreaming) {
+      // Append chunk content to the current streaming message bubble
+      if (!this._streamingDiv) {
+        this.hideLoading();
+        this._streamingDiv = document.createElement("div");
+        this._streamingDiv.className = "message ai";
+
+        const contentDiv = document.createElement("div");
+        contentDiv.className = "message-content";
+        this._streamingDiv.appendChild(contentDiv);
+
+        const timestamp = document.createElement("div");
+        timestamp.className = "message-timestamp";
+        this._streamingDiv.appendChild(timestamp);
+
+        this.messagesContainer.appendChild(this._streamingDiv);
+      }
+
+      // Append text to the content element
+      const contentEl = this._streamingDiv.querySelector(".message-content");
+      contentEl.textContent += message.content || "";
+
+      // Update timestamp on each chunk
+      const tsEl = this._streamingDiv.querySelector(".message-timestamp");
+      tsEl.textContent = this.formatTimestamp(message.timestamp);
+
+      this.scrollToBottom();
+
+      // When the stream is done, release the reference so the next
+      // response starts a fresh bubble.
+      if (isDone) {
+        this._streamingDiv = null;
+      }
+    } else {
+      // Non-streaming (complete) response — display as a single message
+      this.displayMessage(message);
+    }
   }
 
   handleAdminJoin(message) {
@@ -366,8 +486,13 @@ class ChatClient {
       return;
     }
 
+    // Ensure any previous streaming bubble is finalized before the next
+    // response starts, in case the server's done=true was lost.
+    this._streamingDiv = null;
+
     const message = {
       type: "user_message",
+      session_id: this.sessionID,
       content: content,
       timestamp: new Date().toISOString(),
       sender: this.isAdminMode ? "admin" : "user",
@@ -389,6 +514,7 @@ class ChatClient {
 
       const message = {
         type: "file_upload",
+        session_id: this.sessionID,
         file_id: result.file_id,
         file_url: result.file_url,
         timestamp: new Date().toISOString(),
@@ -539,6 +665,7 @@ class ChatClient {
 
       const message = {
         type: "voice_message",
+        session_id: this.sessionID,
         file_id: result.file_id,
         file_url: result.file_url,
         timestamp: new Date().toISOString(),
@@ -561,6 +688,7 @@ class ChatClient {
 
     const message = {
       type: "model_select",
+      session_id: this.sessionID,
       model_id: modelID,
       timestamp: new Date().toISOString(),
     };
@@ -597,6 +725,7 @@ class ChatClient {
 
     const message = {
       type: "help_request",
+      session_id: this.sessionID,
       timestamp: new Date().toISOString(),
     };
 
@@ -690,7 +819,157 @@ class ChatClient {
     }
   }
 
+  // Share session — POST to get/create share token, copy link to clipboard
+  async shareSession() {
+    if (!this.sessionID) return;
+
+    const token = this.getJWTToken();
+    if (!token) return;
+
+    try {
+      const apiBase = _qp.get("api")
+        ? `${window.location.protocol}//${_qp.get("api")}`
+        : "";
+      const response = await fetch(
+        `${apiBase}${PATH_PREFIX}/sessions/${this.sessionID}/share`,
+        {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
+
+      if (!response.ok) {
+        this.displaySystemMessage("Failed to share session", "error");
+        return;
+      }
+
+      const data = await response.json();
+
+      // Preserve prefix/api params so the shared URL reaches the right server
+      const shareParams = new URLSearchParams();
+      shareParams.set("share_token", data.share_token);
+      const prefix = _qp.get("prefix");
+      if (prefix) shareParams.set("prefix", prefix);
+      const api = _qp.get("api");
+      if (api) shareParams.set("api", api);
+      const shareUrl = `${window.location.origin}${window.location.pathname}?${shareParams}`;
+
+      this.showShareDialog(shareUrl);
+    } catch (err) {
+      console.error("Share error:", err);
+      this.displaySystemMessage("Failed to share session", "error");
+    }
+  }
+
+  showShareDialog(url) {
+    // Backdrop
+    const backdrop = document.createElement("div");
+    backdrop.className = "share-dialog-backdrop";
+
+    // Dialog
+    const dialog = document.createElement("div");
+    dialog.className = "share-dialog";
+
+    const title = document.createElement("div");
+    title.className = "share-dialog-title";
+    title.textContent = "Share link";
+
+    const urlInput = document.createElement("input");
+    urlInput.type = "text";
+    urlInput.value = url;
+    urlInput.readOnly = true;
+    urlInput.className = "share-dialog-url";
+    urlInput.addEventListener("click", () => urlInput.select());
+
+    const actions = document.createElement("div");
+    actions.className = "share-dialog-actions";
+
+    const copyBtn = document.createElement("button");
+    copyBtn.textContent = "Copy";
+    copyBtn.className = "share-dialog-copy";
+    copyBtn.addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(url);
+      } catch (_) {
+        urlInput.select();
+        document.execCommand("copy");
+      }
+      copyBtn.textContent = "Copied!";
+      setTimeout(() => {
+        copyBtn.textContent = "Copy";
+      }, 1500);
+    });
+
+    const closeBtn = document.createElement("button");
+    closeBtn.textContent = "Close";
+    closeBtn.className = "share-dialog-close";
+    const close = () => document.body.removeChild(backdrop);
+    closeBtn.addEventListener("click", close);
+    backdrop.addEventListener("click", (e) => {
+      if (e.target === backdrop) close();
+    });
+
+    actions.appendChild(copyBtn);
+    actions.appendChild(closeBtn);
+    dialog.appendChild(title);
+    dialog.appendChild(urlInput);
+    dialog.appendChild(actions);
+    backdrop.appendChild(dialog);
+    document.body.appendChild(backdrop);
+
+    urlInput.select();
+  }
+
+  // Read-only mode for shared sessions (no auth, no WebSocket)
+  async enterReadOnlyMode() {
+    // Hide interactive elements
+    document.getElementById("input-area").style.display = "none";
+    this.backBtn.style.display = "none";
+    this.shareBtn.style.display = "none";
+    if (this.modelSelectorContainer) {
+      this.modelSelectorContainer.style.display = "none";
+    }
+
+    this.updateStatus("connected", "Shared conversation (read-only)");
+
+    // Fetch messages via public endpoint
+    try {
+      const apiBase = _qp.get("api")
+        ? `${window.location.protocol}//${_qp.get("api")}`
+        : "";
+      const response = await fetch(
+        `${apiBase}${PATH_PREFIX}/shared/${this.shareToken}`,
+      );
+
+      if (!response.ok) {
+        this.updateStatus("disconnected", "Shared session not found");
+        return;
+      }
+
+      const data = await response.json();
+      const messages = data.messages || [];
+      for (const msg of messages) {
+        this.displayMessage(msg);
+      }
+    } catch (err) {
+      console.error("Failed to load shared session:", err);
+      this.updateStatus("disconnected", "Failed to load shared session");
+    }
+  }
+
   goBackToSessions() {
+    // Close WebSocket cleanly before navigating to avoid
+    // "WebSocket is closed due to suspension" console errors.
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    if (this.ws) {
+      this.ws.onclose = null; // prevent reconnect logic
+      this.ws.close();
+      this.ws = null;
+    }
+
     // If in admin mode, close window instead of navigating
     if (this.isAdminMode) {
       window.close();
@@ -699,7 +978,8 @@ class ChatClient {
 
     // Navigate back to session list
     const token = this.getJWTToken();
-    const sessionsUrl = `sessions.html?token=${encodeURIComponent(token)}`;
+    const apiParam = _qp.get("api") ? `&api=${_qp.get("api")}` : "";
+    const sessionsUrl = `sessions.html?token=${encodeURIComponent(token)}${apiParam}`;
     window.location.href = sessionsUrl;
   }
 }

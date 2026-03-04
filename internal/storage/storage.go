@@ -77,6 +77,7 @@ type SessionDocument struct {
 	LastActivity       time.Time         `bson:"lastActivity,omitempty"`
 	MaxResponseTime    int64             `bson:"maxRespTime"`   // milliseconds
 	AvgResponseTime    int64             `bson:"avgRespTime"`   // milliseconds
+	ShareToken         string            `bson:"shareToken,omitempty"`
 	CreatedAt          time.Time         `bson:"_ts,omitempty"` // gomongo automatic timestamp
 	ModifiedAt         time.Time         `bson:"_mt,omitempty"` // gomongo automatic timestamp
 }
@@ -93,17 +94,51 @@ type MessageDocument struct {
 
 // SessionMetadata represents summary information about a session
 type SessionMetadata struct {
-	ID              string
-	UserID          string // User ID for admin views
-	Name            string
-	LastMessageTime time.Time
-	MessageCount    int
-	AdminAssisted   bool
-	StartTime       time.Time
-	EndTime         *time.Time
-	TotalTokens     int
-	MaxResponseTime int64 // milliseconds
-	AvgResponseTime int64 // milliseconds
+	ID              string     `json:"id"`
+	UserID          string     `json:"user_id"`
+	Name            string     `json:"name"`
+	LastMessageTime time.Time  `json:"last_activity"`
+	MessageCount    int        `json:"message_count"`
+	AdminAssisted   bool       `json:"admin_assisted"`
+	StartTime       time.Time  `json:"start_time"`
+	EndTime         *time.Time `json:"end_time,omitempty"`
+	IsActive        bool       `json:"is_active"`
+	Duration        int64      `json:"duration"`                // seconds
+	TotalTokens     int        `json:"total_tokens"`
+	MaxResponseTime    int64  `json:"max_response_time"`              // milliseconds
+	AvgResponseTime    int64  `json:"avg_response_time"`              // milliseconds
+	AssistingAdminName string `json:"assisting_admin_name,omitempty"`
+	ShareToken         string `json:"share_token,omitempty"`
+}
+
+// buildSessionMetadata constructs a SessionMetadata from a SessionDocument,
+// computing derived fields (IsActive, Duration).
+func buildSessionMetadata(doc *SessionDocument, lastMessageTime time.Time) *SessionMetadata {
+	isActive := doc.EndTime == nil
+	var duration int64
+	if doc.EndTime != nil {
+		duration = int64(doc.EndTime.Sub(doc.StartTime).Seconds())
+	} else {
+		duration = int64(time.Since(doc.StartTime).Seconds())
+	}
+
+	return &SessionMetadata{
+		ID:                 doc.ID,
+		UserID:             doc.UserID,
+		Name:               doc.Name,
+		LastMessageTime:    lastMessageTime,
+		MessageCount:       len(doc.Messages),
+		AdminAssisted:      doc.AdminAssisted,
+		StartTime:          doc.StartTime,
+		EndTime:            doc.EndTime,
+		IsActive:           isActive,
+		Duration:           duration,
+		TotalTokens:        doc.TotalTokens,
+		MaxResponseTime:    doc.MaxResponseTime,
+		AvgResponseTime:    doc.AvgResponseTime,
+		AssistingAdminName: doc.AssistingAdminName,
+		ShareToken:         doc.ShareToken,
+	}
 }
 
 // SessionListOptions defines filtering, sorting, and pagination options for listing sessions
@@ -245,12 +280,19 @@ func (s *StorageService) EnsureIndexes(ctx context.Context) error {
 		Options: options.Index().SetName(constants.IndexUserStartTime),
 	}
 
+	// Create sparse unique index for shareToken (only sessions that have been shared)
+	shareTokenIndex := mongo.IndexModel{
+		Keys:    bson.D{{Key: constants.MongoFieldShareToken, Value: 1}},
+		Options: options.Index().SetName(constants.IndexShareToken).SetUnique(true).SetSparse(true),
+	}
+
 	// Create all indexes
 	indexes := []mongo.IndexModel{
 		userIDIndex,
 		startTimeIndex,
 		adminAssistedIndex,
 		compoundIndex,
+		shareTokenIndex,
 	}
 
 	_, err := s.collection.CreateIndexes(ctx, indexes)
@@ -260,7 +302,7 @@ func (s *StorageService) EnsureIndexes(ctx context.Context) error {
 	}
 
 	s.logger.Info("MongoDB indexes created successfully",
-		"indexes", []string{constants.IndexUserID, constants.IndexStartTime, constants.IndexAdminAssisted, constants.IndexUserStartTime},
+		"indexes", []string{constants.IndexUserID, constants.IndexStartTime, constants.IndexAdminAssisted, constants.IndexUserStartTime, constants.IndexShareToken},
 	)
 
 	return nil
@@ -367,6 +409,116 @@ func (s *StorageService) UpdateSession(sess *session.Session) error {
 	}
 
 	return nil
+}
+
+// UpdateSessionName sets the name field for a session in MongoDB.
+func (s *StorageService) UpdateSessionName(sessionID, name string) error {
+	if sessionID == "" {
+		return ErrInvalidSessionID
+	}
+
+	ctx, cancel := util.NewTimeoutContext(constants.DefaultContextTimeout)
+	defer cancel()
+
+	filter := bson.M{constants.MongoFieldID: sessionID}
+	update := bson.M{"$set": bson.M{"nm": name}}
+
+	var result *mongo.UpdateResult
+	err := s.retryOperation(ctx, "UpdateSessionName", func() error {
+		var err error
+		result, err = s.collection.UpdateOne(ctx, filter, update)
+		return err
+	})
+	if err != nil {
+		return fmt.Errorf("failed to update session name: %w", err)
+	}
+	if result.MatchedCount == 0 {
+		return ErrSessionNotFound
+	}
+	return nil
+}
+
+// SetShareToken sets the share token for a session in MongoDB.
+func (s *StorageService) SetShareToken(sessionID, token string) error {
+	if sessionID == "" {
+		return ErrInvalidSessionID
+	}
+
+	ctx, cancel := util.NewTimeoutContext(constants.DefaultContextTimeout)
+	defer cancel()
+
+	filter := bson.M{constants.MongoFieldID: sessionID}
+	update := bson.M{"$set": bson.M{constants.MongoFieldShareToken: token}}
+
+	var result *mongo.UpdateResult
+	err := s.retryOperation(ctx, "SetShareToken", func() error {
+		var err error
+		result, err = s.collection.UpdateOne(ctx, filter, update)
+		return err
+	})
+	if err != nil {
+		return fmt.Errorf("failed to set share token: %w", err)
+	}
+	if result.MatchedCount == 0 {
+		return ErrSessionNotFound
+	}
+	return nil
+}
+
+// GetSessionByShareToken retrieves a session from MongoDB by its share token.
+func (s *StorageService) GetSessionByShareToken(token string) (*session.Session, error) {
+	if token == "" {
+		return nil, errors.New("share token cannot be empty")
+	}
+
+	ctx, cancel := util.NewTimeoutContext(constants.DefaultContextTimeout)
+	defer cancel()
+
+	filter := bson.M{constants.MongoFieldShareToken: token}
+	var doc SessionDocument
+
+	err := s.retryOperation(ctx, "GetSessionByShareToken", func() error {
+		result := s.collection.FindOne(ctx, filter)
+		return result.Decode(&doc)
+	})
+
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return nil, ErrSessionNotFound
+		}
+		return nil, fmt.Errorf("failed to get session by share token: %w", err)
+	}
+
+	sess := s.documentToSession(&doc)
+	return sess, nil
+}
+
+// GetShareToken retrieves the share token for a session from MongoDB.
+// Returns empty string if session has no share token.
+func (s *StorageService) GetShareToken(sessionID string) (string, error) {
+	if sessionID == "" {
+		return "", ErrInvalidSessionID
+	}
+
+	ctx, cancel := util.NewTimeoutContext(constants.DefaultContextTimeout)
+	defer cancel()
+
+	filter := bson.M{constants.MongoFieldID: sessionID}
+
+	var doc SessionDocument
+	err := s.retryOperation(ctx, "GetShareToken", func() error {
+		result := s.collection.FindOne(ctx, filter)
+		return result.Decode(&doc)
+	})
+
+	if err != nil {
+		if errors.Is(err, mongo.ErrNoDocuments) {
+			return "", ErrSessionNotFound
+		}
+		return "", fmt.Errorf("failed to get share token: %w", err)
+	}
+
+	return doc.ShareToken, nil
 }
 
 // GetSession retrieves a session from MongoDB by ID
@@ -781,19 +933,7 @@ func (s *StorageService) ListUserSessions(userID string, limit int) ([]*SessionM
 			lastMessageTime = doc.Messages[len(doc.Messages)-1].Timestamp
 		}
 
-		metadata := &SessionMetadata{
-			ID:              doc.ID,
-			UserID:          doc.UserID,
-			Name:            doc.Name,
-			LastMessageTime: lastMessageTime,
-			MessageCount:    len(doc.Messages),
-			AdminAssisted:   doc.AdminAssisted,
-			StartTime:       doc.StartTime,
-			EndTime:         doc.EndTime,
-			TotalTokens:     doc.TotalTokens,
-			MaxResponseTime: doc.MaxResponseTime,
-			AvgResponseTime: doc.AvgResponseTime,
-		}
+		metadata := buildSessionMetadata(&doc, lastMessageTime)
 
 		sessions = append(sessions, metadata)
 	}
@@ -1007,19 +1147,7 @@ func (s *StorageService) ListAllSessionsWithOptions(opts *SessionListOptions) ([
 			lastMessageTime = doc.Messages[len(doc.Messages)-1].Timestamp
 		}
 
-		metadata := &SessionMetadata{
-			ID:              doc.ID,
-			UserID:          doc.UserID,
-			Name:            doc.Name,
-			LastMessageTime: lastMessageTime,
-			MessageCount:    len(doc.Messages),
-			AdminAssisted:   doc.AdminAssisted,
-			StartTime:       doc.StartTime,
-			EndTime:         doc.EndTime,
-			TotalTokens:     doc.TotalTokens,
-			MaxResponseTime: doc.MaxResponseTime,
-			AvgResponseTime: doc.AvgResponseTime,
-		}
+		metadata := buildSessionMetadata(&doc, lastMessageTime)
 
 		sessions = append(sessions, metadata)
 	}

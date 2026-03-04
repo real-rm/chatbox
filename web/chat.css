@@ -319,6 +319,74 @@ body {
     color: #0c5460;
 }
 
+/* Share dialog */
+.share-dialog-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.share-dialog {
+    background: white;
+    border-radius: 10px;
+    padding: 20px;
+    width: 90%;
+    max-width: 480px;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2);
+}
+
+.share-dialog-title {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 12px;
+}
+
+.share-dialog-url {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid #ced4da;
+    border-radius: 6px;
+    font-size: 13px;
+    box-sizing: border-box;
+    color: #495057;
+}
+
+.share-dialog-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 14px;
+}
+
+.share-dialog-copy,
+.share-dialog-close {
+    padding: 7px 16px;
+    border-radius: 6px;
+    font-size: 14px;
+    cursor: pointer;
+    border: 1px solid #ced4da;
+    background: white;
+    transition: background 0.2s;
+}
+
+.share-dialog-copy {
+    background: #0d6efd;
+    color: white;
+    border-color: #0d6efd;
+}
+
+.share-dialog-copy:hover {
+    background: #0b5ed7;
+}
+
+.share-dialog-close:hover {
+    background: #e9ecef;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
     .message {

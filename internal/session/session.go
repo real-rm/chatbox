@@ -43,12 +43,12 @@ var (
 
 // Message represents a chat message
 type Message struct {
-	Content   string
-	Timestamp time.Time
-	Sender    string // "user", "ai", "admin"
-	FileID    string
-	FileURL   string
-	Metadata  map[string]string
+	Content   string            `json:"content"`
+	Timestamp time.Time         `json:"timestamp"`
+	Sender    string            `json:"sender"` // "user", "ai", "admin"
+	FileID    string            `json:"file_id,omitempty"`
+	FileURL   string            `json:"file_url,omitempty"`
+	Metadata  map[string]string `json:"metadata,omitempty"`
 }
 
 // Session represents an active user session.
@@ -207,6 +207,29 @@ func (sm *SessionManager) CreateSession(userID string) (*Session, error) {
 	sm.userSessions[userID] = session.ID
 
 	sm.logger.Info("Session created", "session_id", session.ID, "user_id", userID)
+	return session, nil
+}
+
+// GetActiveSessionForUser returns the user's active session, if any.
+// Returns ErrSessionNotFound if the user has no active session.
+func (sm *SessionManager) GetActiveSessionForUser(userID string) (*Session, error) {
+	if userID == "" {
+		return nil, ErrInvalidUserID
+	}
+
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+
+	sessionID, exists := sm.userSessions[userID]
+	if !exists {
+		return nil, fmt.Errorf("%w: no active session for user %s", ErrSessionNotFound, userID)
+	}
+
+	session, ok := sm.sessions[sessionID]
+	if !ok || !session.IsActive {
+		return nil, fmt.Errorf("%w: no active session for user %s", ErrSessionNotFound, userID)
+	}
+
 	return session, nil
 }
 

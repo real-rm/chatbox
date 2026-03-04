@@ -110,6 +110,13 @@ func (c *Connection) GetSessionID() string {
 	return c.SessionID
 }
 
+// SetSessionID updates the session ID for this connection under mutex protection.
+func (c *Connection) SetSessionID(id string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.SessionID = id
+}
+
 // GetRoles returns the roles for this connection.
 // Roles is immutable after construction (set in NewConnection), so no mutex is needed.
 func (c *Connection) GetRoles() []string {

@@ -10,7 +10,7 @@ test.describe("Chat Page", () => {
   test.describe("page structure", () => {
     test.beforeEach(async ({ page }) => {
       // Block WebSocket connections to prevent real connection attempts
-      await page.route("**/chat/ws**", (route) => route.abort());
+      await page.route("**/chatbox/ws**", (route) => route.abort());
     });
 
     test("renders all UI elements", async ({ page }) => {
@@ -77,7 +77,7 @@ test.describe("Chat Page", () => {
       page,
     }) => {
       // Block WebSocket to keep it in connecting/reconnecting state
-      await page.route("**/chat/ws**", (route) => route.abort());
+      await page.route("**/chatbox/ws**", (route) => route.abort());
 
       await page.goto(`/chat.html?token=${TEST_JWT_TOKEN}`);
 
@@ -86,7 +86,7 @@ test.describe("Chat Page", () => {
     });
 
     test("shows disconnected when no token", async ({ page }) => {
-      await page.route("**/chat/ws**", (route) => route.abort());
+      await page.route("**/chatbox/ws**", (route) => route.abort());
 
       await page.goto("/chat.html");
 
@@ -98,7 +98,7 @@ test.describe("Chat Page", () => {
 
   test.describe("message input", () => {
     test.beforeEach(async ({ page }) => {
-      await page.route("**/chat/ws**", (route) => route.abort());
+      await page.route("**/chatbox/ws**", (route) => route.abort());
     });
 
     test("message input accepts text", async ({ page }) => {
@@ -137,9 +137,9 @@ test.describe("Chat Page", () => {
 
   test.describe("navigation", () => {
     test.beforeEach(async ({ page }) => {
-      await page.route("**/chat/ws**", (route) => route.abort());
+      await page.route("**/chatbox/ws**", (route) => route.abort());
       // Mock sessions API for when we navigate back
-      await page.route("**/chat/sessions", (route) => {
+      await page.route("**/chatbox/sessions", (route) => {
         route.fulfill({
           status: 200,
           contentType: "application/json",

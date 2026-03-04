@@ -9,7 +9,7 @@ import {
 test.describe("Admin Dashboard", () => {
   test.beforeEach(async ({ page }) => {
     // Mock admin API endpoints
-    await page.route("**/chat/admin/metrics**", (route) => {
+    await page.route("**/chatbox/admin/metrics**", (route) => {
       route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -17,7 +17,7 @@ test.describe("Admin Dashboard", () => {
       });
     });
 
-    await page.route("**/chat/admin/sessions**", (route) => {
+    await page.route("**/chatbox/admin/sessions**", (route) => {
       route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -156,7 +156,7 @@ test.describe("Admin Dashboard", () => {
   test.describe("filters", () => {
     test("applies user ID filter", async ({ page }) => {
       let lastRequestUrl = "";
-      await page.route("**/chat/admin/sessions**", (route) => {
+      await page.route("**/chatbox/admin/sessions**", (route) => {
         lastRequestUrl = route.request().url();
         route.fulfill({
           status: 200,
@@ -178,7 +178,7 @@ test.describe("Admin Dashboard", () => {
 
     test("applies status filter", async ({ page }) => {
       let lastRequestUrl = "";
-      await page.route("**/chat/admin/sessions**", (route) => {
+      await page.route("**/chatbox/admin/sessions**", (route) => {
         lastRequestUrl = route.request().url();
         route.fulfill({
           status: 200,
@@ -217,7 +217,7 @@ test.describe("Admin Dashboard", () => {
       page,
     }) => {
       const requestUrls = [];
-      await page.route("**/chat/admin/sessions**", (route) => {
+      await page.route("**/chatbox/admin/sessions**", (route) => {
         requestUrls.push(route.request().url());
         route.fulfill({
           status: 200,
@@ -267,7 +267,7 @@ test.describe("Admin Dashboard", () => {
 
   test.describe("empty state", () => {
     test("shows empty state when no sessions", async ({ page }) => {
-      await page.route("**/chat/admin/sessions**", (route) => {
+      await page.route("**/chatbox/admin/sessions**", (route) => {
         route.fulfill({
           status: 200,
           contentType: "application/json",
@@ -287,7 +287,7 @@ test.describe("Admin Dashboard", () => {
   test.describe("refresh", () => {
     test("refresh button triggers data reload", async ({ page }) => {
       let requestCount = 0;
-      await page.route("**/chat/admin/sessions**", (route) => {
+      await page.route("**/chatbox/admin/sessions**", (route) => {
         requestCount++;
         route.fulfill({
           status: 200,

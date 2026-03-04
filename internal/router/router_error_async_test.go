@@ -36,6 +36,7 @@ func (m *mockStorageForAsync) CreateSession(sess *session.Session) error { retur
 func (m *mockStorageForAsync) AddMessage(sessionID string, msg *session.Message) error {
 	return nil
 }
+func (m *mockStorageForAsync) UpdateSessionName(sessionID, name string) error { return nil }
 
 func TestHandleChatError_FatalDoesNotBlock(t *testing.T) {
 	logger, err := golog.InitLog(golog.LogConfig{

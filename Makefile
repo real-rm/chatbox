@@ -1,6 +1,6 @@
 # Makefile for Chat Application WebSocket Service
 
-.PHONY: help build test test-unit test-integration test-property test-coverage cleantest clean run docker-build docker-run docker-compose-up docker-compose-down lint fmt vet deps tidy check install deploy k8s-deploy k8s-delete k8s-logs k8s-status test-e2e test-e2e-ui test-e2e-api test-e2e-headed test-e2e-all-browsers test-e2e-report env-local
+.PHONY: help build test test-unit test-integration test-property test-coverage cleantest clean run run-local docker-build docker-run docker-compose-up docker-compose-down docker-infra-up docker-infra-down lint fmt vet deps tidy check install deploy k8s-deploy k8s-delete k8s-logs k8s-status test-e2e test-e2e-ui test-e2e-api test-e2e-headed test-e2e-all-browsers test-e2e-report env-local dev-server dev-token dev-token-admin
 
 # Variables
 APP_NAME := chatbox
@@ -146,11 +146,32 @@ test-e2e-report: ## Open the Playwright HTML test report
 	@echo "$(COLOR_GREEN)Opening Playwright report...$(COLOR_RESET)"
 	npx playwright show-report
 
+##@ Dev Tools
+
+dev-server: ## Start static file server for web/ pages (port 3333)
+	@echo "$(COLOR_GREEN)Starting static file server on http://localhost:3333 ...$(COLOR_RESET)"
+	@node tests/static-server.js
+
+dev-token: ## Generate a dev JWT token (user role) with ready-to-use URLs
+	@node scripts/dev-token.js --role user
+
+dev-token-admin: ## Generate a dev JWT token (admin role) with ready-to-use URLs
+	@node scripts/dev-token.js --role admin
+
 ##@ Running
 
-run: ## Run the application locally
+run: ## Run the application locally (requires MongoDB on localhost:27017)
 	@echo "$(COLOR_GREEN)Running $(APP_NAME)...$(COLOR_RESET)"
 	$(GO) run $(MAIN_FILE)
+
+run-local: docker-infra-up ## Start infrastructure then run the server binary (config.local.toml)
+	@echo "$(COLOR_GREEN)Waiting for MongoDB to be ready...$(COLOR_RESET)"
+	@until docker exec chatbox-mongodb mongosh --quiet --eval "db.runCommand('ping').ok" > /dev/null 2>&1; do \
+		printf '.'; sleep 1; \
+	done
+	@echo ""
+	@echo "$(COLOR_GREEN)MongoDB ready. Starting server...$(COLOR_RESET)"
+	$(GO) run $(MAIN_FILE) -config config.local.toml
 
 run-dev: ## Run the application in development mode with hot reload
 	@echo "$(COLOR_GREEN)Running $(APP_NAME) in development mode...$(COLOR_RESET)"
@@ -189,6 +210,15 @@ docker-compose-down: ## Stop services with docker compose
 	@echo "$(COLOR_YELLOW)Stopping services with docker compose...$(COLOR_RESET)"
 	docker compose down
 	@echo "$(COLOR_GREEN)Services stopped!$(COLOR_RESET)"
+
+docker-infra-up: ## Start infrastructure only (MongoDB, MinIO, MailHog) — no chatbox build needed
+	@echo "$(COLOR_GREEN)Starting infrastructure services...$(COLOR_RESET)"
+	docker compose up -d mongodb minio minio-setup mailhog
+	@echo "$(COLOR_GREEN)Infrastructure started (MongoDB :27017, MinIO :9000/:9001, MailHog :8025)$(COLOR_RESET)"
+
+docker-infra-down: ## Stop infrastructure services
+	@echo "$(COLOR_YELLOW)Stopping infrastructure services...$(COLOR_RESET)"
+	docker compose stop mongodb minio minio-setup mailhog
 
 docker-compose-logs: ## View docker compose logs
 	docker compose logs -f

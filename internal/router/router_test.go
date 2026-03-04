@@ -38,6 +38,10 @@ func (m *mockStorageService) AddMessage(sessionID string, msg *session.Message) 
 	return nil
 }
 
+func (m *mockStorageService) UpdateSessionName(sessionID, name string) error {
+	return nil
+}
+
 func TestNewMessageRouter(t *testing.T) {
 	logger := createTestLogger()
 	sm := session.NewSessionManager(15*time.Minute, logger)
@@ -256,7 +260,7 @@ func TestHandleUserMessage(t *testing.T) {
 			errCode: chaterrors.ErrCodeMissingField,
 		},
 		{
-			name: "non-existent session - auto-creates",
+			name: "non-existent session - reuses active session",
 			msg: &message.Message{
 				Type:      message.TypeUserMessage,
 				SessionID: "non-existent",
@@ -264,8 +268,7 @@ func TestHandleUserMessage(t *testing.T) {
 				Sender:    message.SenderUser,
 				Timestamp: time.Now(),
 			},
-			wantErr: true, // Will fail because user-1 already has an active session
-			errCode: chaterrors.ErrCodeDatabaseError,
+			wantErr: false, // Gracefully reuses user's existing active session
 		},
 		{
 			name:    "nil message",

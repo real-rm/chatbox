@@ -45,6 +45,10 @@ func (m *mockStorageServiceForErrorTests) AddMessage(sessionID string, msg *sess
 	return nil
 }
 
+func (m *mockStorageServiceForErrorTests) UpdateSessionName(sessionID, name string) error {
+	return nil
+}
+
 // TestErrorHandling_NilConnection tests that nil connection is properly handled
 // **Validates: Requirements 6.1**
 func TestErrorHandling_NilConnection(t *testing.T) {

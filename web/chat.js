@@ -238,6 +238,12 @@ class ChatClient {
       const message = JSON.parse(event.data);
       console.log("Received message:", message);
 
+      // Keep sessionID in sync with the server-authoritative value.
+      // The server may assign a different ID than the client-generated one.
+      if (message.session_id && message.session_id !== this.sessionID) {
+        this.sessionID = message.session_id;
+      }
+
       switch (message.type) {
         case "connection_status":
           this.handleConnectionStatus(message);
@@ -821,7 +827,10 @@ class ChatClient {
 
   // Share session — POST to get/create share token, copy link to clipboard
   async shareSession() {
-    if (!this.sessionID) return;
+    if (!this.sessionID) {
+      this.displaySystemMessage("Send a message first before sharing", "error");
+      return;
+    }
 
     const token = this.getJWTToken();
     if (!token) return;

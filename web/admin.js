@@ -1,7 +1,13 @@
 // Admin Dashboard JavaScript
 
-// Configuration
-const API_BASE_URL = window.location.origin;
+// Dev/production configuration via query parameters:
+//   ?prefix=/custom/path  — API path prefix (default: /chatbox)
+//   ?api=localhost:8080    — API server host:port (default: same as page host)
+const _qp = new URLSearchParams(window.location.search);
+const PATH_PREFIX = _qp.get("prefix") || "/chatbox";
+const API_BASE_URL = _qp.get("api")
+  ? `${window.location.protocol}//${_qp.get("api")}`
+  : window.location.origin;
 const AUTO_REFRESH_INTERVAL = 10000; // 10 seconds
 
 // State
@@ -76,7 +82,7 @@ async function loadMetrics() {
       params.append("end_time", currentFilters.dateEnd);
 
     const response = await fetch(
-      `${API_BASE_URL}/chat/admin/metrics?${params}`,
+      `${API_BASE_URL}${PATH_PREFIX}/admin/metrics?${params}`,
       {
         headers: {
           Authorization: `Bearer ${getJWTToken()}`,
@@ -115,7 +121,7 @@ async function loadSessions() {
     params.append("sort_order", currentSort.order);
 
     const response = await fetch(
-      `${API_BASE_URL}/chat/admin/sessions?${params}`,
+      `${API_BASE_URL}${PATH_PREFIX}/admin/sessions?${params}`,
       {
         headers: {
           Authorization: `Bearer ${getJWTToken()}`,
@@ -220,7 +226,7 @@ function updateSessionsDisplay(sessions) {
 async function showUserSessions(userID) {
   try {
     const response = await fetch(
-      `${API_BASE_URL}/chat/admin/users/${userID}/sessions`,
+      `${API_BASE_URL}${PATH_PREFIX}/admin/users/${userID}/sessions`,
       {
         headers: {
           Authorization: `Bearer ${getJWTToken()}`,
@@ -289,7 +295,7 @@ async function takeoverSession(sessionID) {
 
   try {
     const response = await fetch(
-      `${API_BASE_URL}/chat/admin/takeover/${sessionID}`,
+      `${API_BASE_URL}${PATH_PREFIX}/admin/takeover/${sessionID}`,
       {
         method: "POST",
         headers: {
@@ -308,7 +314,8 @@ async function takeoverSession(sessionID) {
 
     // Open chat window with admin context
     const token = getJWTToken();
-    const chatUrl = `chat.html?session_id=${sessionID}&admin=true&token=${encodeURIComponent(token)}`;
+    const apiParam = _qp.get("api") ? `&api=${_qp.get("api")}` : "";
+    const chatUrl = `chat.html?session_id=${sessionID}&admin=true&token=${encodeURIComponent(token)}${apiParam}`;
     window.open(chatUrl, "_blank", "width=800,height=600");
 
     // Close modal if open

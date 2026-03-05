@@ -45,7 +45,8 @@ func (m *streamingMockLLMService) StreamMessage(ctx context.Context, modelID str
 	return ch, nil
 }
 
-func (m *streamingMockLLMService) ValidateModel(modelID string) error { return nil }
+func (m *streamingMockLLMService) ValidateModel(modelID string) error  { return nil }
+func (m *streamingMockLLMService) GetAvailableModels() []llm.ModelInfo { return nil }
 
 // TestStreamingResponseForwarding verifies that LLM response chunks are forwarded to the client
 func TestStreamingResponseForwarding(t *testing.T) {
@@ -104,7 +105,8 @@ func TestStreamingResponseForwarding(t *testing.T) {
 				assert.NoError(t, err)
 			}()
 
-			// Collect messages from the connection's send channel
+			// Collect messages from the connection's send channel.
+			// Skip connection_status messages (initial status sent on registration).
 			var receivedMessages []*message.Message
 			timeout := time.After(2 * time.Second)
 			expectedMessages := tt.expectedChunks + 1 // +1 for loading indicator
@@ -116,6 +118,9 @@ func TestStreamingResponseForwarding(t *testing.T) {
 					var msg message.Message
 					err := json.Unmarshal(data, &msg)
 					require.NoError(t, err)
+					if msg.Type == message.TypeConnectionStatus {
+						continue
+					}
 					receivedMessages = append(receivedMessages, &msg)
 				case <-timeout:
 					break collectLoop
@@ -196,7 +201,8 @@ func TestStreamingErrorHandling(t *testing.T) {
 	err = router.HandleUserMessage(conn, msg)
 	assert.NoError(t, err) // Error is sent to client, not returned
 
-	// Collect messages from the connection's send channel
+	// Collect messages from the connection's send channel.
+	// Skip connection_status messages (initial status sent on registration).
 	timeout := time.After(1 * time.Second)
 	var receivedMessages []*message.Message
 
@@ -207,6 +213,9 @@ collectLoop:
 			var msg message.Message
 			err := json.Unmarshal(data, &msg)
 			require.NoError(t, err)
+			if msg.Type == message.TypeConnectionStatus {
+				continue
+			}
 			receivedMessages = append(receivedMessages, &msg)
 		case <-timeout:
 			break collectLoop
@@ -285,7 +294,8 @@ func TestLLMErrorScenarios(t *testing.T) {
 			err = router.HandleUserMessage(conn, msg)
 			assert.NoError(t, err) // Error is sent to client, not returned
 
-			// Collect messages from the connection's send channel
+			// Collect messages from the connection's send channel.
+			// Skip connection_status messages (initial status sent on registration).
 			timeout := time.After(1 * time.Second)
 			var receivedMessages []*message.Message
 
@@ -296,6 +306,9 @@ func TestLLMErrorScenarios(t *testing.T) {
 					var msg message.Message
 					err := json.Unmarshal(data, &msg)
 					require.NoError(t, err)
+					if msg.Type == message.TypeConnectionStatus {
+						continue
+					}
 					receivedMessages = append(receivedMessages, &msg)
 				case <-timeout:
 					break collectLoop
@@ -350,7 +363,7 @@ func TestStreamingChunkError(t *testing.T) {
 		assert.NoError(t, err)
 	}()
 
-	// Collect messages
+	// Collect messages. Skip connection_status (initial status sent on registration).
 	timeout := time.After(2 * time.Second)
 	var receivedMessages []*message.Message
 
@@ -361,6 +374,9 @@ collectLoop:
 			var msg message.Message
 			err := json.Unmarshal(data, &msg)
 			require.NoError(t, err)
+			if msg.Type == message.TypeConnectionStatus {
+				continue
+			}
 			receivedMessages = append(receivedMessages, &msg)
 
 			// Check if we got the final chunk

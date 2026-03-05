@@ -34,6 +34,12 @@ const (
 	SenderSystem SenderType = "system"
 )
 
+// ModelRef is a minimal model descriptor sent to the client.
+type ModelRef struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
 // ErrorInfo contains error details
 type ErrorInfo struct {
 	Code        string `json:"code"`
@@ -50,6 +56,7 @@ type Message struct {
 	FileID    string            `json:"file_id,omitempty"`
 	FileURL   string            `json:"file_url,omitempty"`
 	ModelID   string            `json:"model_id,omitempty"`
+	Models    []ModelRef        `json:"models,omitempty"`
 	Timestamp time.Time         `json:"timestamp"`
 	Sender    SenderType        `json:"sender"`
 	Metadata  map[string]string `json:"metadata,omitempty"`

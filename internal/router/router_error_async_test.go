@@ -27,7 +27,8 @@ func (m *mockLLMForAsync) StreamMessage(ctx context.Context, modelID string, mes
 	return ch, nil
 }
 
-func (m *mockLLMForAsync) ValidateModel(modelID string) error { return nil }
+func (m *mockLLMForAsync) ValidateModel(modelID string) error  { return nil }
+func (m *mockLLMForAsync) GetAvailableModels() []llm.ModelInfo { return nil }
 
 // mockStorageForAsync is a minimal mock
 type mockStorageForAsync struct{}
@@ -37,6 +38,9 @@ func (m *mockStorageForAsync) AddMessage(sessionID string, msg *session.Message)
 	return nil
 }
 func (m *mockStorageForAsync) UpdateSessionName(sessionID, name string) error { return nil }
+func (m *mockStorageForAsync) UpdateSessionModelID(sessionID, modelID string) error {
+	return nil
+}
 
 func TestHandleChatError_FatalDoesNotBlock(t *testing.T) {
 	logger, err := golog.InitLog(golog.LogConfig{

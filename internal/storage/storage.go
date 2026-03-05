@@ -438,6 +438,33 @@ func (s *StorageService) UpdateSessionName(sessionID, name string) error {
 	return nil
 }
 
+// UpdateSessionModelID persists the selected model ID for a session.
+func (s *StorageService) UpdateSessionModelID(sessionID, modelID string) error {
+	if sessionID == "" {
+		return ErrInvalidSessionID
+	}
+
+	ctx, cancel := util.NewTimeoutContext(constants.DefaultContextTimeout)
+	defer cancel()
+
+	filter := bson.M{constants.MongoFieldID: sessionID}
+	update := bson.M{"$set": bson.M{"modelId": modelID}}
+
+	var result *mongo.UpdateResult
+	err := s.retryOperation(ctx, "UpdateSessionModelID", func() error {
+		var err error
+		result, err = s.collection.UpdateOne(ctx, filter, update)
+		return err
+	})
+	if err != nil {
+		return fmt.Errorf("failed to update session model ID: %w", err)
+	}
+	if result.MatchedCount == 0 {
+		return ErrSessionNotFound
+	}
+	return nil
+}
+
 // SetShareToken sets the share token for a session in MongoDB.
 func (s *StorageService) SetShareToken(sessionID, token string) error {
 	if sessionID == "" {

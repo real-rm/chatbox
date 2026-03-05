@@ -177,6 +177,8 @@ func (m *mockMessageRouter) RegisterConnection(sessionID string, conn *websocket
 
 func (m *mockMessageRouter) UnregisterConnection(sessionID string) {}
 
+func (m *mockMessageRouter) GetAvailableModelRefs() []message.ModelRef { return nil }
+
 // TestProductionIssue18_AdminRateLimiting verifies admin endpoint rate limiting
 //
 // Production Readiness Issue #18: Admin endpoints rate limiting verification

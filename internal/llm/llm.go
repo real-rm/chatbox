@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -542,20 +543,42 @@ func (s *LLMService) getProviderName(modelID string) string {
 	return "unknown"
 }
 
-// ValidateEndpoint validates that an LLM provider endpoint URL uses HTTPS and has a host.
-// This prevents SSRF by rejecting non-HTTPS endpoints at startup.
+// ValidateEndpoint validates that an LLM provider endpoint URL has a valid scheme and host.
+// HTTPS is required for public endpoints. HTTP is allowed only for internal/private hosts
+// (loopback, RFC 1918 addresses, Kubernetes service names) to support internal Dify deployments.
 func ValidateEndpoint(endpoint string) error {
 	u, err := url.Parse(endpoint)
 	if err != nil {
 		return fmt.Errorf("invalid endpoint URL: %w", err)
 	}
-	if u.Scheme != "https" {
-		return fmt.Errorf("endpoint must use https scheme, got %q", u.Scheme)
-	}
 	if u.Host == "" {
 		return fmt.Errorf("endpoint must have a host")
 	}
-	return nil
+	if u.Scheme == "https" {
+		return nil
+	}
+	if u.Scheme == "http" && isInternalHost(u.Hostname()) {
+		return nil
+	}
+	return fmt.Errorf("endpoint must use https scheme, got %q (http is only allowed for internal hosts)", u.Scheme)
+}
+
+// isInternalHost reports whether host is an internal/private address:
+// loopback, RFC 1918 private IPs, or an internal hostname (no dots, or .local/.internal/.svc suffix).
+func isInternalHost(host string) bool {
+	if ip := net.ParseIP(host); ip != nil {
+		return ip.IsLoopback() || ip.IsPrivate()
+	}
+	// Kubernetes short service names (no dots) or internal DNS suffixes
+	if !strings.Contains(host, ".") {
+		return true
+	}
+	for _, suffix := range []string{".local", ".internal", ".svc", ".cluster.local"} {
+		if strings.HasSuffix(host, suffix) {
+			return true
+		}
+	}
+	return false
 }
 
 // recoverStreamPanic handles panic recovery in streaming goroutines.

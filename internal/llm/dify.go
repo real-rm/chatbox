@@ -210,8 +210,9 @@ func (p *DifyProvider) StreamMessage(ctx context.Context, req *LLMRequest) (<-ch
 			}
 
 			// Handle different event types
+			// Dify uses "message" for basic chat apps and "agent_message" for agent/workflow apps.
 			switch event.Event {
-			case "message":
+			case "message", "agent_message":
 				// Streaming chunk with answer content
 				if event.Answer != "" {
 					select {

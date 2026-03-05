@@ -24,7 +24,7 @@ func TestValidateEndpoint(t *testing.T) {
 			wantErr:  false,
 		},
 		{
-			name:     "http rejected",
+			name:     "http rejected for public host",
 			endpoint: "http://api.openai.com/v1",
 			wantErr:  true,
 			errMsg:   "endpoint must use https scheme",
@@ -33,7 +33,7 @@ func TestValidateEndpoint(t *testing.T) {
 			name:     "no scheme rejected",
 			endpoint: "api.openai.com/v1",
 			wantErr:  true,
-			errMsg:   "endpoint must use https scheme",
+			errMsg:   "endpoint must have a host",
 		},
 		{
 			name:     "empty host rejected",
@@ -50,6 +50,41 @@ func TestValidateEndpoint(t *testing.T) {
 		{
 			name:     "internal IP still allowed if https",
 			endpoint: "https://192.168.1.1:8443/v1",
+			wantErr:  false,
+		},
+		{
+			name:     "http allowed for loopback",
+			endpoint: "http://127.0.0.1:8080/v1",
+			wantErr:  false,
+		},
+		{
+			name:     "http allowed for localhost",
+			endpoint: "http://localhost:8080/v1",
+			wantErr:  false,
+		},
+		{
+			name:     "http allowed for RFC 1918 private IP",
+			endpoint: "http://10.96.0.50/v1",
+			wantErr:  false,
+		},
+		{
+			name:     "http allowed for RFC 1918 192.168 range",
+			endpoint: "http://192.168.1.10:8080/v1",
+			wantErr:  false,
+		},
+		{
+			name:     "http allowed for Kubernetes short service name",
+			endpoint: "http://dify/v1",
+			wantErr:  false,
+		},
+		{
+			name:     "http allowed for .svc.cluster.local",
+			endpoint: "http://dify-api.default.svc.cluster.local/v1",
+			wantErr:  false,
+		},
+		{
+			name:     "http allowed for .internal suffix",
+			endpoint: "http://dify.internal/v1",
 			wantErr:  false,
 		},
 	}

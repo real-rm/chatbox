@@ -443,4 +443,5 @@ func (m *mockLLMServiceForIntegration) StreamMessage(ctx context.Context, modelI
 	return ch, nil
 }
 
-func (m *mockLLMServiceForIntegration) ValidateModel(modelID string) error { return nil }
+func (m *mockLLMServiceForIntegration) ValidateModel(modelID string) error  { return nil }
+func (m *mockLLMServiceForIntegration) GetAvailableModels() []llm.ModelInfo { return nil }

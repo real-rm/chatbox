@@ -69,6 +69,7 @@ func (r *blockingRouter) RouteMessage(conn *Connection, msg *message.Message) er
 
 func (r *blockingRouter) RegisterConnection(sessionID string, conn *Connection) error { return nil }
 func (r *blockingRouter) UnregisterConnection(sessionID string)                       {}
+func (r *blockingRouter) GetAvailableModelRefs() []message.ModelRef                   { return nil }
 
 // TestReadPump_ConcurrentMessagesSemaphore verifies that at most
 // constants.MaxConcurrentMessagesPerConn RouteMessage goroutines can run

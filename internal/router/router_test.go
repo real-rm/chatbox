@@ -42,6 +42,10 @@ func (m *mockStorageService) UpdateSessionName(sessionID, name string) error {
 	return nil
 }
 
+func (m *mockStorageService) UpdateSessionModelID(sessionID, modelID string) error {
+	return nil
+}
+
 func TestNewMessageRouter(t *testing.T) {
 	logger := createTestLogger()
 	sm := session.NewSessionManager(15*time.Minute, logger)
@@ -585,6 +589,10 @@ func TestHandleModelSelection_NonExistentSession(t *testing.T) {
 
 	conn := mockConnection("user-123")
 
+	// Register connection so sendToConnection can find it
+	err := router.RegisterConnection("non-existent-session", conn)
+	require.NoError(t, err)
+
 	msg := &message.Message{
 		Type:      message.TypeModelSelect,
 		SessionID: "non-existent-session",
@@ -593,13 +601,9 @@ func TestHandleModelSelection_NonExistentSession(t *testing.T) {
 		Sender:    message.SenderUser,
 	}
 
-	err := router.RouteMessage(conn, msg)
-	require.Error(t, err)
-
-	var chatErr *chaterrors.ChatError
-	if assert.ErrorAs(t, err, &chatErr) {
-		assert.Equal(t, chaterrors.ErrCodeNotFound, chatErr.Code)
-	}
+	// Model selection creates the session if it doesn't exist
+	err = router.RouteMessage(conn, msg)
+	require.NoError(t, err)
 }
 
 func TestHandleModelSelection_UpdateModel(t *testing.T) {

@@ -58,7 +58,7 @@ class ChatClient {
 
     // Messages
     this.messagesContainer = document.getElementById("messages-container");
-    this.loadingAnimation = document.getElementById("loading-animation");
+    this._typingIndicator = null;
 
     // Input elements
     this.messageInput = document.getElementById("message-input");
@@ -195,6 +195,9 @@ class ChatClient {
         return;
       }
       const data = await response.json();
+      if (data.model_id) {
+        this._restoredModelID = data.model_id;
+      }
       const messages = data.messages || [];
       for (const msg of messages) {
         this.displayMessage(msg);
@@ -342,36 +345,39 @@ class ChatClient {
     const isDone = message.metadata && message.metadata.done === "true";
 
     if (isStreaming) {
-      // Append chunk content to the current streaming message bubble
-      if (!this._streamingDiv) {
-        this.hideLoading();
-        this._streamingDiv = document.createElement("div");
-        this._streamingDiv.className = "message ai";
+      // Only create the bubble when there is actual content to display.
+      // Empty chunks (e.g. done=true with no content) should not spawn
+      // a visible bubble or hide the typing indicator prematurely.
+      if (message.content) {
+        if (!this._streamingDiv) {
+          this.hideLoading();
+          this._streamingDiv = document.createElement("div");
+          this._streamingDiv.className = "message ai";
 
-        const contentDiv = document.createElement("div");
-        contentDiv.className = "message-content";
-        this._streamingDiv.appendChild(contentDiv);
+          const contentDiv = document.createElement("div");
+          contentDiv.className = "message-content";
+          this._streamingDiv.appendChild(contentDiv);
 
-        const timestamp = document.createElement("div");
-        timestamp.className = "message-timestamp";
-        this._streamingDiv.appendChild(timestamp);
+          const timestamp = document.createElement("div");
+          timestamp.className = "message-timestamp";
+          this._streamingDiv.appendChild(timestamp);
 
-        this.messagesContainer.appendChild(this._streamingDiv);
+          this.messagesContainer.appendChild(this._streamingDiv);
+        }
+
+        const contentEl = this._streamingDiv.querySelector(".message-content");
+        contentEl.textContent += message.content;
+
+        const tsEl = this._streamingDiv.querySelector(".message-timestamp");
+        tsEl.textContent = this.formatTimestamp(message.timestamp);
+
+        this.scrollToBottom();
       }
-
-      // Append text to the content element
-      const contentEl = this._streamingDiv.querySelector(".message-content");
-      contentEl.textContent += message.content || "";
-
-      // Update timestamp on each chunk
-      const tsEl = this._streamingDiv.querySelector(".message-timestamp");
-      tsEl.textContent = this.formatTimestamp(message.timestamp);
-
-      this.scrollToBottom();
 
       // When the stream is done, release the reference so the next
       // response starts a fresh bubble.
       if (isDone) {
+        this.hideLoading();
         this._streamingDiv = null;
       }
     } else {
@@ -403,12 +409,8 @@ class ChatClient {
     }
   }
 
-  handleLoading(message) {
-    if (message.loading) {
-      this.showLoading();
-    } else {
-      this.hideLoading();
-    }
+  handleLoading() {
+    this.showLoading();
   }
 
   handleError(message) {
@@ -507,6 +509,7 @@ class ChatClient {
     this.ws.send(JSON.stringify(message));
     this.displayMessage(message);
     this.messageInput.value = "";
+    this.showLoading();
   }
 
   // File Upload
@@ -700,10 +703,12 @@ class ChatClient {
     };
 
     this.ws.send(JSON.stringify(message));
+    this.modelSelector.value = modelID;
     this.displaySystemMessage(`Switched to ${modelID}`);
   }
 
   showModelSelector(models) {
+    const savedValue = this.modelSelector.value || this._restoredModelID || "";
     this.modelSelector.innerHTML = "";
     models.forEach((model) => {
       const option = document.createElement("option");
@@ -711,6 +716,9 @@ class ChatClient {
       option.textContent = model.name;
       this.modelSelector.appendChild(option);
     });
+    if (savedValue && models.some((m) => m.id === savedValue)) {
+      this.modelSelector.value = savedValue;
+    }
     this.modelSelectorContainer.style.display = "block";
   }
 
@@ -746,12 +754,22 @@ class ChatClient {
   }
 
   showLoading() {
-    this.loadingAnimation.style.display = "block";
+    if (this._typingIndicator) return;
+    const el = document.createElement("div");
+    el.className = "typing-indicator";
+    el.appendChild(document.createElement("span"));
+    el.appendChild(document.createElement("span"));
+    el.appendChild(document.createElement("span"));
+    this._typingIndicator = el;
+    this.messagesContainer.appendChild(el);
     this.scrollToBottom();
   }
 
   hideLoading() {
-    this.loadingAnimation.style.display = "none";
+    if (this._typingIndicator) {
+      this._typingIndicator.remove();
+      this._typingIndicator = null;
+    }
   }
 
   showUploadProgress(progress) {

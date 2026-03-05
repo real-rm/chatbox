@@ -149,6 +149,7 @@ type MessageRouter interface {
 	RouteMessage(conn *Connection, msg *message.Message) error
 	RegisterConnection(sessionID string, conn *Connection) error
 	UnregisterConnection(sessionID string)
+	GetAvailableModelRefs() []message.ModelRef
 }
 
 // NewHandler creates a new WebSocket handler
@@ -325,6 +326,22 @@ func (h *Handler) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		defer h.pumpWg.Done()
 		connection.writePump()
 	})
+
+	// Send initial connection status with available models immediately after connect.
+	// This lets the frontend show the model selector before the user sends a message.
+	if h.router != nil {
+		if models := h.router.GetAvailableModelRefs(); len(models) > 0 {
+			status := &message.Message{
+				Type:      message.TypeConnectionStatus,
+				Sender:    message.SenderSystem,
+				Timestamp: time.Now(),
+				Models:    models,
+			}
+			if data, err := json.Marshal(status); err == nil {
+				connection.SafeSend(data)
+			}
+		}
+	}
 }
 
 // createConnection creates a new Connection with user context from JWT claims

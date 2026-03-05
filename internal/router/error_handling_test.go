@@ -32,7 +32,8 @@ func (m *mockLLMServiceForErrorTests) StreamMessage(ctx context.Context, modelID
 	return ch, nil
 }
 
-func (m *mockLLMServiceForErrorTests) ValidateModel(modelID string) error { return nil }
+func (m *mockLLMServiceForErrorTests) ValidateModel(modelID string) error  { return nil }
+func (m *mockLLMServiceForErrorTests) GetAvailableModels() []llm.ModelInfo { return nil }
 
 // mockStorageServiceForErrorTests is a simple mock for error handling tests
 type mockStorageServiceForErrorTests struct{}
@@ -46,6 +47,10 @@ func (m *mockStorageServiceForErrorTests) AddMessage(sessionID string, msg *sess
 }
 
 func (m *mockStorageServiceForErrorTests) UpdateSessionName(sessionID, name string) error {
+	return nil
+}
+
+func (m *mockStorageServiceForErrorTests) UpdateSessionModelID(sessionID, modelID string) error {
 	return nil
 }
 
@@ -112,13 +117,6 @@ func TestErrorHandling_InvalidSessionID(t *testing.T) {
 			msgType:   message.TypeUserMessage,
 			wantErr:   true,
 			errCode:   chaterrors.ErrCodeMissingField,
-		},
-		{
-			name:      "non-existent session ID for model selection",
-			sessionID: "non-existent-session",
-			msgType:   message.TypeModelSelect,
-			wantErr:   true,
-			errCode:   chaterrors.ErrCodeNotFound,
 		},
 	}
 

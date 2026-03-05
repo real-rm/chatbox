@@ -53,6 +53,8 @@ func (r *panicOnFirstCallRouter) RegisterConnection(sessionID string, conn *Conn
 
 func (r *panicOnFirstCallRouter) UnregisterConnection(sessionID string) {}
 
+func (r *panicOnFirstCallRouter) GetAvailableModelRefs() []message.ModelRef { return nil }
+
 // TestReadPump_PanicInRouteMessageIsRecovered verifies that a panic inside
 // RouteMessage does not crash readPump or the whole process. After the panic
 // is recovered, subsequent messages must still be processed normally.

@@ -625,7 +625,8 @@ func (m *mockLLMService) StreamMessage(ctx context.Context, modelID string, mess
 	return ch, nil
 }
 
-func (m *mockLLMService) ValidateModel(modelID string) error { return nil }
+func (m *mockLLMService) ValidateModel(modelID string) error  { return nil }
+func (m *mockLLMService) GetAvailableModels() []llm.ModelInfo { return nil }
 
 // Feature: production-readiness-fixes, Property 4: Streaming requests have timeout
 // **Validates: Requirements 8.1, 8.3**
@@ -805,4 +806,5 @@ func (m *mockLLMServiceWithContext) StreamMessage(ctx context.Context, modelID s
 	return ch, nil
 }
 
-func (m *mockLLMServiceWithContext) ValidateModel(modelID string) error { return nil }
+func (m *mockLLMServiceWithContext) ValidateModel(modelID string) error  { return nil }
+func (m *mockLLMServiceWithContext) GetAvailableModels() []llm.ModelInfo { return nil }

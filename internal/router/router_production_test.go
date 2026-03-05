@@ -40,6 +40,10 @@ func (m *MockStorageService) UpdateSessionName(sessionID, name string) error {
 	return nil
 }
 
+func (m *MockStorageService) UpdateSessionModelID(sessionID, modelID string) error {
+	return nil
+}
+
 // MockLLMService for testing
 type MockLLMService struct {
 	StreamMessageFunc func(context.Context, string, []llm.ChatMessage) (<-chan *llm.LLMChunk, error)
@@ -66,7 +70,8 @@ func (m *MockLLMService) SendMessage(ctx context.Context, modelID string, messag
 	return &llm.LLMResponse{Content: "test response"}, nil
 }
 
-func (m *MockLLMService) ValidateModel(modelID string) error { return nil }
+func (m *MockLLMService) ValidateModel(modelID string) error  { return nil }
+func (m *MockLLMService) GetAvailableModels() []llm.ModelInfo { return nil }
 
 // TestProductionIssue02_SessionIDConsistency verifies that session IDs are
 // consistent between SessionManager and Router throughout the creation flow.

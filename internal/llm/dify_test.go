@@ -147,6 +147,20 @@ func TestDifyProvider_StreamMessage(t *testing.T) {
 			wantErr:        false,
 		},
 		{
+			name: "agent_message streaming (Dify agent/workflow apps)",
+			messages: []ChatMessage{
+				{Role: "user", Content: "Hello"},
+			},
+			streamData: []string{
+				`data: {"event":"agent_message","message_id":"msg_789","conversation_id":"conv_012","answer":"I am"}`,
+				`data: {"event":"agent_message","message_id":"msg_789","conversation_id":"conv_012","answer":" an agent"}`,
+				`data: {"event":"message_end","message_id":"msg_789","metadata":{"usage":{"total_tokens":15}}}`,
+			},
+			mockStatusCode: http.StatusOK,
+			wantChunks:     3, // 2 agent_message chunks + 1 end
+			wantErr:        false,
+		},
+		{
 			name: "streaming with error event",
 			messages: []ChatMessage{
 				{Role: "user", Content: "Hello"},

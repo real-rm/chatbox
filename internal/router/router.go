@@ -41,6 +41,7 @@ type LLMService interface {
 	SendMessage(ctx context.Context, modelID string, messages []llm.ChatMessage) (*llm.LLMResponse, error)
 	StreamMessage(ctx context.Context, modelID string, messages []llm.ChatMessage) (<-chan *llm.LLMChunk, error)
 	ValidateModel(modelID string) error
+	GetAvailableModels() []llm.ModelInfo
 }
 
 // NotificationService interface for notification operations (to avoid circular dependency)
@@ -53,6 +54,7 @@ type StorageService interface {
 	CreateSession(sess *session.Session) error
 	AddMessage(sessionID string, msg *session.Message) error
 	UpdateSessionName(sessionID, name string) error
+	UpdateSessionModelID(sessionID, modelID string) error
 }
 
 // MessageRouter routes messages between clients, LLM backends, and admin users
@@ -136,6 +138,7 @@ func redactURLQuery(rawURL string) string {
 // RegisterConnection registers a connection for a session.
 // If the session already exists, ownership is verified before registration.
 // If an old connection exists for the session, it is marked as closing.
+// On success, sends an initial connection_status message with available models.
 func (mr *MessageRouter) RegisterConnection(sessionID string, conn *websocket.Connection) error {
 	if conn == nil {
 		return ErrNilConnection
@@ -145,13 +148,13 @@ func (mr *MessageRouter) RegisterConnection(sessionID string, conn *websocket.Co
 	}
 
 	mr.mu.Lock()
-	defer mr.mu.Unlock()
 
 	// Verify session ownership inside the lock to prevent a TOCTOU race between the
 	// ownership check and the connection registration. Both operations are atomic under mu.
 	// Lock ordering is safe: mr.mu → sessionManager.mu (sessionManager never calls back into router).
 	if sess, err := mr.sessionManager.GetSession(sessionID); err == nil {
 		if sess.UserID != conn.UserID {
+			mr.mu.Unlock()
 			mr.logger.Warn("Session ownership violation in RegisterConnection",
 				"session_id", sessionID,
 				"session_owner", sess.UserID,
@@ -170,7 +173,46 @@ func (mr *MessageRouter) RegisterConnection(sessionID string, conn *websocket.Co
 	}
 
 	mr.connections[sessionID] = conn
+	mr.mu.Unlock()
+
+	// Send initial connection_status with available models (outside the lock).
+	mr.sendInitialStatus(conn, sessionID)
 	return nil
+}
+
+// sendInitialStatus sends a connection_status message with available models to the client.
+func (mr *MessageRouter) sendInitialStatus(conn *websocket.Connection, sessionID string) {
+	var models []message.ModelRef
+	if mr.llmService != nil {
+		available := mr.llmService.GetAvailableModels()
+		models = make([]message.ModelRef, 0, len(available))
+		for _, m := range available {
+			models = append(models, message.ModelRef{ID: m.ID, Name: m.Name})
+		}
+	}
+	status := &message.Message{
+		Type:      message.TypeConnectionStatus,
+		SessionID: sessionID,
+		Sender:    message.SenderSystem,
+		Timestamp: time.Now(),
+		Models:    models,
+	}
+	if err := mr.sendToConnection(sessionID, status); err != nil {
+		mr.logger.Warn("Failed to send initial connection status", "session_id", sessionID, "error", err)
+	}
+}
+
+// GetAvailableModelRefs returns available models as ModelRef values for the client.
+func (mr *MessageRouter) GetAvailableModelRefs() []message.ModelRef {
+	if mr.llmService == nil {
+		return nil
+	}
+	available := mr.llmService.GetAvailableModels()
+	refs := make([]message.ModelRef, 0, len(available))
+	for _, m := range available {
+		refs = append(refs, message.ModelRef{ID: m.ID, Name: m.Name})
+	}
+	return refs
 }
 
 // UnregisterConnection removes a connection for a session
@@ -640,25 +682,22 @@ func (mr *MessageRouter) handleModelSelection(conn *websocket.Connection, msg *m
 		return chaterrors.ErrMissingField("model_id")
 	}
 
-	// Verify session exists and ownership
-	sess, err := mr.sessionManager.GetSession(msg.SessionID)
+	// Get or create session (user may switch model before sending any message)
+	sess, err := mr.getOrCreateSession(conn, msg.SessionID)
 	if err != nil {
-		return chaterrors.NewValidationError(
-			chaterrors.ErrCodeNotFound,
-			"Session not found",
-			err,
-		)
+		return err
 	}
-	if sess.UserID != conn.UserID {
-		mr.logger.Warn("Session ownership violation in model selection",
-			"session_id", msg.SessionID,
-			"session_owner", sess.UserID,
-			"requesting_user", conn.UserID)
-		return chaterrors.NewValidationError(
-			chaterrors.ErrCodeUnauthorized,
-			"You do not have permission to access this session",
-			nil,
-		)
+
+	// Re-register connection under the authoritative session ID if it changed
+	sessionID := sess.ID
+	if sessionID != msg.SessionID {
+		mr.mu.Lock()
+		if c, ok := mr.connections[msg.SessionID]; ok {
+			delete(mr.connections, msg.SessionID)
+			mr.connections[sessionID] = c
+		}
+		mr.mu.Unlock()
+		conn.SetSessionID(sessionID)
 	}
 
 	// Validate model ID against configured providers
@@ -672,22 +711,27 @@ func (mr *MessageRouter) handleModelSelection(conn *websocket.Connection, msg *m
 		}
 	}
 
-	// Store the selected model in the session
-	if err := mr.sessionManager.SetModelID(msg.SessionID, msg.ModelID); err != nil {
+	// Store the selected model in the session (in-memory + persistent)
+	if err := mr.sessionManager.SetModelID(sessionID, msg.ModelID); err != nil {
 		return chaterrors.ErrDatabaseError(err)
 	}
+	if mr.storageService != nil {
+		if err := mr.storageService.UpdateSessionModelID(sessionID, msg.ModelID); err != nil {
+			mr.logger.Warn("Failed to persist model selection", "session_id", sessionID, "model_id", msg.ModelID, "error", err)
+		}
+	}
 
-	mr.logger.Info("Model selection", "session_id", msg.SessionID, "model_id", msg.ModelID)
+	mr.logger.Info("Model selection", "session_id", sessionID, "model_id", msg.ModelID)
 
 	// Send confirmation message back to client
 	response := &message.Message{
 		Type:      message.TypeConnectionStatus,
-		SessionID: msg.SessionID,
+		SessionID: sessionID,
 		Content:   fmt.Sprintf("Model changed to %s", msg.ModelID),
 		Sender:    message.SenderAI,
 	}
 
-	return mr.sendToConnection(msg.SessionID, response)
+	return mr.sendToConnection(sessionID, response)
 }
 
 // handleFileUpload processes file upload messages

@@ -490,3 +490,5 @@ func (m *mockMessageRouter) UnregisterConnection(sessionID string) {
 	defer m.mu.Unlock()
 	delete(m.sessions, sessionID)
 }
+
+func (m *mockMessageRouter) GetAvailableModelRefs() []message.ModelRef { return nil }

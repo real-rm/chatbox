@@ -776,6 +776,7 @@ func handleGetSessionMessages(storageService *storage.StorageService, logger *go
 		c.JSON(constants.StatusOK, gin.H{
 			"session_id": sess.ID,
 			"name":       sess.Name,
+			"model_id":   sess.ModelID,
 			"messages":   sess.Messages,
 		})
 	}

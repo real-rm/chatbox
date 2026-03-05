@@ -56,6 +56,8 @@ func (m *mockRouter) UnregisterConnection(sessionID string) {
 	m.mu.Unlock()
 }
 
+func (m *mockRouter) GetAvailableModelRefs() []message.ModelRef { return nil }
+
 // RoutedMessages returns a snapshot of all routed messages (thread-safe).
 func (m *mockRouter) RoutedMessages() []*message.Message {
 	m.mu.RLock()
@@ -429,6 +431,8 @@ func (m *mockRouterWithError) RegisterConnection(sessionID string, conn *Connect
 func (m *mockRouterWithError) UnregisterConnection(sessionID string) {
 }
 
+func (m *mockRouterWithError) GetAvailableModelRefs() []message.ModelRef { return nil }
+
 // TestReadPump_RegistrationErrorHandling tests that connection registration errors are properly handled
 func TestReadPump_RegistrationErrorHandling(t *testing.T) {
 	validator := auth.NewJWTValidator("test-secret")
@@ -555,6 +559,8 @@ func (m *mockRouterWithRegistrationError) RegisterConnection(sessionID string, c
 
 func (m *mockRouterWithRegistrationError) UnregisterConnection(sessionID string) {
 }
+
+func (m *mockRouterWithRegistrationError) GetAvailableModelRefs() []message.ModelRef { return nil }
 
 // TestEndToEndMessageFlow tests the complete message flow from WebSocket to router
 func TestEndToEndMessageFlow(t *testing.T) {
@@ -1141,6 +1147,8 @@ func (m *streamingMockRouter) UnregisterConnection(sessionID string) {
 	m.unregisteredSessions = append(m.unregisteredSessions, sessionID)
 	delete(m.registeredSessions, sessionID)
 }
+
+func (m *streamingMockRouter) GetAvailableModelRefs() []message.ModelRef { return nil }
 
 // TestEndToEndStreamingFlow tests the complete streaming flow from client to LLM and back
 func TestEndToEndStreamingFlow(t *testing.T) {

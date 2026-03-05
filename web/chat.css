@@ -175,37 +175,41 @@ body {
 }
 
 /* Loading Animation */
-#loading-animation {
-    padding: 16px;
-    text-align: center;
-}
-
-.loading-dots {
-    display: inline-flex;
+.typing-indicator {
+    align-self: flex-start;
+    background: #e9ecef;
+    color: #212529;
+    border-radius: 12px;
+    padding: 12px 16px;
+    max-width: 80%;
+    display: flex;
+    align-items: center;
     gap: 4px;
 }
 
-.loading-dots span {
+.typing-indicator span {
     width: 8px;
     height: 8px;
     border-radius: 50%;
-    background: #007bff;
-    animation: bounce 1.4s infinite ease-in-out both;
+    background: #6c757d;
+    animation: typing-bounce 1.4s infinite ease-in-out both;
 }
 
-.loading-dots span:nth-child(1) {
+.typing-indicator span:nth-child(1) {
     animation-delay: -0.32s;
 }
 
-.loading-dots span:nth-child(2) {
+.typing-indicator span:nth-child(2) {
     animation-delay: -0.16s;
 }
 
-@keyframes bounce {
+@keyframes typing-bounce {
     0%, 80%, 100% {
-        transform: scale(0);
+        opacity: 0.3;
+        transform: scale(0.8);
     }
     40% {
+        opacity: 1;
         transform: scale(1);
     }
 }
